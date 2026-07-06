@@ -244,11 +244,11 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
                   <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={78} paddingAngle={2}>
                     {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" strokeWidth={2} />)}
                   </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} />
+                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="pie-legend">
-                {pieData.sort((a, b) => b.value - a.value).map((d, i) => (
+                {[...pieData].sort((a, b) => b.value - a.value).map((d, i) => (
                   <div key={i} className="legend-row">
                     <span className="legend-dot" style={{ background: d.color }} />
                     <span className="legend-name">{d.name}</span>
@@ -267,7 +267,7 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
               <YAxis stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v / 1000) + "k" : v}`} width={44} />
-              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} cursor={{ fill: "var(--brass-soft)" }} />
+              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} cursor={{ fill: "var(--brass-soft)" }} />
               <Bar dataKey="income" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={18} />
               <Bar dataKey="expense" fill="var(--rust)" radius={[3, 3, 0, 0]} maxBarSize={18} />
             </BarChart>
