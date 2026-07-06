@@ -1,7 +1,13 @@
 {
   "name": "amble-finance",
+  "productName": "Amble",
   "private": true,
   "version": "0.1.0",
+  "homepage": "https://github.com/Cogito11/Amble-Finance",
+  "author": {
+    "name": "Cole Bishop",
+    "email": "cdbishop2005@gmail.com"
+  },
   "description": "Amble - a personal finance and budget tracker",
   "main": "main.js",
   "scripts": {
@@ -25,25 +31,28 @@
     "cross-env": "^7.0.3"
   },
   "build": {
-    "appId": "com.amble.finance",
-    "productName": "Amble",
+    "appId": "com.bishop.amble",
+    "artifactName": "Amble_${version}_Setup_${os}_${arch}.${ext}",
     "files": [
       "dist/**/*",
       "main.js"
     ],
-    "directories": {
-      "output": "release"
-    },
-    "mac": {
-      "category": "public.app-category.finance",
-      "target": "dmg"
-    },
     "win": {
-      "target": "nsis"
+      "target": ["portable", "nsis"]
     },
     "linux": {
-      "target": "AppImage",
-      "category": "Finance"
+      "target": ["appImage", "deb"],
+      "category": "Finance",
+      "maintainer": "Cole Bishop <cdbishop2005@gmail.com>"
+    },
+    "mac": {
+      "target": ["dmg", "zip"]
+    },
+    "portable": {
+      "artifactName": "Amble_${version}_Portable_${os}_${arch}.${ext}"
+    },
+    "appImage": {
+      "artifactName": "Amble_${version}_${os}_${arch}.${ext}"
     }
   }
 }
