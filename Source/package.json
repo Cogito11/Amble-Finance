@@ -38,15 +38,18 @@
       "main.js"
     ],
     "win": {
-      "target": ["portable", "nsis"]
+      "target": ["portable", "nsis"],
+      "icon": "Amble/assets/logos/AmbleLogo.ico"
     },
     "linux": {
       "target": ["appImage", "deb"],
+      "icon": "Amble/assets/logos/icons",
       "category": "Finance",
       "maintainer": "Cole Bishop <cdbishop2005@gmail.com>"
     },
     "mac": {
-      "target": ["dmg", "zip"]
+      "target": ["dmg", "zip"],
+      "icon": "Amble/assets/logos/AmbleLogo.png"
     },
     "portable": {
       "artifactName": "Amble_${version}_Portable_${os}_${arch}.${ext}"

@@ -1,12 +1,26 @@
 const { app, BrowserWindow } = require("electron");
 const path = require("path");
 
+function getIconPath() {
+  const base = path.join(__dirname, 'Amble/assets/logos');
+  switch (process.platform) {
+    case 'win32': return path.join(base, 'AmbleLogo.ico');
+    case 'linux': return path.join(base, 'icons', '256x256.png');
+    case 'darwin': return path.join(base, 'AmbleLogo.png');
+    default: return path.join(base, 'AmbleLogo.png');
+  }
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1320,
     height: 840,
+
     minWidth: 400,
     minHeight: 300,
+
+    title: "Amble Finance",
+    icon: getIconPath(),
     backgroundColor: "#f4f9fd",
     titleBarStyle: "hiddenInset",
     webPreferences: {
