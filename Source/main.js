@@ -20,7 +20,7 @@ function createWindow() {
     win.loadURL(devServerUrl);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    win.loadFile(path.join(__dirname, "../dist/index.html"));
+    win.loadFile(path.join(__dirname, "dist/index.html"));
   }
 }
 
