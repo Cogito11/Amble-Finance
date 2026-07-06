@@ -5,12 +5,9 @@
   "description": "Amble — a calm personal finance and budget tracker",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "electron:build": "vite build && electron-builder",
-    "electron:build:dir": "vite build && electron-builder --dir"
+    "start": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
+    "build": "vite build && electron-builder",
+    "build:dir": "vite build && electron-builder --dir"
   },
   "dependencies": {
     "react": "^18.3.1",

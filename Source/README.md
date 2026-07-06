@@ -1,14 +1,12 @@
 # Amble — personal finance & budget tracker
 
 A calm, desktop-style budgeting app: accounts, transactions, category
-budgets with gauge dials, and a dashboard with charts. This is the
-standalone version — it runs as a normal website or as a native desktop
-app via Electron, and it's yours to keep, host, or modify.
+budgets with gauge dials, and a dashboard with charts. This is packaged as
+an Electron desktop app for your computer.
 
-Your data is stored in the browser's `localStorage` (see `src/storage.js`).
-Nothing is sent to a server — it all stays on the device you're using it on.
-That also means data does **not** sync between your browser and a packaged
-desktop build automatically — each one keeps its own local copy.
+Your data is stored locally on your machine via the browser storage layer
+Electron provides (`localStorage`, see `src/storage.js`) — nothing is sent
+to a server, and nothing leaves your computer.
 
 ## 1. Install dependencies
 
@@ -18,81 +16,63 @@ You'll need [Node.js](https://nodejs.org) 18 or newer installed.
 npm install
 ```
 
-## 2. Run it as a website (local dev)
+## 2. Run it
 
 ```bash
-npm run dev
+npm start
 ```
 
-Opens at `http://localhost:5173`. Edit `src/App.jsx` and it hot-reloads.
+This opens Amble in a desktop window, with dev tools attached and hot
+reload enabled, so you can make changes to `src/App.jsx` and see them
+immediately.
 
-## 3. Build it as a website (to host anywhere)
+## 3. Build the desktop application
 
 ```bash
 npm run build
 ```
 
-This outputs static files to `dist/`. Upload that folder's contents to
-any static host — Netlify, Vercel, GitHub Pages, Cloudflare Pages, S3, or
-your own server. No backend required. You can preview the production
-build locally first with `npm run preview`.
+This packages Amble into an installable desktop app for your current
+operating system, placed in the `release/` folder:
 
-## 4. Run it as a desktop app (development)
+- **macOS** → `Amble.dmg`
+- **Windows** → `Amble Setup.exe`
+- **Linux** → `Amble.AppImage`
 
-```bash
-npm run electron:dev
-```
+Run this command on the OS you want to build for — `electron-builder`
+packages for whatever platform it's running on. To get a `.exe`, run
+`npm run build` on Windows; for a `.dmg`, run it on a Mac. Cross-building
+onto a different OS is possible but needs extra setup (code signing, Wine
+for building Windows installers from a Mac, etc.) — let me know if you
+need that.
 
-This starts the Vite dev server and opens it in an Electron window, with
-dev tools attached. Good for testing before you package it.
-
-## 5. Build it as an installable desktop app
-
-```bash
-npm run electron:build
-```
-
-This builds the web app and packages it with `electron-builder` into an
-installer for your current platform, placed in `release/`:
-
-- **macOS** → `.dmg`
-- **Windows** → `.exe` (NSIS installer)
-- **Linux** → `.AppImage`
-
-Important: `electron-builder` packages for the platform you run it *on*.
-To get a Windows `.exe`, run this command on Windows (or in a Windows CI
-runner); for a macOS `.dmg`, run it on a Mac. Cross-building is possible
-but has extra setup (code signing, Wine for Windows-from-Mac, etc.) —
-happy to help with that if you need it.
-
-If you just want a runnable folder without a formal installer (e.g. to
-test quickly), use:
+If you just want a runnable, unpacked app folder without a full installer
+(useful for a quick test), use:
 
 ```bash
-npm run electron:build:dir
+npm run build:dir
 ```
 
 ## Project structure
 
 ```
 amble-finance/
-├── index.html            # HTML entry point
-├── vite.config.js         # Vite build config
+├── index.html            # HTML entry point, loaded by the Electron window
+├── vite.config.js         # Build config for bundling the React app
 ├── src/
-│   ├── main.jsx            # React root
-│   ├── App.jsx             # The whole app (UI, logic, styles)
-│   └── storage.js          # localStorage-backed data layer
+│   ├── main.jsx             # React root
+│   ├── App.jsx              # The whole app (UI, logic, styles)
+│   └── storage.js           # localStorage-backed data layer
 ├── electron/
-│   └── main.js             # Electron main process (creates the window)
+│   └── main.js               # Electron main process (creates the window)
 └── package.json
 ```
 
 ## Notes
 
 - Fonts (Fraunces, Inter, JetBrains Mono) load from Google Fonts over the
-  network. If you need the app to work fully offline (e.g. in Electron
-  with no internet), let me know and I can bundle the font files locally
-  instead.
-- To reset all data, clear the site's storage in your browser's dev tools
-  (Application → Local Storage), or in the desktop app, clear Electron's
-  local storage the same way via the dev tools.
+  network. If you want the app to work fully offline, let me know and I
+  can bundle the font files locally instead.
+- To reset all data, open dev tools in the app (it's already open in
+  `npm start`; in the packaged build you can enable it temporarily in
+  `electron/main.js`) and clear Application → Local Storage.
