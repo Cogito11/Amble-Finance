@@ -1,7 +1,7 @@
 {
   "name": "amble-finance",
   "private": true,
-  "version": "0.1.0beta",
+  "version": "0.1.0",
   "description": "Amble - a personal finance and budget tracker",
   "main": "main.js",
   "scripts": {
