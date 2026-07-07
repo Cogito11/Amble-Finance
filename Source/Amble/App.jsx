@@ -261,6 +261,8 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
     spent: monthTx.filter((t) => t.type === "expense" && t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
   })).sort((a, b) => (b.spent / (b.limit || 1)) - (a.spent / (a.limit || 1))).slice(0, 4);
 
+  const uncategorizedSpent = monthTx.filter((t) => t.type === "expense" && !t.categoryId).reduce((s, t) => s + t.amount, 0);
+
   const pieData = expenseCats.map((c) => ({
     name: c.name, color: c.color,
     value: monthTx.filter((t) => t.type === "expense" && t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
@@ -298,11 +300,19 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
         <StatCard label="This month, net" value={fmt(monthIncome - monthExpense)} tone={monthIncome - monthExpense >= 0 ? "teal" : "rust"} icon={monthIncome - monthExpense >= 0 ? ArrowUpRight : ArrowDownRight} />
       </div>
 
-      {budgeted.length > 0 && (
+      {(budgeted.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
           <div className="card-title">Budgets this month</div>
           <div className="gauge-row">
             {catSpend.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
+            {uncategorizedSpent > 0 && (
+              <Gauge
+                spent={uncategorizedSpent}
+                limit={monthExpense}
+                label="Uncategorized"
+                footnote={`${Math.round((uncategorizedSpent / monthExpense) * 100)}% of spending`}
+              />
+            )}
           </div>
         </div>
       )}
@@ -358,6 +368,9 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
           <div className="chart-empty">No transactions yet.</div>
         ) : (
           <table className="table">
+            <thead>
+              <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="amount">Amount</th></tr>
+            </thead>
             <tbody>
               {recent.map((t) => (
                 <tr key={t.id}>
@@ -1197,6 +1210,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .legend-val { font-family:'JetBrains Mono',monospace; color:var(--text); }
 
 .table { width:100%; border-collapse:collapse; font-size:13.5px; }
+.table thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); font-weight:500; padding-bottom:8px; }
 .table.full thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); font-weight:500; padding:14px 20px; border-bottom:1px solid var(--border); }
 .table.full tbody td { padding:12px 20px; border-bottom:1px solid var(--border); }
 .table.full tbody tr:last-child td { border-bottom:none; }
