@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
-  CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, Settings,
+  CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet
 } from "lucide-react";
 import {
@@ -85,6 +85,7 @@ const VIEW_TITLES = {
   transactions: "Transactions",
   accounts: "Accounts",
   budgets: "Budgets",
+  more: "More",
 };
 
 /* ---------------------------------- gauge ---------------------------------- */
@@ -179,7 +180,7 @@ function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger
         <div className="modal-body">
           <p className="confirm-message">{message}</p>
         </div>
-        <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+        <div className="modal-footer" style={{ justifyContent: "flex-end", gap: 8 }}>
           {!hideCancel && <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>}
           <button className={`btn ${tone === "danger" ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>
             {tone === "danger" && <Trash2 size={14} />} {confirmLabel}
@@ -190,52 +191,47 @@ function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger
   );
 }
 
-function SettingsModal({ onClose, onExportJSON, onImportJSON, onExportCSV, transactionCount }) {
+function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount }) {
   const fileInputRef = useRef(null);
   return (
-    <Modal title="Settings" onClose={onClose}>
-      <div className="modal-body">
-        <div className="settings-section">
-          <div className="settings-section-title">Backup &amp; restore</div>
-          <p className="settings-desc">
-            Export a full backup of your accounts, categories, and transactions as a JSON file.
-            Use it to move your data to another computer or restore it later — your data never
-            leaves this device on its own.
-          </p>
-          <div className="settings-actions">
-            <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
-            <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json,.json"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) onImportJSON(file);
-                e.target.value = "";
-              }}
-            />
-          </div>
-        </div>
-        <div className="settings-section">
-          <div className="settings-section-title">Spreadsheet export</div>
-          <p className="settings-desc">
-            Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a CSV
-            file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant for
-            analysis, not as a backup you'd import back in.
-          </p>
-          <div className="settings-actions">
-            <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
-              <FileSpreadsheet size={14} /> Export transactions (.csv)
-            </button>
-          </div>
+    <div className="more-view">
+      <div className="card">
+        <div className="card-title">Backup &amp; restore</div>
+        <p className="settings-desc">
+          Export a full backup of your accounts, categories, and transactions as a JSON file.
+          Use it to move your data to another computer or restore it later — your data never
+          leaves this device on its own.
+        </p>
+        <div className="settings-actions">
+          <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
+          <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onImportJSON(file);
+              e.target.value = "";
+            }}
+          />
         </div>
       </div>
-      <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
-        <button className="btn btn-primary" onClick={onClose}>Done</button>
+      <div className="card">
+        <div className="card-title">Spreadsheet export</div>
+        <p className="settings-desc">
+          Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a CSV
+          file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant for
+          analysis, not as a backup you'd import back in.
+        </p>
+        <div className="settings-actions">
+          <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
+            <FileSpreadsheet size={14} /> Export transactions (.csv)
+          </button>
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -311,14 +307,16 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
             <div className="chart-empty">No expenses logged this month yet.</div>
           ) : (
             <div className="pie-wrap">
-              <ResponsiveContainer width="55%" height={200}>
-                <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" innerRadius={50} outerRadius={78} paddingAngle={2}>
-                    {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" strokeWidth={2} />)}
-                  </Pie>
-                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="pie-chart-wrap">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="92%" paddingAngle={2}>
+                      {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" strokeWidth={2} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               <div className="pie-legend">
                 {[...pieData].sort((a, b) => b.value - a.value).map((d, i) => (
                   <div key={i} className="legend-row">
@@ -432,9 +430,11 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
                   <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
                     {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
                   </td>
-                  <td className="row-actions">
-                    <button className="icon-btn" onClick={() => onEdit(t)}><Pencil size={14} /></button>
-                    <button className="icon-btn" onClick={() => onDelete(t.id)}><Trash2 size={14} /></button>
+                  <td className="row-actions-cell">
+                    <div className="row-actions">
+                      <button className="icon-btn" onClick={() => onEdit(t)}><Pencil size={14} /></button>
+                      <button className="icon-btn" onClick={() => onDelete(t.id)}><Trash2 size={14} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -522,9 +522,11 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
                 <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
                 <td className="amount">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
                 <td className="amount">{c.type === "expense" ? (c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>) : "—"}</td>
-                <td className="row-actions">
-                  <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
-                  <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+                <td className="row-actions-cell">
+                  <div className="row-actions">
+                    <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
+                    <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -534,9 +536,11 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
                 <td className="muted">income</td>
                 <td className="amount">—</td>
                 <td className="amount">—</td>
-                <td className="row-actions">
-                  <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
-                  <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+                <td className="row-actions-cell">
+                  <div className="row-actions">
+                    <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
+                    <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -757,7 +761,6 @@ export default function App() {
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
   const [accError, setAccError] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
 
   useEffect(() => {
@@ -905,7 +908,6 @@ export default function App() {
           onConfirm: () => {
             setState({ accounts: data.accounts, categories: data.categories, transactions: data.transactions });
             setConfirmDialog(null);
-            setSettingsOpen(false);
           },
         });
       } catch (e) {
@@ -970,13 +972,13 @@ export default function App() {
                 <item.icon size={18} /> <span>{item.label}</span>
               </button>
             ))}
+            <button className={`nav-item ${view === "more" ? "active" : ""}`} onClick={() => setView("more")}>
+              <MoreHorizontal size={18} /> <span>More</span>
+            </button>
           </nav>
           <div className="sidebar-footer">
             <div className="nw-label">Net worth</div>
             <div className="nw-value">{fmt(netWorth)}</div>
-            <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
-              <Settings size={14} /> Settings
-            </button>
           </div>
         </aside>
 
@@ -987,7 +989,9 @@ export default function App() {
               <button className="icon-btn theme-toggle" onClick={() => setDarkMode((d) => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
                 {darkMode ? <Sun size={17} /> : <Moon size={17} />}
               </button>
-              <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
+              {view !== "more" && (
+                <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
+              )}
             </div>
           </header>
           <div className="content">
@@ -1002,6 +1006,14 @@ export default function App() {
             )}
             {view === "budgets" && (
               <BudgetsView categories={state.categories} transactions={state.transactions} onAdd={() => setCatModal({})} onEdit={setCatModal} onDelete={requestDeleteCategory} />
+            )}
+            {view === "more" && (
+              <MoreView
+                onExportJSON={exportJSON}
+                onImportJSON={requestImportJSON}
+                onExportCSV={exportTransactionsCSV}
+                transactionCount={state.transactions.length}
+              />
             )}
           </div>
         </main>
@@ -1022,15 +1034,6 @@ export default function App() {
       )}
       {catModal !== null && (
         <CategoryModal initial={catModal} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
-      )}
-      {settingsOpen && (
-        <SettingsModal
-          onClose={() => setSettingsOpen(false)}
-          onExportJSON={exportJSON}
-          onImportJSON={requestImportJSON}
-          onExportCSV={exportTransactionsCSV}
-          transactionCount={state.transactions.length}
-        />
       )}
       {confirmDialog && (
         <ConfirmDialog
@@ -1117,8 +1120,6 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .sidebar-footer { border-top:1px solid var(--border); padding-top:14px; margin-top:10px; }
 .nw-label { font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em; }
 .nw-value { font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:600; color:var(--brass); margin-top:2px; }
-.settings-btn { display:flex; align-items:center; gap:7px; width:100%; margin-top:12px; background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:12.5px; font-weight:500; padding:8px 10px; border-radius:8px; cursor:pointer; font-family:'Inter',sans-serif; }
-.settings-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--brass); }
 
 .main { display:flex; flex-direction:column; min-width:0; height:100%; min-height:0; }
 .topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 32px; border-bottom:1px solid var(--border); flex-shrink:0; }
@@ -1165,8 +1166,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .gauge-over { font-size:11px; color:var(--rust); margin-top:2px; }
 
 .chart-empty { color: var(--text-faint); font-size:13.5px; padding: 30px 0; text-align:center; }
-.pie-wrap { display:flex; align-items:center; gap:12px; }
-.pie-legend { flex:1; display:flex; flex-direction:column; gap:7px; }
+.pie-wrap { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pie-chart-wrap { flex: 1 1 180px; min-width:150px; max-width:220px; }
+.pie-legend { flex:1 1 160px; display:flex; flex-direction:column; gap:7px; min-width:140px; }
 .legend-row { display:flex; align-items:center; gap:8px; font-size:12.5px; }
 .legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 .legend-name { flex:1; color:var(--text-muted); }
@@ -1181,6 +1183,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .muted { color: var(--text-muted); }
 .amount { font-family:'JetBrains Mono',monospace; font-weight:500; text-align:right; }
 .row-actions { display:flex; gap:4px; justify-content:flex-end; }
+.row-actions-cell { vertical-align:middle; }
 
 .pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:3px 9px; border-radius:20px; border:1px solid var(--border); color:var(--text-muted); }
 
@@ -1212,10 +1215,8 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .modal.modal-sm { max-width: 380px; }
 .confirm-message { font-size:13.5px; color:var(--text-muted); line-height:1.55; margin:0; }
 
-.settings-section { display:flex; flex-direction:column; gap:10px; padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--border); }
-.settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
-.settings-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; }
-.settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0; }
+.more-view { display:flex; flex-direction:column; }
+.settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }
 .settings-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
