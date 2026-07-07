@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
-  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2
+  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -64,6 +64,123 @@ function planCategoryTotal(cat) {
 
 function planAllocated(plan) {
   return (plan.categories || []).reduce((s, c) => s + planCategoryTotal(c), 0);
+}
+
+// Spend for a category: if it belongs to a plan, scope to that plan's date range
+// (or all-time if the plan has no dates set); otherwise scope to the current calendar month.
+function categorySpend(category, transactions, plans, cmk) {
+  const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
+  let txs = transactions.filter((t) => t.type === "expense" && t.categoryId === category.id);
+  if (ownerPlan) {
+    if (ownerPlan.startDate) txs = txs.filter((t) => t.date >= ownerPlan.startDate);
+    if (ownerPlan.endDate) txs = txs.filter((t) => t.date <= ownerPlan.endDate);
+  } else {
+    txs = txs.filter((t) => monthKeyOf(t.date) === cmk);
+  }
+  return txs.reduce((s, t) => s + t.amount, 0);
+}
+
+// Mirrors a plan's categories into the app-wide category list so they can be
+// assigned to real transactions. Keeps existing links, creates new categories
+// for new plan categories, and unlinks (but never deletes) ones removed from the plan.
+function syncPlanCategories(plan, categories) {
+  let cats = categories.slice();
+  const keepIds = new Set();
+  const newPlanCats = (plan.categories || []).map((pc) => {
+    const total = planCategoryTotal(pc);
+    const existingIdx = pc.categoryId ? cats.findIndex((c) => c.id === pc.categoryId) : -1;
+    if (existingIdx >= 0) {
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense" };
+      keepIds.add(pc.categoryId);
+      return pc;
+    }
+    const newId = uid();
+    cats.push({
+      id: newId, name: pc.name, type: "expense", limit: total,
+      color: CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)], planId: plan.id,
+    });
+    keepIds.add(newId);
+    return { ...pc, categoryId: newId };
+  });
+  cats = cats.map((c) => (c.planId === plan.id && !keepIds.has(c.id) ? { ...c, planId: null } : c));
+  return { categories: cats, plan: { ...plan, categories: newPlanCats } };
+}
+
+const REPEAT_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", match: "Match time frame" };
+
+// Computes the next cycle's start/end dates, always starting on the previous plan's end date.
+function nextPlanDates(plan) {
+  if (!plan.endDate) return null;
+  const start = new Date(plan.endDate + "T00:00:00");
+  const end = new Date(start);
+  const freq = plan.repeat && plan.repeat.frequency;
+  if (freq === "weekly") end.setDate(end.getDate() + 7);
+  else if (freq === "biweekly") end.setDate(end.getDate() + 14);
+  else if (freq === "monthly") end.setMonth(end.getMonth() + 1);
+  else if (freq === "match") {
+    const origStart = plan.startDate ? new Date(plan.startDate + "T00:00:00") : null;
+    const origEnd = new Date(plan.endDate + "T00:00:00");
+    const durationDays = origStart ? Math.max(1, Math.round((origEnd - origStart) / 86400000)) : 7;
+    end.setDate(end.getDate() + durationDays);
+  } else {
+    return null;
+  }
+  const toStr = (d) => d.toISOString().slice(0, 10);
+  return { startDate: toStr(start), endDate: toStr(end) };
+}
+
+function planMatchDurationDays(plan) {
+  if (!plan.startDate || !plan.endDate) return null;
+  const start = new Date(plan.startDate + "T00:00:00");
+  const end = new Date(plan.endDate + "T00:00:00");
+  return Math.max(1, Math.round((end - start) / 86400000));
+}
+
+// Rolls forward any active, repeat-enabled plans whose end date has passed, duplicating
+// each into a fresh plan/cycle (with its own categories) so historical data stays intact.
+function rolloverDuePlans(state) {
+  const today = todayStr();
+  let categories = state.categories.slice();
+  let plans = state.plans.slice();
+  let mutated = false;
+
+  for (let i = 0; i < plans.length; i++) {
+    const p = plans[i];
+    if (!(p.active && p.repeat && p.repeat.enabled && p.endDate && p.endDate < today)) continue;
+
+    let cur = p;
+    let lastNew = null;
+    let iterations = 0;
+    while (cur.endDate && cur.endDate < today && iterations < 104) {
+      const dates = nextPlanDates(cur);
+      if (!dates) break;
+      iterations++;
+      lastNew = {
+        id: uid(),
+        name: p.name,
+        startDate: dates.startDate,
+        endDate: dates.endDate,
+        income: p.income,
+        dateCreated: today,
+        active: true,
+        repeat: { ...p.repeat },
+        categories: (p.categories || []).map((c) => ({
+          id: uid(), name: c.name, mode: c.mode, bulkAmount: c.bulkAmount,
+          items: (c.items || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
+        })),
+      };
+      cur = lastNew;
+    }
+    if (lastNew) {
+      mutated = true;
+      plans[i] = { ...p, active: false };
+      const synced = syncPlanCategories(lastNew, categories);
+      categories = synced.categories;
+      plans.push(synced.plan);
+    }
+  }
+
+  return mutated ? { ...state, plans, categories } : state;
 }
 
 function computeBalance(account, transactions) {
@@ -522,15 +639,51 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, error }) {
 
 function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
   const cmk = currentMonthKey();
-  const monthTx = transactions.filter((t) => t.type === "expense" && monthKeyOf(t.date) === cmk);
+  const activePlan = (plans || []).find((p) => p.active);
+
   const expenseCats = categories.filter((c) => c.type === "expense");
-  const withSpend = expenseCats.map((c) => ({
-    ...c, spent: monthTx.filter((t) => t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
-  }));
-  const budgeted = withSpend.filter((c) => c.limit > 0);
+  const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, cmk) }));
+  // Gauges: general (non-plan) categories, plus the active plan's categories only — never other plans'.
+  const gaugeCats = withSpend.filter((c) => c.limit > 0 && (!c.planId || (activePlan && c.planId === activePlan.id)));
+
+  const planCats = activePlan ? withSpend.filter((c) => c.planId === activePlan.id) : [];
+  // "General" means not owned by any plan at all — categories from other (inactive) plans
+  // stay out of this list entirely, so they can't be edited/deleted from the Budgets tab.
+  const generalExpenseCats = withSpend.filter((c) => !c.planId);
+  const incomeCats = categories.filter((c) => c.type === "income");
+
+  const monthTx = transactions.filter((t) => t.type === "expense" && monthKeyOf(t.date) === cmk);
   const uncategorizedSpent = monthTx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const totalMonthSpent = monthTx.reduce((s, t) => s + t.amount, 0);
-  const activePlan = (plans || []).find((p) => p.active);
+
+  const renderCategoryRows = (list) => list.map((c) => (
+    <tr key={c.id}>
+      <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
+      <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
+      <td className="amount col-center">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
+      <td className="amount col-center">{c.type === "expense" ? (c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>) : "—"}</td>
+      <td className={`amount col-center ${c.type === "expense" && c.limit > 0 && c.limit - c.spent < 0 ? "tone-rust" : ""}`}>
+        {c.type === "expense" && c.limit > 0 ? fmt(c.limit - c.spent) : "—"}
+      </td>
+      <td className="row-actions-cell">
+        <div className="row-actions">
+          <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
+          <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+        </div>
+      </td>
+    </tr>
+  ));
+
+  const renderPlanCategoryRows = (list) => list.map((c) => (
+    <tr key={c.id}>
+      <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
+      <td className="amount col-center">{fmt(c.spent)}</td>
+      <td className="amount col-center">{c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>}</td>
+      <td className={`amount col-center ${c.limit > 0 && c.limit - c.spent < 0 ? "tone-rust" : ""}`}>
+        {c.limit > 0 ? fmt(c.limit - c.spent) : "—"}
+      </td>
+    </tr>
+  ));
 
   return (
     <div className="budget-view">
@@ -562,13 +715,6 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
               </div>
             </div>
           </div>
-          {activePlan.categories && activePlan.categories.length > 0 && (
-            <div className="plan-card-cats">
-              {activePlan.categories.map((c) => (
-                <span key={c.id} className="pill">{c.name} · {fmt(planCategoryTotal(c))}</span>
-              ))}
-            </div>
-          )}
         </div>
       ) : (
         <div className="card plan-active-card plan-active-empty">
@@ -580,11 +726,11 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
         </div>
       )}
 
-      {(budgeted.length > 0 || uncategorizedSpent > 0) && (
+      {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
-          <div className="card-title">This month</div>
+          <div className="card-title">Category gauges</div>
           <div className="gauge-row">
-            {budgeted.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
+            {gaugeCats.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
             {uncategorizedSpent > 0 && (
               <Gauge
                 spent={uncategorizedSpent}
@@ -596,32 +742,34 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
           </div>
         </div>
       )}
+
       <div className="card no-pad">
         <div className="card-title padded">
-          Categories
+          Budget plan categories
+          {activePlan && <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit plan</button>}
+        </div>
+        {activePlan && planCats.length > 0 ? (
+          <table className="table full">
+            <thead><tr><th>Name</th><th className="col-center">Spent</th><th className="col-center">Budgeted</th><th className="col-center">Remaining balance</th></tr></thead>
+            <tbody>{renderPlanCategoryRows(planCats)}</tbody>
+          </table>
+        ) : (
+          <p className="settings-desc plan-cats-empty">
+            {activePlan ? "This plan doesn't have any categories yet — add some from the Edit plan button above." : "Set a plan active on the Plans page to see its categories here."}
+          </p>
+        )}
+      </div>
+
+      <div className="card no-pad">
+        <div className="card-title padded">
+          General categories
           <button className="btn btn-ghost btn-sm" onClick={onAdd}><Plus size={14} /> Add category</button>
         </div>
         <table className="table full">
-          <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent this month</th><th className="col-center">Monthly limit</th><th className="col-center">Remaining balance</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent</th><th className="col-center">Limit</th><th className="col-center">Remaining balance</th><th></th></tr></thead>
           <tbody>
-            {withSpend.map((c) => (
-              <tr key={c.id}>
-                <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
-                <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
-                <td className="amount col-center">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
-                <td className="amount col-center">{c.type === "expense" ? (c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>) : "—"}</td>
-                <td className={`amount col-center ${c.type === "expense" && c.limit > 0 && c.limit - c.spent < 0 ? "tone-rust" : ""}`}>
-                  {c.type === "expense" && c.limit > 0 ? fmt(c.limit - c.spent) : "—"}
-                </td>
-                <td className="row-actions-cell">
-                  <div className="row-actions">
-                    <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
-                    <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {categories.filter((c) => c.type === "income").map((c) => (
+            {renderCategoryRows(generalExpenseCats)}
+            {incomeCats.map((c) => (
               <tr key={c.id}>
                 <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
                 <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
@@ -645,7 +793,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
 /* ---------------------------------- plans view ---------------------------------- */
 
-function PlansView({ plans, onAdd, onEdit, onDelete, onSetActive }) {
+function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate }) {
   if (plans.length === 0) {
     return (
       <EmptyState
@@ -675,10 +823,14 @@ function PlansView({ plans, onAdd, onEdit, onDelete, onSetActive }) {
                 <div className="plan-card-name">
                   {p.name}
                   {p.active && <span className="pill plan-active-pill"><CheckCircle2 size={11} /> Active</span>}
+                  {p.repeat && p.repeat.enabled && (
+                    <span className="pill"><Repeat size={11} /> {REPEAT_LABELS[p.repeat.frequency] || "Repeats"}</span>
+                  )}
                 </div>
                 <div className="row-actions">
-                  <button className="icon-btn" onClick={() => onEdit(p)}><Pencil size={14} /></button>
-                  <button className="icon-btn" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
+                  <button className="icon-btn" title="Duplicate plan" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
+                  <button className="icon-btn" title="Edit plan" onClick={() => onEdit(p)}><Pencil size={14} /></button>
+                  <button className="icon-btn" title="Delete plan" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
                 </div>
               </div>
               <div className="plan-card-dates muted">
@@ -702,10 +854,22 @@ function PlansView({ plans, onAdd, onEdit, onDelete, onSetActive }) {
                 </div>
               </div>
               {p.categories && p.categories.length > 0 && (
-                <div className="plan-card-cats">
-                  {p.categories.map((c) => (
-                    <span key={c.id} className="pill">{c.name} · {fmt(planCategoryTotal(c))}</span>
-                  ))}
+                <div className="plan-card-catlist">
+                  {p.categories.map((c) => {
+                    const budgeted = planCategoryTotal(c);
+                    const spent = c.categoryId
+                      ? transactions.filter((t) => t.type === "expense" && t.categoryId === c.categoryId).reduce((s, t) => s + t.amount, 0)
+                      : null;
+                    const over = spent !== null && spent > budgeted;
+                    return (
+                      <div key={c.id} className="plan-cat-mini">
+                        <span className="plan-cat-mini-name">{c.name}</span>
+                        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
+                          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               <div className="plan-card-footer">
@@ -882,6 +1046,7 @@ function CategoryModal({ initial, onSave, onClose, onDelete }) {
       type,
       limit: type === "expense" ? (parseFloat(limit) || 0) : 0,
       color: initial.color || CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)],
+      planId: initial.planId ?? null,
     });
   };
 
@@ -928,6 +1093,11 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const [cats, setCats] = useState(
     initial.categories && initial.categories.length ? initial.categories : []
   );
+  const [repeatOn, setRepeatOn] = useState(!!(initial.repeat && initial.repeat.enabled));
+  const [repeatFreq, setRepeatFreq] = useState((initial.repeat && initial.repeat.frequency) || "monthly");
+
+  const canRepeat = !!(startDate && endDate);
+  const matchDays = planMatchDurationDays({ startDate, endDate });
 
   const canSave = name.trim().length > 0;
   const allocated = cats.reduce((s, c) => s + planCategoryTotal(c), 0);
@@ -962,8 +1132,10 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
       income: Number(income) || 0,
       dateCreated: initial.dateCreated || todayStr(),
       active: initial.active || false,
+      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq },
       categories: cats.map((c) => ({
         id: c.id,
+        categoryId: c.categoryId,
         name: c.name.trim() || "Untitled category",
         mode: c.mode === "items" ? "items" : "bulk",
         bulkAmount: Number(c.bulkAmount) || 0,
@@ -992,6 +1164,34 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         <div className="form-group">
           <label>Income</label>
           <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={income} onChange={(e) => setIncome(e.target.value)} />
+        </div>
+
+        <div className="plan-repeat-block">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={repeatOn}
+              disabled={!canRepeat}
+              onChange={(e) => setRepeatOn(e.target.checked)}
+            />
+            Repeat this plan
+          </label>
+          {!canRepeat && <p className="settings-desc">Set both a start and end date to enable repeating.</p>}
+          {canRepeat && repeatOn && (
+            <div className="seg plan-repeat-seg">
+              <button type="button" className={`seg-btn ${repeatFreq === "weekly" ? "active" : ""}`} onClick={() => setRepeatFreq("weekly")}>Weekly</button>
+              <button type="button" className={`seg-btn ${repeatFreq === "biweekly" ? "active" : ""}`} onClick={() => setRepeatFreq("biweekly")}>Every 2 weeks</button>
+              <button type="button" className={`seg-btn ${repeatFreq === "monthly" ? "active" : ""}`} onClick={() => setRepeatFreq("monthly")}>Monthly</button>
+              <button type="button" className={`seg-btn ${repeatFreq === "match" ? "active" : ""}`} onClick={() => setRepeatFreq("match")}>
+                Match time frame{matchDays ? ` (${matchDays}d)` : ""}
+              </button>
+            </div>
+          )}
+          {canRepeat && repeatOn && (
+            <p className="settings-desc">
+              The next cycle will start on {fmtDate(endDate)} and run for the selected length, carrying forward the same income and categories as a new plan.
+            </p>
+          )}
         </div>
 
         <div className="plan-summary-bar">
@@ -1103,6 +1303,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!loaded) return;
+    setState((s) => (s ? rolloverDuePlans(s) : s));
+  }, [loaded]);
+
+  useEffect(() => {
     if (!loaded || !state) return;
     (async () => {
       try { await window.storage.set(STORAGE_KEY, JSON.stringify(state), false); }
@@ -1195,10 +1400,17 @@ export default function App() {
 
   const savePlan = (p) => {
     setState((s) => {
-      const exists = s.plans.some((x) => x.id === p.id);
-      let plans = exists ? s.plans.map((x) => (x.id === p.id ? p : x)) : [...s.plans, p];
-      if (p.active) plans = plans.map((x) => (x.id === p.id ? x : { ...x, active: false }));
-      return { ...s, plans };
+      let categories = s.categories;
+      let planToSave = p;
+      if (p.active) {
+        const synced = syncPlanCategories(p, categories);
+        categories = synced.categories;
+        planToSave = synced.plan;
+      }
+      const exists = s.plans.some((x) => x.id === planToSave.id);
+      let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [...s.plans, planToSave];
+      if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
+      return { ...s, plans, categories };
     });
     setPlanModal(null);
   };
@@ -1215,7 +1427,35 @@ export default function App() {
     });
   };
   const setActivePlan = (id) => {
-    setState((s) => ({ ...s, plans: s.plans.map((p) => ({ ...p, active: p.id === id ? !p.active : false })) }));
+    setState((s) => {
+      const target = s.plans.find((p) => p.id === id);
+      if (!target || target.active) {
+        // toggling off, or plan not found — just clear active flags
+        return { ...s, plans: s.plans.map((p) => ({ ...p, active: p.id === id ? false : p.active })) };
+      }
+      const synced = syncPlanCategories(target, s.categories);
+      const plans = s.plans.map((p) => (p.id === id ? { ...synced.plan, active: true } : { ...p, active: false }));
+      return { ...s, plans, categories: synced.categories };
+    });
+  };
+  const duplicatePlan = (id) => {
+    const p = state.plans.find((x) => x.id === id);
+    if (!p) return;
+    setPlanModal({
+      name: `${p.name} (Duplicate)`,
+      startDate: p.startDate || "",
+      endDate: p.endDate || "",
+      income: p.income,
+      active: false,
+      repeat: p.repeat ? { ...p.repeat } : { enabled: false, frequency: "monthly" },
+      categories: (p.categories || []).map((c) => ({
+        id: uid(),
+        name: c.name,
+        mode: c.mode,
+        bulkAmount: c.bulkAmount,
+        items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount })),
+      })),
+    });
   };
 
   const exportJSON = () => {
@@ -1355,10 +1595,12 @@ export default function App() {
             {view === "plans" && (
               <PlansView
                 plans={state.plans}
+                transactions={state.transactions}
                 onAdd={() => setPlanModal({})}
                 onEdit={setPlanModal}
                 onDelete={requestDeletePlan}
                 onSetActive={setActivePlan}
+                onDuplicate={duplicatePlan}
               />
             )}
             {view === "more" && (
@@ -1590,16 +1832,26 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-stat-value { font-family:'JetBrains Mono',monospace; font-size:16.5px; font-weight:600; margin-top:2px; }
 .plan-card-cats { display:flex; gap:6px; flex-wrap:wrap; }
 .plan-card-footer { display:flex; justify-content:flex-end; }
+.plan-card-catlist { display:flex; flex-direction:column; gap:5px; border-top:1px solid var(--border); padding-top:10px; }
+.plan-cat-mini { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; }
+.plan-cat-mini-name { color:var(--text-muted); }
+.plan-cat-mini-amt { font-family:'JetBrains Mono',monospace; }
 
 .plan-active-card { display:flex; flex-direction:column; gap:10px; }
 .plan-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
 .plan-active-empty { flex-direction:row; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .plan-empty-text { flex:1; min-width:220px; }
 .plan-empty-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:4px; }
+.plan-cats-empty { padding: 0 20px 20px; margin:0; }
 
 .plan-summary-bar { display:flex; gap:24px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
 .plan-summary-bar > div { display:flex; flex-direction:column; gap:2px; font-size:12px; }
 .plan-summary-bar strong { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; }
+.plan-repeat-block { display:flex; flex-direction:column; gap:8px; border:1px solid var(--border); border-radius:10px; padding:12px 14px; background: var(--surface-2); }
+.checkbox-row { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; cursor:pointer; }
+.checkbox-row input[type="checkbox"] { width:15px; height:15px; accent-color: var(--brass); cursor:pointer; }
+.plan-repeat-seg { flex-wrap:wrap; }
+.plan-repeat-seg .seg-btn { flex:1 1 auto; white-space:nowrap; padding:7px 10px; }
 .plan-categories { display:flex; flex-direction:column; gap:12px; }
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
