@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
-  Download, Upload, FileSpreadsheet
+  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -54,7 +54,16 @@ function seedCategories() {
 }
 
 function defaultState() {
-  return { accounts: [], categories: seedCategories(), transactions: [] };
+  return { accounts: [], categories: seedCategories(), transactions: [], plans: [] };
+}
+
+function planCategoryTotal(cat) {
+  if (cat.mode === "items") return (cat.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  return Number(cat.bulkAmount) || 0;
+}
+
+function planAllocated(plan) {
+  return (plan.categories || []).reduce((s, c) => s + planCategoryTotal(c), 0);
 }
 
 function computeBalance(account, transactions) {
@@ -78,6 +87,7 @@ const NAV_ITEMS = [
   { id: "transactions", label: "Transactions", icon: Receipt },
   { id: "accounts", label: "Accounts", icon: Wallet },
   { id: "budgets", label: "Budgets", icon: Target },
+  { id: "plans", label: "Plans", icon: ClipboardList },
 ];
 
 const VIEW_TITLES = {
@@ -85,6 +95,7 @@ const VIEW_TITLES = {
   transactions: "Transactions",
   accounts: "Accounts",
   budgets: "Budgets",
+  plans: "Plans",
   more: "More",
 };
 
@@ -162,10 +173,10 @@ function EmptyState({ icon: Icon, title, message, actionLabel, onAction }) {
   );
 }
 
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, wide }) {
   return (
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className={`modal${wide ? " modal-lg" : ""}`}>
         <div className="modal-header">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose}><X size={18} /></button>
@@ -509,7 +520,7 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, error }) {
 
 /* ---------------------------------- budgets view ---------------------------------- */
 
-function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
+function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
   const cmk = currentMonthKey();
   const monthTx = transactions.filter((t) => t.type === "expense" && monthKeyOf(t.date) === cmk);
   const expenseCats = categories.filter((c) => c.type === "expense");
@@ -519,9 +530,56 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
   const budgeted = withSpend.filter((c) => c.limit > 0);
   const uncategorizedSpent = monthTx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const totalMonthSpent = monthTx.reduce((s, t) => s + t.amount, 0);
+  const activePlan = (plans || []).find((p) => p.active);
 
   return (
     <div className="budget-view">
+      {activePlan ? (
+        <div className="card plan-active-card">
+          <div className="card-title">
+            Active plan
+            <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit plan</button>
+          </div>
+          <div className="plan-active-name">{activePlan.name}</div>
+          {(activePlan.startDate || activePlan.endDate) && (
+            <div className="plan-card-dates muted">
+              {activePlan.startDate ? fmtDate(activePlan.startDate) : "No start"} – {activePlan.endDate ? fmtDate(activePlan.endDate) : "No end"}
+            </div>
+          )}
+          <div className="plan-card-stats">
+            <div>
+              <div className="plan-stat-label">Income</div>
+              <div className="plan-stat-value">{fmt(activePlan.income)}</div>
+            </div>
+            <div>
+              <div className="plan-stat-label">Allocated</div>
+              <div className="plan-stat-value">{fmt(planAllocated(activePlan))}</div>
+            </div>
+            <div>
+              <div className="plan-stat-label">Remaining to allocate</div>
+              <div className={`plan-stat-value ${(Number(activePlan.income) || 0) - planAllocated(activePlan) < 0 ? "tone-rust" : "tone-teal"}`}>
+                {fmt((Number(activePlan.income) || 0) - planAllocated(activePlan))}
+              </div>
+            </div>
+          </div>
+          {activePlan.categories && activePlan.categories.length > 0 && (
+            <div className="plan-card-cats">
+              {activePlan.categories.map((c) => (
+                <span key={c.id} className="pill">{c.name} · {fmt(planCategoryTotal(c))}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card plan-active-card plan-active-empty">
+          <div className="plan-empty-text">
+            <div className="plan-empty-title">No active budget plan</div>
+            <p className="settings-desc">Create a plan each payday to break your income down into spending categories, then mark it active to see it here.</p>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={onGoPlans}><ClipboardList size={14} /> Go to Plans</button>
+        </div>
+      )}
+
       {(budgeted.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
           <div className="card-title">This month</div>
@@ -580,6 +638,84 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------- plans view ---------------------------------- */
+
+function PlansView({ plans, onAdd, onEdit, onDelete, onSetActive }) {
+  if (plans.length === 0) {
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="No budget plans yet"
+        message="Create a plan every payday to break your income down into spending categories before you budget against it."
+        actionLabel="Create plan"
+        onAction={onAdd}
+      />
+    );
+  }
+
+  const sorted = [...plans].sort((a, b) => b.dateCreated.localeCompare(a.dateCreated));
+
+  return (
+    <div className="plans-view">
+      <div className="plans-header">
+        <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> New plan</button>
+      </div>
+      <div className="plans-list">
+        {sorted.map((p) => {
+          const allocated = planAllocated(p);
+          const remaining = (Number(p.income) || 0) - allocated;
+          return (
+            <div key={p.id} className={`plan-card ${p.active ? "plan-active" : ""}`}>
+              <div className="plan-card-top">
+                <div className="plan-card-name">
+                  {p.name}
+                  {p.active && <span className="pill plan-active-pill"><CheckCircle2 size={11} /> Active</span>}
+                </div>
+                <div className="row-actions">
+                  <button className="icon-btn" onClick={() => onEdit(p)}><Pencil size={14} /></button>
+                  <button className="icon-btn" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
+                </div>
+              </div>
+              <div className="plan-card-dates muted">
+                Created {fmtDate(p.dateCreated)}
+                {(p.startDate || p.endDate) && (
+                  <> · {p.startDate ? fmtDate(p.startDate) : "No start"} – {p.endDate ? fmtDate(p.endDate) : "No end"}</>
+                )}
+              </div>
+              <div className="plan-card-stats">
+                <div>
+                  <div className="plan-stat-label">Income</div>
+                  <div className="plan-stat-value">{fmt(p.income)}</div>
+                </div>
+                <div>
+                  <div className="plan-stat-label">Allocated</div>
+                  <div className="plan-stat-value">{fmt(allocated)}</div>
+                </div>
+                <div>
+                  <div className="plan-stat-label">Remaining</div>
+                  <div className={`plan-stat-value ${remaining < 0 ? "tone-rust" : "tone-teal"}`}>{fmt(remaining)}</div>
+                </div>
+              </div>
+              {p.categories && p.categories.length > 0 && (
+                <div className="plan-card-cats">
+                  {p.categories.map((c) => (
+                    <span key={c.id} className="pill">{c.name} · {fmt(planCategoryTotal(c))}</span>
+                  ))}
+                </div>
+              )}
+              <div className="plan-card-footer">
+                <button className={`btn btn-sm ${p.active ? "btn-ghost" : "btn-primary"}`} onClick={() => onSetActive(p.id)}>
+                  {p.active ? "Unset active" : "Set active"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -781,6 +917,145 @@ function CategoryModal({ initial, onSave, onClose, onDelete }) {
   );
 }
 
+/* ---------------------------------- plan modal ---------------------------------- */
+
+function PlanModal({ initial, onSave, onClose, onDelete }) {
+  const isEdit = !!initial.id;
+  const [name, setName] = useState(initial.name || "");
+  const [startDate, setStartDate] = useState(initial.startDate || "");
+  const [endDate, setEndDate] = useState(initial.endDate || "");
+  const [income, setIncome] = useState(initial.income ?? "");
+  const [cats, setCats] = useState(
+    initial.categories && initial.categories.length ? initial.categories : []
+  );
+
+  const canSave = name.trim().length > 0;
+  const allocated = cats.reduce((s, c) => s + planCategoryTotal(c), 0);
+  const remaining = (Number(income) || 0) - allocated;
+
+  const addCategory = () => {
+    setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, items: [] }]);
+  };
+  const updateCategory = (id, patch) => {
+    setCats((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  };
+  const removeCategory = (id) => {
+    setCats((cs) => cs.filter((c) => c.id !== id));
+  };
+  const addItem = (catId) => {
+    setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: [...(c.items || []), { id: uid(), name: "", amount: 0 }] } : c)));
+  };
+  const updateItem = (catId, itemId, patch) => {
+    setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: (c.items || []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) } : c)));
+  };
+  const removeItem = (catId, itemId) => {
+    setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: (c.items || []).filter((i) => i.id !== itemId) } : c)));
+  };
+
+  const submit = () => {
+    if (!canSave) return;
+    onSave({
+      id: initial.id || uid(),
+      name: name.trim(),
+      startDate: startDate || null,
+      endDate: endDate || null,
+      income: Number(income) || 0,
+      dateCreated: initial.dateCreated || todayStr(),
+      active: initial.active || false,
+      categories: cats.map((c) => ({
+        id: c.id,
+        name: c.name.trim() || "Untitled category",
+        mode: c.mode === "items" ? "items" : "bulk",
+        bulkAmount: Number(c.bulkAmount) || 0,
+        items: (c.items || []).map((i) => ({ id: i.id, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0 })),
+      })),
+    });
+  };
+
+  return (
+    <Modal title={isEdit ? "Edit plan" : "New plan"} onClose={onClose} wide>
+      <div className="modal-body">
+        <div className="form-group">
+          <label>Plan name</label>
+          <input className="input" placeholder="e.g. July 5 Paycheck" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Start date (optional)</label>
+            <input type="date" className="input mono" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>End date (optional)</label>
+            <input type="date" className="input mono" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Income</label>
+          <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={income} onChange={(e) => setIncome(e.target.value)} />
+        </div>
+
+        <div className="plan-summary-bar">
+          <div><span className="muted">Income</span><strong>{fmt(Number(income) || 0)}</strong></div>
+          <div><span className="muted">Allocated</span><strong>{fmt(allocated)}</strong></div>
+          <div>
+            <span className="muted">Remaining</span>
+            <strong className={remaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(remaining)}</strong>
+          </div>
+        </div>
+
+        <div className="plan-categories">
+          <div className="plan-categories-header">
+            <div className="card-title" style={{ marginBottom: 0 }}>Budget categories</div>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={addCategory}><Plus size={14} /> Add category</button>
+          </div>
+          {cats.length === 0 && (
+            <p className="settings-desc">No categories yet — break your income down into spending buckets, like Rent or Groceries.</p>
+          )}
+          {cats.map((c) => (
+            <div key={c.id} className="plan-cat-block">
+              <div className="plan-cat-row">
+                <input className="input" placeholder="Category name (e.g. Streaming services)" value={c.name} onChange={(e) => updateCategory(c.id, { name: e.target.value })} />
+                <div className="seg plan-cat-seg">
+                  <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
+                  <button type="button" className={`seg-btn ${c.mode === "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "items" })}>Itemized</button>
+                </div>
+                <button type="button" className="icon-btn" onClick={() => removeCategory(c.id)}><Trash2 size={14} /></button>
+              </div>
+              {c.mode === "items" ? (
+                <div className="plan-items">
+                  {(c.items || []).map((it) => (
+                    <div key={it.id} className="plan-item-row">
+                      <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
+                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} />
+                      <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
+                    </div>
+                  ))}
+                  <div className="plan-items-footer">
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => addItem(c.id)}><Plus size={13} /> Add expense</button>
+                    <div className="plan-cat-subtotal muted">Subtotal: {fmt(planCategoryTotal(c))}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="form-group plan-cat-bulk">
+                  <label>Budget amount</label>
+                  <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="modal-footer">
+        {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!canSave} onClick={submit}>Save plan</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------------------------------- app root ---------------------------------- */
 
 const STORAGE_KEY = "vault-finance-data-v1";
@@ -794,6 +1069,7 @@ export default function App() {
   const [txModal, setTxModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
+  const [planModal, setPlanModal] = useState(null);
   const [accError, setAccError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null);
 
@@ -817,7 +1093,8 @@ export default function App() {
     (async () => {
       try {
         const res = await window.storage.get(STORAGE_KEY, false);
-        setState(res && res.value ? JSON.parse(res.value) : defaultState());
+        const raw = res && res.value ? JSON.parse(res.value) : null;
+        setState(raw ? { ...defaultState(), ...raw, plans: Array.isArray(raw.plans) ? raw.plans : [] } : defaultState());
       } catch (e) {
         setState(defaultState());
       }
@@ -916,6 +1193,31 @@ export default function App() {
     });
   };
 
+  const savePlan = (p) => {
+    setState((s) => {
+      const exists = s.plans.some((x) => x.id === p.id);
+      let plans = exists ? s.plans.map((x) => (x.id === p.id ? p : x)) : [...s.plans, p];
+      if (p.active) plans = plans.map((x) => (x.id === p.id ? x : { ...x, active: false }));
+      return { ...s, plans };
+    });
+    setPlanModal(null);
+  };
+  const deletePlan = (id) => {
+    setState((s) => ({ ...s, plans: s.plans.filter((p) => p.id !== id) }));
+    setPlanModal(null);
+  };
+  const requestDeletePlan = (id) => {
+    const p = state.plans.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Delete plan?",
+      message: `This will permanently delete “${p?.name || "this plan"}”. This can't be undone.`,
+      onConfirm: () => { deletePlan(id); setConfirmDialog(null); },
+    });
+  };
+  const setActivePlan = (id) => {
+    setState((s) => ({ ...s, plans: s.plans.map((p) => ({ ...p, active: p.id === id ? !p.active : false })) }));
+  };
+
   const exportJSON = () => {
     const payload = { app: "amble-finance", version: 1, exportedAt: new Date().toISOString(), data: state };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -937,10 +1239,10 @@ export default function App() {
         if (!valid) throw new Error("bad shape");
         setConfirmDialog({
           title: "Import backup?",
-          message: `This will replace all current accounts, categories, and transactions with the contents of “${file.name}”. This can't be undone.`,
+          message: `This will replace all current accounts, categories, transactions, and plans with the contents of “${file.name}”. This can't be undone.`,
           confirmLabel: "Import & replace",
           onConfirm: () => {
-            setState({ accounts: data.accounts, categories: data.categories, transactions: data.transactions });
+            setState({ accounts: data.accounts, categories: data.categories, transactions: data.transactions, plans: Array.isArray(data.plans) ? data.plans : [] });
             setConfirmDialog(null);
           },
         });
@@ -1023,7 +1325,7 @@ export default function App() {
               <button className="icon-btn theme-toggle" onClick={() => setDarkMode((d) => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
                 {darkMode ? <Sun size={17} /> : <Moon size={17} />}
               </button>
-              {view !== "more" && (
+              {view !== "more" && view !== "plans" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
             </div>
@@ -1039,7 +1341,25 @@ export default function App() {
               <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} error={accError} />
             )}
             {view === "budgets" && (
-              <BudgetsView categories={state.categories} transactions={state.transactions} onAdd={() => setCatModal({})} onEdit={setCatModal} onDelete={requestDeleteCategory} />
+              <BudgetsView
+                categories={state.categories}
+                transactions={state.transactions}
+                onAdd={() => setCatModal({})}
+                onEdit={setCatModal}
+                onDelete={requestDeleteCategory}
+                plans={state.plans}
+                onEditPlan={setPlanModal}
+                onGoPlans={() => setView("plans")}
+              />
+            )}
+            {view === "plans" && (
+              <PlansView
+                plans={state.plans}
+                onAdd={() => setPlanModal({})}
+                onEdit={setPlanModal}
+                onDelete={requestDeletePlan}
+                onSetActive={setActivePlan}
+              />
             )}
             {view === "more" && (
               <MoreView
@@ -1068,6 +1388,9 @@ export default function App() {
       )}
       {catModal !== null && (
         <CategoryModal initial={catModal} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
+      )}
+      {planModal !== null && (
+        <PlanModal initial={planModal} onSave={savePlan} onClose={() => setPlanModal(null)} onDelete={requestDeletePlan} />
       )}
       {confirmDialog && (
         <ConfirmDialog
@@ -1250,7 +1573,46 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .modal-overlay { position:fixed; inset:0; background: rgba(10,10,7,0.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
 .modal { background: var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; }
 .modal.modal-sm { max-width: 380px; }
+.modal.modal-lg { max-width: 640px; }
 .confirm-message { font-size:13.5px; color:var(--text-muted); line-height:1.55; margin:0; }
+
+.plans-view { display:flex; flex-direction:column; gap:16px; }
+.plans-header { display:flex; justify-content:flex-end; }
+.plans-list { display:flex; flex-direction:column; gap:14px; }
+.plan-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+.plan-card.plan-active { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
+.plan-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.plan-card-name { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; display:flex; align-items:center; gap:8px; }
+.plan-active-pill { border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }
+.plan-card-dates { font-size:12px; }
+.plan-card-stats { display:flex; gap:28px; flex-wrap:wrap; }
+.plan-stat-label { font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; }
+.plan-stat-value { font-family:'JetBrains Mono',monospace; font-size:16.5px; font-weight:600; margin-top:2px; }
+.plan-card-cats { display:flex; gap:6px; flex-wrap:wrap; }
+.plan-card-footer { display:flex; justify-content:flex-end; }
+
+.plan-active-card { display:flex; flex-direction:column; gap:10px; }
+.plan-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
+.plan-active-empty { flex-direction:row; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.plan-empty-text { flex:1; min-width:220px; }
+.plan-empty-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:4px; }
+
+.plan-summary-bar { display:flex; gap:24px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
+.plan-summary-bar > div { display:flex; flex-direction:column; gap:2px; font-size:12px; }
+.plan-summary-bar strong { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; }
+.plan-categories { display:flex; flex-direction:column; gap:12px; }
+.plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
+.plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
+.plan-cat-row { display:flex; align-items:center; gap:8px; }
+.plan-cat-row .input { flex:1; }
+.plan-cat-seg { flex-shrink:0; width:160px; }
+.plan-cat-bulk { margin:0; }
+.plan-items { display:flex; flex-direction:column; gap:8px; }
+.plan-item-row { display:flex; align-items:center; gap:8px; }
+.plan-item-row .input { flex:1; }
+.plan-item-amount { width:110px; flex-shrink:0; }
+.plan-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.plan-cat-subtotal { font-size:12px; }
 
 .more-view { display:flex; flex-direction:column; }
 .settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }
