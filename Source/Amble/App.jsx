@@ -101,7 +101,7 @@ function describeArc(cx, cy, r, startAngle, endAngle) {
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 1 ${end.x} ${end.y}`;
 }
 
-function Gauge({ spent, limit, label, size = 148 }) {
+function Gauge({ spent, limit, label, size = 148, footnote }) {
   const pct = limit > 0 ? spent / limit : 0;
   const displayPct = Math.min(pct, 1);
   const over = pct > 1;
@@ -110,6 +110,7 @@ function Gauge({ spent, limit, label, size = 148 }) {
   const track = describeArc(cx, cy, r, -135, 135);
   const value = describeArc(cx, cy, r, -135, -135 + 270 * displayPct);
   const ticks = [-135, -67.5, 0, 67.5, 135];
+  const remaining = limit - spent;
 
   return (
     <div className="gauge">
@@ -127,7 +128,13 @@ function Gauge({ spent, limit, label, size = 148 }) {
         <text x={cx} y={cy + 14} textAnchor="middle" className="gauge-sub">of {fmt(limit)}</text>
       </svg>
       <div className="gauge-label">{label}</div>
-      {over && <div className="gauge-over">+{fmt(spent - limit)} over</div>}
+      {footnote !== undefined ? (
+        <div className="gauge-remaining">{footnote}</div>
+      ) : over ? (
+        <div className="gauge-over">+{fmt(spent - limit)} over</div>
+      ) : (
+        <div className="gauge-remaining">{fmt(remaining)} left</div>
+      )}
     </div>
   );
 }
@@ -497,14 +504,24 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
     ...c, spent: monthTx.filter((t) => t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
   }));
   const budgeted = withSpend.filter((c) => c.limit > 0);
+  const uncategorizedSpent = monthTx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
+  const totalMonthSpent = monthTx.reduce((s, t) => s + t.amount, 0);
 
   return (
     <div className="budget-view">
-      {budgeted.length > 0 && (
+      {(budgeted.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
           <div className="card-title">This month</div>
           <div className="gauge-row">
             {budgeted.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
+            {uncategorizedSpent > 0 && (
+              <Gauge
+                spent={uncategorizedSpent}
+                limit={totalMonthSpent}
+                label="Uncategorized"
+                footnote={`${Math.round((uncategorizedSpent / totalMonthSpent) * 100)}% of spending`}
+              />
+            )}
           </div>
         </div>
       )}
@@ -514,14 +531,17 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
           <button className="btn btn-ghost btn-sm" onClick={onAdd}><Plus size={14} /> Add category</button>
         </div>
         <table className="table full">
-          <thead><tr><th>Name</th><th>Type</th><th>Spent this month</th><th>Monthly limit</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent this month</th><th className="col-center">Monthly limit</th><th className="col-center">Remaining balance</th><th></th></tr></thead>
           <tbody>
             {withSpend.map((c) => (
               <tr key={c.id}>
                 <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
                 <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
-                <td className="amount">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
-                <td className="amount">{c.type === "expense" ? (c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>) : "—"}</td>
+                <td className="amount col-center">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
+                <td className="amount col-center">{c.type === "expense" ? (c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>) : "—"}</td>
+                <td className={`amount col-center ${c.type === "expense" && c.limit > 0 && c.limit - c.spent < 0 ? "tone-rust" : ""}`}>
+                  {c.type === "expense" && c.limit > 0 ? fmt(c.limit - c.spent) : "—"}
+                </td>
                 <td className="row-actions-cell">
                   <div className="row-actions">
                     <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
@@ -533,9 +553,10 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete }) {
             {categories.filter((c) => c.type === "income").map((c) => (
               <tr key={c.id}>
                 <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
-                <td className="muted">income</td>
-                <td className="amount">—</td>
-                <td className="amount">—</td>
+                <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
+                <td className="amount col-center">—</td>
+                <td className="amount col-center">—</td>
+                <td className="amount col-center">—</td>
                 <td className="row-actions-cell">
                   <div className="row-actions">
                     <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
@@ -1164,6 +1185,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .gauge-sub { font-family:'JetBrains Mono',monospace; fill: var(--text-faint); font-size:10.5px; }
 .gauge-label { font-size:12.5px; color:var(--text-muted); margin-top:2px; text-align:center; }
 .gauge-over { font-size:11px; color:var(--rust); margin-top:2px; }
+.gauge-remaining { font-size:11px; color:var(--text-faint); margin-top:2px; text-align:center; }
 
 .chart-empty { color: var(--text-faint); font-size:13.5px; padding: 30px 0; text-align:center; }
 .pie-wrap { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -1182,6 +1204,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .table:not(.full) tr:last-child td { border-bottom:none; }
 .muted { color: var(--text-muted); }
 .amount { font-family:'JetBrains Mono',monospace; font-weight:500; text-align:right; }
+.col-center { text-align:center !important; }
 .row-actions { display:flex; gap:4px; justify-content:flex-end; }
 .row-actions-cell { vertical-align:middle; }
 
