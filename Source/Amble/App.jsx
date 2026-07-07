@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
-  CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun
+  CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, Settings,
+  Download, Upload, FileSpreadsheet
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -164,6 +165,77 @@ function Modal({ title, onClose, children }) {
         {children}
       </div>
     </div>
+  );
+}
+
+function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger", hideCancel = false, onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div className="modal modal-sm">
+        <div className="modal-header">
+          <h2>{title}</h2>
+          <button className="icon-btn" onClick={onCancel}><X size={18} /></button>
+        </div>
+        <div className="modal-body">
+          <p className="confirm-message">{message}</p>
+        </div>
+        <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+          {!hideCancel && <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>}
+          <button className={`btn ${tone === "danger" ? "btn-danger" : "btn-primary"}`} onClick={onConfirm}>
+            {tone === "danger" && <Trash2 size={14} />} {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsModal({ onClose, onExportJSON, onImportJSON, onExportCSV, transactionCount }) {
+  const fileInputRef = useRef(null);
+  return (
+    <Modal title="Settings" onClose={onClose}>
+      <div className="modal-body">
+        <div className="settings-section">
+          <div className="settings-section-title">Backup &amp; restore</div>
+          <p className="settings-desc">
+            Export a full backup of your accounts, categories, and transactions as a JSON file.
+            Use it to move your data to another computer or restore it later — your data never
+            leaves this device on its own.
+          </p>
+          <div className="settings-actions">
+            <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
+            <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onImportJSON(file);
+                e.target.value = "";
+              }}
+            />
+          </div>
+        </div>
+        <div className="settings-section">
+          <div className="settings-section-title">Spreadsheet export</div>
+          <p className="settings-desc">
+            Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a CSV
+            file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant for
+            analysis, not as a backup you'd import back in.
+          </p>
+          <div className="settings-actions">
+            <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
+              <FileSpreadsheet size={14} /> Export transactions (.csv)
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+        <button className="btn btn-primary" onClick={onClose}>Done</button>
+      </div>
+    </Modal>
   );
 }
 
@@ -685,6 +757,8 @@ export default function App() {
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
   const [accError, setAccError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -745,6 +819,15 @@ export default function App() {
     setState((s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== id) }));
     setTxModal(null);
   };
+  const requestDeleteTransaction = (id) => {
+    const t = state.transactions.find((x) => x.id === id);
+    const label = t?.description?.trim() ? `“${t.description.trim()}”` : `this ${t?.type || ""} transaction`;
+    setConfirmDialog({
+      title: "Delete transaction?",
+      message: `This will permanently delete ${label}. This can't be undone.`,
+      onConfirm: () => { deleteTransaction(id); setConfirmDialog(null); },
+    });
+  };
 
   const saveAccount = (a) => {
     setState((s) => {
@@ -754,11 +837,19 @@ export default function App() {
     setAccModal(null);
   };
   const deleteAccount = (id) => {
-    const inUse = state.transactions.some((t) => t.accountId === id || t.toAccountId === id);
-    if (inUse) { setAccError("This account has transactions on it. Delete those transactions first."); return; }
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }));
     setAccModal(null);
     setAccError("");
+  };
+  const requestDeleteAccount = (id) => {
+    const a = state.accounts.find((x) => x.id === id);
+    const inUse = state.transactions.some((t) => t.accountId === id || t.toAccountId === id);
+    if (inUse) { setAccError("This account has transactions on it. Delete those transactions first."); return; }
+    setConfirmDialog({
+      title: "Delete account?",
+      message: `This will permanently delete “${a?.name || "this account"}”. This can't be undone.`,
+      onConfirm: () => { deleteAccount(id); setConfirmDialog(null); },
+    });
   };
 
   const saveCategory = (c) => {
@@ -775,6 +866,88 @@ export default function App() {
       transactions: s.transactions.map((t) => t.categoryId === id ? { ...t, categoryId: null } : t),
     }));
     setCatModal(null);
+  };
+  const requestDeleteCategory = (id) => {
+    const c = state.categories.find((x) => x.id === id);
+    const inUse = state.transactions.some((t) => t.categoryId === id);
+    setConfirmDialog({
+      title: "Delete category?",
+      message: inUse
+        ? `This will permanently delete “${c?.name || "this category"}”. Transactions using it will become uncategorized. This can't be undone.`
+        : `This will permanently delete “${c?.name || "this category"}”. This can't be undone.`,
+      onConfirm: () => { deleteCategory(id); setConfirmDialog(null); },
+    });
+  };
+
+  const exportJSON = () => {
+    const payload = { app: "amble-finance", version: 1, exportedAt: new Date().toISOString(), data: state };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `amble-backup-${todayStr()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const requestImportJSON = (file) => {
+    (async () => {
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const data = parsed && typeof parsed === "object" && parsed.data ? parsed.data : parsed;
+        const valid = data && Array.isArray(data.accounts) && Array.isArray(data.categories) && Array.isArray(data.transactions);
+        if (!valid) throw new Error("bad shape");
+        setConfirmDialog({
+          title: "Import backup?",
+          message: `This will replace all current accounts, categories, and transactions with the contents of “${file.name}”. This can't be undone.`,
+          confirmLabel: "Import & replace",
+          onConfirm: () => {
+            setState({ accounts: data.accounts, categories: data.categories, transactions: data.transactions });
+            setConfirmDialog(null);
+            setSettingsOpen(false);
+          },
+        });
+      } catch (e) {
+        setConfirmDialog({
+          title: "Import failed",
+          message: "That file doesn't look like a valid Amble backup (.json). No changes were made.",
+          confirmLabel: "OK",
+          tone: "primary",
+          hideCancel: true,
+          onConfirm: () => setConfirmDialog(null),
+        });
+      }
+    })();
+  };
+
+  const exportTransactionsCSV = () => {
+    const accName = (id) => state.accounts.find((a) => a.id === id)?.name || "";
+    const catName = (id) => state.categories.find((c) => c.id === id)?.name || "";
+    const header = ["Date", "Type", "Description", "Account", "Transfer To", "Category", "Amount"];
+    const rows = [...state.transactions]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((t) => [
+        t.date,
+        t.type,
+        t.description || "",
+        accName(t.accountId),
+        t.type === "transfer" ? accName(t.toAccountId) : "",
+        t.type === "transfer" ? "" : catName(t.categoryId),
+        t.amount.toFixed(2),
+      ]);
+    const escape = (v) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `amble-transactions-${todayStr()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const netWorth = state.accounts.reduce((s, a) => s + balances[a.id], 0);
@@ -801,6 +974,9 @@ export default function App() {
           <div className="sidebar-footer">
             <div className="nw-label">Net worth</div>
             <div className="nw-value">{fmt(netWorth)}</div>
+            <button className="settings-btn" onClick={() => setSettingsOpen(true)}>
+              <Settings size={14} /> Settings
+            </button>
           </div>
         </aside>
 
@@ -819,13 +995,13 @@ export default function App() {
               <Dashboard accounts={state.accounts} categories={state.categories} transactions={state.transactions} balances={balances} onGoTx={() => { setView("accounts"); setAccModal({}); }} />
             )}
             {view === "transactions" && (
-              <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={deleteTransaction} />
+              <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} />
             )}
             {view === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={deleteAccount} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} error={accError} />
             )}
             {view === "budgets" && (
-              <BudgetsView categories={state.categories} transactions={state.transactions} onAdd={() => setCatModal({})} onEdit={setCatModal} onDelete={deleteCategory} />
+              <BudgetsView categories={state.categories} transactions={state.transactions} onAdd={() => setCatModal({})} onEdit={setCatModal} onDelete={requestDeleteCategory} />
             )}
           </div>
         </main>
@@ -838,14 +1014,34 @@ export default function App() {
           categories={state.categories}
           onSave={saveTransaction}
           onClose={() => setTxModal(null)}
-          onDelete={deleteTransaction}
+          onDelete={requestDeleteTransaction}
         />
       )}
       {accModal !== null && (
-        <AccountModal initial={accModal} onSave={saveAccount} onClose={() => { setAccModal(null); setAccError(""); }} onDelete={deleteAccount} />
+        <AccountModal initial={accModal} onSave={saveAccount} onClose={() => { setAccModal(null); setAccError(""); }} onDelete={requestDeleteAccount} />
       )}
       {catModal !== null && (
-        <CategoryModal initial={catModal} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={deleteCategory} />
+        <CategoryModal initial={catModal} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
+      )}
+      {settingsOpen && (
+        <SettingsModal
+          onClose={() => setSettingsOpen(false)}
+          onExportJSON={exportJSON}
+          onImportJSON={requestImportJSON}
+          onExportCSV={exportTransactionsCSV}
+          transactionCount={state.transactions.length}
+        />
+      )}
+      {confirmDialog && (
+        <ConfirmDialog
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          tone={confirmDialog.tone}
+          hideCancel={confirmDialog.hideCancel}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
+        />
       )}
     </div>
   );
@@ -857,10 +1053,11 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-#root { min-height: 100vh; }
+html, body { margin: 0; padding: 0; height: 100%; }
+#root { height: 100%; }
 
 .app-root, .app-loading {
+  height: 100%;
   --ink: #f4f9fd;
   --surface: #ffffff;
   --surface-2: #eaf4fc;
@@ -904,9 +1101,9 @@ html, body { margin: 0; padding: 0; }
 
 .app-root *:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
-.app-shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+.app-shell { display: grid; grid-template-columns: 232px 1fr; height: 100vh; overflow: hidden; }
 
-.sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; height: 100%; overflow-y: auto; }
 .brand { display:flex; align-items:center; gap:10px; padding: 6px 8px 20px; }
 .brand-mark { width:34px; height:34px; border-radius:8px; background: var(--brass-soft); color: var(--brass); border:1px solid var(--brass); display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600; font-size:18px; }
 .brand-name { font-family:'Fraunces',serif; font-weight:600; font-size:16px; letter-spacing: 0.14em; }
@@ -920,21 +1117,25 @@ html, body { margin: 0; padding: 0; }
 .sidebar-footer { border-top:1px solid var(--border); padding-top:14px; margin-top:10px; }
 .nw-label { font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em; }
 .nw-value { font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:600; color:var(--brass); margin-top:2px; }
+.settings-btn { display:flex; align-items:center; gap:7px; width:100%; margin-top:12px; background:transparent; border:1px solid var(--border); color:var(--text-muted); font-size:12.5px; font-weight:500; padding:8px 10px; border-radius:8px; cursor:pointer; font-family:'Inter',sans-serif; }
+.settings-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--brass); }
 
-.main { display:flex; flex-direction:column; min-width:0; }
-.topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 32px; border-bottom:1px solid var(--border); }
+.main { display:flex; flex-direction:column; min-width:0; height:100%; min-height:0; }
+.topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 32px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .topbar-actions { display:flex; align-items:center; gap:10px; }
 .theme-toggle { border:1px solid var(--border); background: var(--surface); width:36px; height:36px; align-items:center; justify-content:center; border-radius:8px; color: var(--text-muted); }
 .theme-toggle:hover { color: var(--brass); border-color: var(--brass); }
 .view-title { font-family:'Fraunces',serif; font-weight:600; font-size:24px; margin:0; }
-.content { padding: 24px 32px 48px; overflow-y:auto; }
+.content { padding: 24px 32px 48px; overflow-y:auto; flex:1; min-height:0; }
 
 .btn { display:inline-flex; align-items:center; gap:6px; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:500; cursor:pointer; border:1px solid transparent; font-family:'Inter',sans-serif; transition: filter .15s, background .15s; }
 .btn-primary { background: var(--brass); color: var(--on-brass); }
 .btn-primary:hover { filter: brightness(1.08); }
-.btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
+.btn:disabled { opacity:0.4; cursor:not-allowed; }
 .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn-danger { background: var(--rust); color: #ffffff; }
+.btn-danger:hover { filter: brightness(1.08); }
 .btn-sm { padding:6px 10px; font-size:12.5px; }
 .icon-btn { background:transparent; border:none; color:var(--text-faint); cursor:pointer; padding:6px; border-radius:6px; display:flex; }
 .icon-btn:hover { background: var(--surface-2); color: var(--text); }
@@ -1008,6 +1209,14 @@ html, body { margin: 0; padding: 0; }
 
 .modal-overlay { position:fixed; inset:0; background: rgba(10,10,7,0.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
 .modal { background: var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; }
+.modal.modal-sm { max-width: 380px; }
+.confirm-message { font-size:13.5px; color:var(--text-muted); line-height:1.55; margin:0; }
+
+.settings-section { display:flex; flex-direction:column; gap:10px; padding-bottom:18px; margin-bottom:18px; border-bottom:1px solid var(--border); }
+.settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+.settings-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; }
+.settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0; }
+.settings-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
 .modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; }

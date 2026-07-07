@@ -35,7 +35,8 @@
     "artifactName": "Amble_${version}_Setup_${os}_${arch}.${ext}",
     "files": [
       "dist/**/*",
-      "main.js"
+      "main.js",
+      "Amble/assets/**/*"
     ],
     "win": {
       "target": ["portable", "nsis"],
