@@ -87,7 +87,9 @@ function categorySpend(category, transactions, plans, cmk, categories) {
 
 // Mirrors a plan's categories into the app-wide category list so they can be
 // assigned to real transactions. Keeps existing links, creates new categories
-// for new plan categories, and unlinks (but never deletes) ones removed from the plan.
+// for new plan categories, and deletes ones removed from the plan (their ids are
+// returned in removedCategoryIds so callers can also clear that categoryId off
+// any transactions that referenced it).
 // Itemized categories also mirror each line item as its own sub-category (linked via
 // parentCategoryId) so a specific expense, like "Netflix" under "Subscriptions", can be
 // selected directly on a transaction.
@@ -135,8 +137,20 @@ function syncPlanCategories(plan, categories) {
 
     return { ...pc, categoryId: parentId, items: newItems };
   });
-  cats = cats.map((c) => (c.planId === plan.id && !keepIds.has(c.id) ? { ...c, planId: null } : c));
-  return { categories: cats, plan: { ...plan, categories: newPlanCats } };
+  const removedCategoryIds = cats
+    .filter((c) => c.planId === plan.id && !keepIds.has(c.id))
+    .map((c) => c.id);
+  cats = cats.filter((c) => !(c.planId === plan.id && !keepIds.has(c.id)));
+  return { categories: cats, plan: { ...plan, categories: newPlanCats }, removedCategoryIds };
+}
+
+// Applies the removedCategoryIds from syncPlanCategories to a transactions list,
+// clearing categoryId on any transaction that pointed at a category which no
+// longer exists so it falls back to "uncategorized" instead of dangling.
+function clearRemovedCategoryRefs(transactions, removedCategoryIds) {
+  if (!removedCategoryIds || !removedCategoryIds.length) return transactions;
+  const removedSet = new Set(removedCategoryIds);
+  return transactions.map((t) => (removedSet.has(t.categoryId) ? { ...t, categoryId: null } : t));
 }
 
 const REPEAT_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", match: "Match time frame" };
@@ -175,6 +189,7 @@ function rolloverDuePlans(state) {
   const today = todayStr();
   let categories = state.categories.slice();
   let plans = state.plans.slice();
+  let transactions = state.transactions.slice();
   let mutated = false;
 
   for (let i = 0; i < plans.length; i++) {
@@ -210,10 +225,11 @@ function rolloverDuePlans(state) {
       const synced = syncPlanCategories(lastNew, categories);
       categories = synced.categories;
       plans.push(synced.plan);
+      transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
     }
   }
 
-  return mutated ? { ...state, plans, categories } : state;
+  return mutated ? { ...state, plans, categories, transactions } : state;
 }
 
 function computeBalance(account, transactions) {
@@ -1074,8 +1090,17 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
   // resolve which parent it belongs to so both dropdowns stay in sync.
   const selectedCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
   const selectedParentId = selectedCategory ? (selectedCategory.parentCategoryId || selectedCategory.id) : "";
-  const selectedParent = selectedParentId ? categories.find((c) => c.id === selectedParentId) : null;
   const subCategories = selectedParentId ? categories.filter((c) => c.parentCategoryId === selectedParentId) : [];
+
+  // "General <parent>" isn't a selectable specific expense — if the chosen category has
+  // sub-items, the transaction must point at one of them, so default to the first as soon
+  // as the current selection isn't one (e.g. right after picking a parent that has items).
+  useEffect(() => {
+    if (subCategories.length > 0 && !subCategories.some((c) => c.id === categoryId)) {
+      setCategoryId(subCategories[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedParentId, subCategories.length]);
 
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
 
@@ -1151,7 +1176,6 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
           <div className="form-group">
             <label>Specific expense</label>
             <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value={selectedParentId}>General {selectedParent?.name}</option>
               {subCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
@@ -1523,6 +1547,7 @@ export default function App() {
         ...s,
         plans: s.plans.map((p) => (p.id === active.id ? synced.plan : p)),
         categories: synced.categories,
+        transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds),
       };
     });
   }, [loaded]);
@@ -1622,15 +1647,17 @@ export default function App() {
     setState((s) => {
       let categories = s.categories;
       let planToSave = p;
+      let transactions = s.transactions;
       if (p.active) {
         const synced = syncPlanCategories(p, categories);
         categories = synced.categories;
         planToSave = synced.plan;
+        transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
       }
       const exists = s.plans.some((x) => x.id === planToSave.id);
       let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [...s.plans, planToSave];
       if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
-      return { ...s, plans, categories };
+      return { ...s, plans, categories, transactions };
     });
     setPlanModal(null);
   };
@@ -1678,7 +1705,7 @@ export default function App() {
       }
       const synced = syncPlanCategories(target, s.categories);
       const plans = s.plans.map((p) => (p.id === id ? { ...synced.plan, active: true } : { ...p, active: false }));
-      return { ...s, plans, categories: synced.categories };
+      return { ...s, plans, categories: synced.categories, transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds) };
     });
   };
   const duplicatePlan = (id) => {
