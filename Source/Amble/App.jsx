@@ -24,14 +24,59 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
+const CURRENCIES = [
+  { code: "USD", name: "US Dollar", symbol: "$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "JPY", name: "Japanese Yen", symbol: "¥" },
+  { code: "CAD", name: "Canadian Dollar", symbol: "$" },
+  { code: "AUD", name: "Australian Dollar", symbol: "$" },
+  { code: "CHF", name: "Swiss Franc", symbol: "Fr" },
+  { code: "CNY", name: "Chinese Yuan", symbol: "¥" },
+  { code: "INR", name: "Indian Rupee", symbol: "₹" },
+  { code: "MXN", name: "Mexican Peso", symbol: "$" },
+  { code: "BRL", name: "Brazilian Real", symbol: "R$" },
+  { code: "KRW", name: "South Korean Won", symbol: "₩" },
+];
+const ZERO_DECIMAL_CURRENCIES = new Set(["JPY", "KRW"]);
+
+// Set once per render from the top-level App component (based on the user's saved
+// preference) before any child component runs, so every fmt() call anywhere in the
+// tree, no matter how deep, picks up the current currency without prop drilling.
+let ACTIVE_CURRENCY = "USD";
+
 const fmt = (n) => {
   const v = Number(n) || 0;
-  return v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  const digits = ZERO_DECIMAL_CURRENCIES.has(ACTIVE_CURRENCY) ? 0 : 2;
+  try {
+    return v.toLocaleString("en-US", { style: "currency", currency: ACTIVE_CURRENCY, maximumFractionDigits: digits, minimumFractionDigits: digits });
+  } catch (e) {
+    return v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+  }
 };
 
 const fmtDate = (d) => {
   const dt = new Date(d + "T00:00:00");
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
+const fmtDateTime = (iso) => {
+  if (!iso) return "Never";
+  try {
+    return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  } catch (e) {
+    return "Never";
+  }
+};
+
+const formatBytes = (bytes) => {
+  const b = Number(bytes) || 0;
+  if (b < 1024) return `${b} B`;
+  const units = ["KB", "MB", "GB"];
+  let val = b / 1024;
+  let i = 0;
+  while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+  return `${val.toFixed(1)} ${units[i]}`;
 };
 
 // The general (unowned by any budget) starter categories — just the income
@@ -80,7 +125,10 @@ function seedDefaultBudgetPlan() {
 function defaultState() {
   const generalCategories = seedCategories();
   const synced = syncPlanCategories(seedDefaultBudgetPlan(), generalCategories);
-  return { accounts: [], categories: synced.categories, transactions: [], plans: [synced.plan] };
+  return {
+    accounts: [], categories: synced.categories, transactions: [], plans: [synced.plan],
+    currency: "USD", lastBackupAt: null,
+  };
 }
 
 function planCategoryTotal(cat) {
@@ -423,7 +471,11 @@ const MORE_TABS = [
   { id: "about", label: "About", icon: Info },
 ];
 
-function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, darkMode, onToggleDarkMode }) {
+function MoreView({
+  onExportJSON, onImportJSON, onExportCSV, transactionCount, darkMode, onToggleDarkMode,
+  currency, onChangeCurrency, accountCount, budgetCount, categoryCount, dbSizeBytes, lastBackupAt,
+  onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
+}) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
 
@@ -449,12 +501,31 @@ function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, d
               {darkMode ? <Sun size={17} /> : <Moon size={17} />}
             </button>
           </div>
-          <p className="settings-desc more-tab-placeholder">More settings are on the way — check back in a future update.</p>
+          <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+            <div>
+              <div className="settings-row-label">Currency</div>
+              <div className="settings-desc">Amounts throughout Amble will be displayed in this currency.</div>
+            </div>
+            <select className="select" value={currency} onChange={(e) => onChangeCurrency(e.target.value)}>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.symbol} {c.code} ({c.name})</option>
+              ))}
+            </select>
+          </div>
         </div>
       )}
 
       {tab === "data" && (
         <>
+          <div className="card">
+            <div className="card-title">Storage</div>
+            <div className="about-details">
+              <div className="about-row"><span className="muted">Database size</span><span>{formatBytes(dbSizeBytes)}</span></div>
+              <div className="about-row"><span className="muted">Transactions</span><span>{transactionCount.toLocaleString()}</span></div>
+              <div className="about-row"><span className="muted">Accounts</span><span>{accountCount.toLocaleString()}</span></div>
+              <div className="about-row"><span className="muted">Budgets</span><span>{budgetCount.toLocaleString()}</span></div>
+            </div>
+          </div>
           <div className="card">
             <div className="card-title">Backup &amp; restore</div>
             <p className="settings-desc">
@@ -462,6 +533,9 @@ function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, d
               JSON file. Use it to move your data to another computer or restore it later — your
               data never leaves this device on its own.
             </p>
+            <div className="about-details">
+              <div className="about-row"><span className="muted">Last backup</span><span>{fmtDateTime(lastBackupAt)}</span></div>
+            </div>
             <div className="settings-actions">
               <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
               <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
@@ -489,6 +563,34 @@ function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, d
               <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
                 <FileSpreadsheet size={14} /> Export transactions (.csv)
               </button>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Data cleanup</div>
+            <p className="settings-desc">
+              Bulk actions for clearing out data you no longer need. Each of these is permanent
+              and cannot be undone. Amble will ask you to confirm first.
+            </p>
+            <div className="settings-actions">
+              <button className="btn btn-ghost tone-rust" onClick={onDeleteAllTransactions} disabled={transactionCount === 0}>
+                <Trash2 size={14} /> Delete all transactions
+              </button>
+              <button className="btn btn-ghost tone-rust" onClick={onDeleteAllBudgets} disabled={budgetCount === 0}>
+                <Trash2 size={14} /> Delete all budgets
+              </button>
+              <button className="btn btn-ghost tone-rust" onClick={onDeleteAllCategories} disabled={categoryCount === 0}>
+                <Trash2 size={14} /> Delete all categories
+              </button>
+              <button className="btn btn-ghost" onClick={onResetSampleData}>
+                <Repeat size={14} /> Reset sample/default data
+              </button>
+            </div>
+            <div className="settings-row" style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4, borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+              <div>
+                <div className="settings-row-label">Factory reset application</div>
+                <div className="settings-desc" style={{ margin: 0 }}>Wipes all data and preferences, returning Amble to a fresh install.</div>
+              </div>
+              <button className="btn btn-danger" onClick={onFactoryReset}><AlertCircle size={14} /> Factory reset</button>
             </div>
           </div>
         </>
@@ -1694,6 +1796,10 @@ export default function App() {
     );
   }
 
+  // Every fmt() call in the tree (including deep child components) reads this
+  // module-level variable, so it must be refreshed before anything below renders.
+  ACTIVE_CURRENCY = state.currency || "USD";
+
   const balances = {};
   state.accounts.forEach((a) => { balances[a.id] = computeBalance(a, state.transactions); });
 
@@ -1854,6 +1960,10 @@ export default function App() {
     });
   };
 
+  const setCurrency = (code) => {
+    setState((s) => ({ ...s, currency: code }));
+  };
+
   const exportJSON = () => {
     const payload = { app: "amble-finance", version: 1, exportedAt: new Date().toISOString(), data: state };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -1863,6 +1973,7 @@ export default function App() {
     a.download = `amble-backup-${todayStr()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() }));
   };
 
   const requestImportJSON = (file) => {
@@ -1878,7 +1989,15 @@ export default function App() {
           message: `This will replace all current accounts, categories, transactions, and plans with the contents of “${file.name}”. This can't be undone.`,
           confirmLabel: "Import & replace",
           onConfirm: () => {
-            setState({ accounts: data.accounts, categories: data.categories, transactions: data.transactions, plans: Array.isArray(data.plans) ? data.plans : [] });
+            setState({
+              ...defaultState(),
+              accounts: data.accounts,
+              categories: data.categories,
+              transactions: data.transactions,
+              plans: Array.isArray(data.plans) ? data.plans : [],
+              ...(data.currency ? { currency: data.currency } : {}),
+              ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
+            });
             setConfirmDialog(null);
           },
         });
@@ -1922,6 +2041,98 @@ export default function App() {
     a.download = `amble-transactions-${todayStr()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const requestDeleteAllTransactions = () => {
+    const n = state.transactions.length;
+    setConfirmDialog({
+      title: "Delete all transactions?",
+      message: `This will permanently delete all ${n} transaction${n === 1 ? "" : "s"}. Accounts, categories, and budgets will be left in place. This can't be undone.`,
+      onConfirm: () => {
+        setState((s) => ({ ...s, transactions: [] }));
+        setConfirmDialog(null);
+      },
+    });
+  };
+
+  const requestDeleteAllBudgets = () => {
+    const n = state.plans.length;
+    setConfirmDialog({
+      title: "Delete all budgets?",
+      message: `This will permanently delete all ${n} budget${n === 1 ? "" : "s"} and their categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
+      onConfirm: () => {
+        setState((s) => {
+          const deletedCategoryIds = s.categories.filter((c) => c.planId).map((c) => c.id);
+          return {
+            ...s,
+            plans: [],
+            categories: s.categories.filter((c) => !c.planId),
+            transactions: s.transactions.map((t) => (deletedCategoryIds.includes(t.categoryId) ? { ...t, categoryId: null } : t)),
+          };
+        });
+        setConfirmDialog(null);
+      },
+    });
+  };
+
+  const requestDeleteAllCategories = () => {
+    const n = state.categories.length;
+    setConfirmDialog({
+      title: "Delete all categories?",
+      message: `This will permanently delete all ${n} categor${n === 1 ? "y" : "ies"}, including any tied to your budgets. Transactions using them will become uncategorized. This can't be undone.`,
+      onConfirm: () => {
+        setState((s) => {
+          const transactions = s.transactions.map((t) => (t.categoryId ? { ...t, categoryId: null } : t));
+          // Strip the links from every plan's categories/items so they're treated as
+          // brand-new the next time they're synced, instead of pointing at nothing.
+          let plans = s.plans.map((p) => ({
+            ...p,
+            categories: (p.categories || []).map((c) => ({
+              ...c,
+              categoryId: undefined,
+              items: (c.items || []).map((it) => ({ ...it, categoryId: undefined })),
+            })),
+          }));
+          let categories = [];
+          // Re-mirror the active budget right away so its category badges don't
+          // disappear until the next reload.
+          const active = plans.find((p) => p.active);
+          if (active) {
+            const synced = syncPlanCategories(active, categories);
+            categories = synced.categories;
+            plans = plans.map((p) => (p.id === active.id ? synced.plan : p));
+          }
+          return { ...s, categories, transactions, plans };
+        });
+        setConfirmDialog(null);
+      },
+    });
+  };
+
+  const requestResetSampleData = () => {
+    setConfirmDialog({
+      title: "Reset sample/default data?",
+      message: "This will permanently delete all of your accounts, transactions, categories, and budgets, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
+      confirmLabel: "Reset data",
+      onConfirm: () => {
+        setState((s) => ({ ...defaultState(), currency: s.currency }));
+        setConfirmDialog(null);
+      },
+    });
+  };
+
+  const requestFactoryReset = () => {
+    setConfirmDialog({
+      title: "Factory reset application?",
+      message: "This will permanently erase everything, including all accounts, transactions, categories, and budgets, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
+      confirmLabel: "Factory reset",
+      onConfirm: () => {
+        setState(defaultState());
+        setDarkMode(false);
+        setView("dashboard");
+        setConfirmDialog(null);
+      },
+    });
   };
 
   const netWorth = state.accounts.reduce((s, a) => s + balances[a.id], 0);
@@ -2007,6 +2218,18 @@ export default function App() {
                 transactionCount={state.transactions.length}
                 darkMode={darkMode}
                 onToggleDarkMode={() => setDarkMode((d) => !d)}
+                currency={state.currency || "USD"}
+                onChangeCurrency={setCurrency}
+                accountCount={state.accounts.length}
+                budgetCount={state.plans.length}
+                categoryCount={state.categories.length}
+                dbSizeBytes={new Blob([JSON.stringify(state)]).size}
+                lastBackupAt={state.lastBackupAt}
+                onDeleteAllTransactions={requestDeleteAllTransactions}
+                onDeleteAllBudgets={requestDeleteAllBudgets}
+                onDeleteAllCategories={requestDeleteAllCategories}
+                onResetSampleData={requestResetSampleData}
+                onFactoryReset={requestFactoryReset}
               />
             )}
           </div>
@@ -2309,7 +2532,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .about-brand-mark { width:44px; height:44px; font-size:26px; }
 .about-app-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; }
 .about-details { display:flex; flex-direction:column; }
-.about-row { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.about-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
