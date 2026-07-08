@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
-  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat
+  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
+  Sliders, Database, Info, Github, Globe
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -196,6 +197,16 @@ function computeBalance(account, transactions) {
   return balance;
 }
 
+const APP_INFO = {
+  name: "Amble",
+  tagline: "A calm, local-first personal finance & budget tracker.",
+  version: "0.1.0",
+  maintainerName: "Cole Bishop",
+  maintainerHandle: "@cogito11",
+  githubUrl: "https://github.com/Cogito11/Amble-Finance",
+  websiteUrl: "https://cogito11.github.io/Amble-Finance/",
+};
+
 const ACCOUNT_ICONS = { checking: Landmark, savings: PiggyBank, credit: CreditCard };
 const ACCOUNT_LABELS = { checking: "Checking", savings: "Savings", credit: "Credit Card" };
 
@@ -326,53 +337,111 @@ function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger
   );
 }
 
-function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount }) {
+const MORE_TABS = [
+  { id: "settings", label: "Settings", icon: Sliders },
+  { id: "data", label: "Data", icon: Database },
+  { id: "about", label: "About", icon: Info },
+];
+
+function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, darkMode, onToggleDarkMode }) {
+  const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
+
   return (
     <div className="more-view">
-      <div className="card">
-        <div className="card-title">Backup &amp; restore</div>
-        <p className="settings-desc">
-          Export a full backup of your accounts, categories, and transactions as a JSON file.
-          Use it to move your data to another computer or restore it later — your data never
-          leaves this device on its own.
-        </p>
-        <div className="settings-actions">
-          <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
-          <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onImportJSON(file);
-              e.target.value = "";
-            }}
-          />
-        </div>
-      </div>
-      <div className="card">
-        <div className="card-title">Spreadsheet export</div>
-        <p className="settings-desc">
-          Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a CSV
-          file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant for
-          analysis, not as a backup you'd import back in.
-        </p>
-        <div className="settings-actions">
-          <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
-            <FileSpreadsheet size={14} /> Export transactions (.csv)
+      <div className="seg more-tabs">
+        {MORE_TABS.map((t) => (
+          <button key={t.id} type="button" className={`seg-btn ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>
+            <t.icon size={14} /> {t.label}
           </button>
-        </div>
+        ))}
       </div>
+
+      {tab === "settings" && (
+        <div className="card">
+          <div className="card-title">Appearance</div>
+          <div className="settings-row">
+            <div>
+              <div className="settings-row-label">Dark mode</div>
+              <div className="settings-desc">Switch between light and dark themes.</div>
+            </div>
+            <button className="icon-btn theme-toggle" onClick={onToggleDarkMode} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+          </div>
+          <p className="settings-desc more-tab-placeholder">More settings are on the way — check back in a future update.</p>
+        </div>
+      )}
+
+      {tab === "data" && (
+        <>
+          <div className="card">
+            <div className="card-title">Backup &amp; restore</div>
+            <p className="settings-desc">
+              Export a full backup of your accounts, categories, transactions, and plans as a
+              JSON file. Use it to move your data to another computer or restore it later — your
+              data never leaves this device on its own.
+            </p>
+            <div className="settings-actions">
+              <button className="btn btn-ghost" onClick={onExportJSON}><Download size={14} /> Export backup (.json)</button>
+              <button className="btn btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup (.json)</button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onImportJSON(file);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title">Spreadsheet export</div>
+            <p className="settings-desc">
+              Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a
+              CSV file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant
+              for analysis, not as a backup you'd import back in.
+            </p>
+            <div className="settings-actions">
+              <button className="btn btn-ghost" onClick={onExportCSV} disabled={transactionCount === 0}>
+                <FileSpreadsheet size={14} /> Export transactions (.csv)
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === "about" && (
+        <div className="card about-card">
+          <div className="about-brand">
+            <div className="brand-mark about-brand-mark">A</div>
+            <div>
+              <div className="about-app-name">{APP_INFO.name}</div>
+              <div className="muted">{APP_INFO.tagline}</div>
+            </div>
+          </div>
+          <div className="about-details">
+            <div className="about-row"><span className="muted">Version</span><span>{APP_INFO.version}</span></div>
+            <div className="about-row"><span className="muted">Maintainer</span><span>{APP_INFO.maintainerName} ({APP_INFO.maintainerHandle})</span></div>
+          </div>
+          <div className="settings-actions about-links">
+            <a className="btn btn-ghost" href={APP_INFO.githubUrl} target="_blank" rel="noreferrer"><Github size={14} /> GitHub</a>
+            {APP_INFO.websiteUrl && (
+              <a className="btn btn-ghost" href={APP_INFO.websiteUrl} target="_blank" rel="noreferrer"><Globe size={14} /> Website</a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ---------------------------------- dashboard ---------------------------------- */
 
-function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx }) {
+function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx }) {
   const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
   const totalAssets = accounts.filter((a) => a.type !== "credit").reduce((s, a) => s + balances[a.id], 0);
   const totalDebt = accounts.filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -balances[a.id]), 0);
@@ -382,8 +451,10 @@ function Dashboard({ accounts, categories, transactions, balances, onAdd, onGoTx
   const monthIncome = monthTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const monthExpense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
+  const activePlanId = (plans || []).find((p) => p.active)?.id;
   const expenseCats = categories.filter((c) => c.type === "expense");
-  const budgeted = expenseCats.filter((c) => c.limit > 0);
+  // Same rule as the Budgets tab: general categories + the active plan's categories only.
+  const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
   const catSpend = budgeted.map((c) => ({
     ...c,
     spent: monthTx.filter((t) => t.type === "expense" && t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
@@ -1415,14 +1486,37 @@ export default function App() {
     setPlanModal(null);
   };
   const deletePlan = (id) => {
-    setState((s) => ({ ...s, plans: s.plans.filter((p) => p.id !== id) }));
+    setState((s) => {
+      // IDs of categories owned by this plan
+      const deletedCategoryIds = s.categories
+        .filter((c) => c.planId === id)
+        .map((c) => c.id);
+
+      return {
+        ...s,
+
+        // Remove the plan
+        plans: s.plans.filter((p) => p.id !== id),
+
+        // Remove all categories that belong to it
+        categories: s.categories.filter((c) => c.planId !== id),
+
+        // Prevent transactions from referencing deleted categories
+        transactions: s.transactions.map((t) =>
+          deletedCategoryIds.includes(t.categoryId)
+            ? { ...t, categoryId: null }
+            : t
+        ),
+      };
+    });
+
     setPlanModal(null);
   };
   const requestDeletePlan = (id) => {
     const p = state.plans.find((x) => x.id === id);
     setConfirmDialog({
       title: "Delete plan?",
-      message: `This will permanently delete “${p?.name || "this plan"}”. This can't be undone.`,
+      message: `This will permanently delete “${p?.name || "this plan"}” and all of its budget categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
       onConfirm: () => { deletePlan(id); setConfirmDialog(null); },
     });
   };
@@ -1572,7 +1666,7 @@ export default function App() {
           </header>
           <div className="content">
             {view === "dashboard" && (
-              <Dashboard accounts={state.accounts} categories={state.categories} transactions={state.transactions} balances={balances} onGoTx={() => { setView("accounts"); setAccModal({}); }} />
+              <Dashboard accounts={state.accounts} categories={state.categories} transactions={state.transactions} balances={balances} plans={state.plans} onGoTx={() => { setView("accounts"); setAccModal({}); }} />
             )}
             {view === "transactions" && (
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} />
@@ -1609,6 +1703,8 @@ export default function App() {
                 onImportJSON={requestImportJSON}
                 onExportCSV={exportTransactionsCSV}
                 transactionCount={state.transactions.length}
+                darkMode={darkMode}
+                onToggleDarkMode={() => setDarkMode((d) => !d)}
               />
             )}
           </div>
@@ -1866,9 +1962,22 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .plan-cat-subtotal { font-size:12px; }
 
-.more-view { display:flex; flex-direction:column; }
+.more-view { display:flex; flex-direction:column; gap:16px; }
+.more-tabs { max-width:360px; margin-bottom:2px; }
 .settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }
 .settings-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.settings-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+.settings-row-label { font-size:13.5px; font-weight:500; margin-bottom:2px; }
+.more-tab-placeholder { margin:0; }
+
+.about-card { display:flex; flex-direction:column; gap:16px; }
+.about-brand { display:flex; align-items:center; gap:14px; }
+.about-brand-mark { width:44px; height:44px; font-size:20px; }
+.about-app-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; }
+.about-details { display:flex; flex-direction:column; }
+.about-row { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.about-row:last-child { border-bottom:none; }
+.about-links { padding-top:2px; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
 .modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; }
@@ -1879,7 +1988,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .form-group .input, .form-group .select { width:100%; }
 
 .seg { display:flex; background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:3px; }
-.seg-btn { flex:1; background:transparent; border:none; color:var(--text-muted); padding:7px; font-size:13px; font-weight:500; text-transform:capitalize; cursor:pointer; border-radius:6px; }
+.seg-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:none; color:var(--text-muted); padding:7px; font-size:13px; font-weight:500; text-transform:capitalize; cursor:pointer; border-radius:6px; }
 .seg-btn.active { background: var(--brass); color: var(--on-brass); }
 
 @media (max-width: 860px) {
