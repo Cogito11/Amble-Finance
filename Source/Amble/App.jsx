@@ -4,7 +4,7 @@ import {
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
-  Sliders, Database, Info, Github, Globe, ChevronRight
+  Sliders, Database, Info, Github, Globe, ChevronRight, Activity
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -34,28 +34,53 @@ const fmtDate = (d) => {
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 
+// The general (unowned by any budget) starter categories — just the income
+// categories. The rest of the starter expense categories live inside the
+// seeded Default Budget below.
 function seedCategories() {
-  const expense = [
-    ["Groceries", 500], ["Dining Out", 200], ["Transportation", 200],
-    ["Utilities", 250], ["Housing", 1500], ["Entertainment", 100],
-    ["Shopping", 150], ["Health", 100], ["Subscriptions", 50], ["Other", 100],
-  ];
   const income = [["Salary", 0], ["Freelance", 0], ["Other Income", 0]];
-  let i = 0;
-  const cats = [];
-  expense.forEach(([name, limit]) => {
-    cats.push({ id: uid(), name, limit, type: "expense", color: CAT_PALETTE[i % CAT_PALETTE.length] });
-    i++;
-  });
-  income.forEach(([name]) => {
-    cats.push({ id: uid(), name, limit: 0, type: "income", color: CAT_PALETTE[i % CAT_PALETTE.length] });
-    i++;
-  });
-  return cats;
+  return income.map(([name], i) => ({
+    id: uid(), name, limit: 0, type: "income", color: CAT_PALETTE[i % CAT_PALETTE.length],
+  }));
+}
+
+const DEFAULT_BUDGET_CATEGORIES = [
+  ["Groceries", 500], ["Dining Out", 200], ["Transportation", 200],
+  ["Utilities", 250], ["Housing", 1500], ["Entertainment", 100],
+  ["Shopping", 150], ["Health", 100], ["Subscriptions", 50],
+];
+
+function currentMonthRange() {
+  const d = new Date();
+  const start = new Date(d.getFullYear(), d.getMonth(), 1);
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  const toStr = (x) => x.toISOString().slice(0, 10);
+  return { startDate: toStr(start), endDate: toStr(end) };
+}
+
+// A starter budget so a fresh install isn't empty — scoped to the current month and
+// set to repeat monthly, so it keeps rolling forward on its own via rolloverDuePlans.
+function seedDefaultBudgetPlan() {
+  const { startDate, endDate } = currentMonthRange();
+  return {
+    id: uid(),
+    name: "Default Budget",
+    startDate,
+    endDate,
+    income: DEFAULT_BUDGET_CATEGORIES.reduce((s, [, limit]) => s + limit, 0),
+    dateCreated: todayStr(),
+    active: true,
+    repeat: { enabled: true, frequency: "monthly" },
+    categories: DEFAULT_BUDGET_CATEGORIES.map(([name, limit]) => ({
+      id: uid(), name, mode: "bulk", bulkAmount: limit, date: null, items: [],
+    })),
+  };
 }
 
 function defaultState() {
-  return { accounts: [], categories: seedCategories(), transactions: [], plans: [] };
+  const generalCategories = seedCategories();
+  const synced = syncPlanCategories(seedDefaultBudgetPlan(), generalCategories);
+  return { accounts: [], categories: synced.categories, transactions: [], plans: [synced.plan] };
 }
 
 function planCategoryTotal(cat) {
@@ -269,16 +294,16 @@ const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "transactions", label: "Transactions", icon: Receipt },
   { id: "accounts", label: "Accounts", icon: Wallet },
-  { id: "budgets", label: "Budgets", icon: Target },
-  { id: "plans", label: "Plans", icon: ClipboardList },
+  { id: "budgets", label: "Status", icon: Activity },
+  { id: "plans", label: "Budgets", icon: ClipboardList },
 ];
 
 const VIEW_TITLES = {
   dashboard: "Dashboard",
   transactions: "Transactions",
   accounts: "Accounts",
-  budgets: "Budgets",
-  plans: "Plans",
+  budgets: "Status",
+  plans: "Budgets",
   more: "More",
 };
 
@@ -515,7 +540,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     const idSet = new Set([c.id, ...childIds]);
     return monthTx.filter((t) => isSpendTx(t) && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
   };
-  // Same rule as the Budgets tab: general categories + the active plan's categories only.
+  // Same rule as the Status tab: general categories + the active plan's categories only.
   const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
   const catSpend = budgeted.map((c) => ({
     ...c,
@@ -787,7 +812,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
   const planCats = activePlan ? withSpend.filter((c) => c.planId === activePlan.id) : [];
   // "General" means not owned by any plan at all — categories from other (inactive) plans
-  // stay out of this list entirely, so they can't be edited/deleted from the Budgets tab.
+  // stay out of this list entirely, so they can't be edited/deleted from the Status tab.
   const generalExpenseCats = withSpend.filter((c) => !c.planId);
   const incomeCats = categories.filter((c) => c.type === "income");
 
@@ -829,8 +854,8 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
       {activePlan ? (
         <div className="card plan-active-card">
           <div className="card-title">
-            Active plan
-            <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit plan</button>
+            Active budget
+            <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit budget</button>
           </div>
           <div className="plan-active-name">{activePlan.name}</div>
           {(activePlan.startDate || activePlan.endDate) && (
@@ -858,10 +883,10 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
       ) : (
         <div className="card plan-active-card plan-active-empty">
           <div className="plan-empty-text">
-            <div className="plan-empty-title">No active budget plan</div>
-            <p className="settings-desc">Create a plan each payday to break your income down into spending categories, then mark it active to see it here.</p>
+            <div className="plan-empty-title">No active budget</div>
+            <p className="settings-desc">Create a budget each payday to break your income down into spending categories, then mark it active to see it here.</p>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onGoPlans}><ClipboardList size={14} /> Go to Plans</button>
+          <button className="btn btn-ghost btn-sm" onClick={onGoPlans}><ClipboardList size={14} /> Go to Budgets</button>
         </div>
       )}
 
@@ -884,8 +909,8 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
       <div className="card no-pad">
         <div className="card-title padded">
-          Budget plan categories
-          {activePlan && <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit plan</button>}
+          Budget categories
+          {activePlan && <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit budget</button>}
         </div>
         {activePlan && planCats.length > 0 ? (
           <table className="table full">
@@ -894,7 +919,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
           </table>
         ) : (
           <p className="settings-desc plan-cats-empty">
-            {activePlan ? "This plan doesn't have any categories yet — add some from the Edit plan button above." : "Set a plan active on the Plans page to see its categories here."}
+            {activePlan ? "This budget doesn't have any categories yet — add some from the Edit budget button above." : "Set a budget active on the Budgets page to see its categories here."}
           </p>
         )}
       </div>
@@ -1026,9 +1051,9 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
     return (
       <EmptyState
         icon={ClipboardList}
-        title="No budget plans yet"
-        message="Create a plan every payday to break your income down into spending categories before you budget against it."
-        actionLabel="Create plan"
+        title="No budgets yet"
+        message="Create a budget every payday to break your income down into spending categories before you spend against it."
+        actionLabel="Create budget"
         onAction={onAdd}
       />
     );
@@ -1039,7 +1064,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
   return (
     <div className="plans-view">
       <div className="plans-header">
-        <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> New plan</button>
+        <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> New budget</button>
       </div>
       <div className="plans-list">
         {sorted.map((p) => {
@@ -1056,9 +1081,9 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
                   )}
                 </div>
                 <div className="row-actions">
-                  <button className="icon-btn" title="Duplicate plan" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
-                  <button className="icon-btn" title="Edit plan" onClick={() => onEdit(p)}><Pencil size={14} /></button>
-                  <button className="icon-btn" title="Delete plan" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
+                  <button className="icon-btn" title="Duplicate budget" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
+                  <button className="icon-btn" title="Edit budget" onClick={() => onEdit(p)}><Pencil size={14} /></button>
+                  <button className="icon-btn" title="Delete budget" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
                 </div>
               </div>
               <div className="plan-card-dates muted">
@@ -1394,10 +1419,10 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   };
 
   return (
-    <Modal title={isEdit ? "Edit plan" : "New plan"} onClose={onClose} wide>
+    <Modal title={isEdit ? "Edit budget" : "New budget"} onClose={onClose} wide>
       <div className="modal-body">
         <div className="form-group">
-          <label>Plan name</label>
+          <label>Budget name</label>
           <input className="input" placeholder="e.g. July 5 Paycheck" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </div>
         <div className="form-row">
@@ -1455,7 +1480,6 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         <div className="plan-categories">
           <div className="plan-categories-header">
             <div className="card-title" style={{ marginBottom: 0 }}>Budget categories</div>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={addCategory}><Plus size={14} /> Add category</button>
           </div>
           {cats.length === 0 && (
             <p className="settings-desc">No categories yet — break your income down into spending buckets, like Rent or Groceries.</p>
@@ -1499,13 +1523,14 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
               )}
             </div>
           ))}
+          <button type="button" className="btn btn-ghost btn-sm plan-add-category-btn" onClick={addCategory}><Plus size={14} /> Add category</button>
         </div>
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!canSave} onClick={submit}>Save plan</button>
+          <button className="btn btn-primary" disabled={!canSave} onClick={submit}>Save budget</button>
         </div>
       </div>
     </Modal>
@@ -1727,8 +1752,8 @@ export default function App() {
   const requestDeletePlan = (id) => {
     const p = state.plans.find((x) => x.id === id);
     setConfirmDialog({
-      title: "Delete plan?",
-      message: `This will permanently delete “${p?.name || "this plan"}” and all of its budget categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
+      title: "Delete budget?",
+      message: `This will permanently delete “${p?.name || "this budget"}” and all of its categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
       onConfirm: () => { deletePlan(id); setConfirmDialog(null); },
     });
   };
@@ -2012,6 +2037,27 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .app-root *:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 
+/* Lets native controls (scrollbars, date/select popups) pick a light or dark
+   rendering that matches the app instead of always defaulting to light. */
+.app-root { color-scheme: light; }
+.app-root.dark { color-scheme: dark; }
+
+/* Scrollbars, themed to match the app instead of the OS default. */
+.app-root, .app-loading, .app-root * , .app-loading * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.app-root ::-webkit-scrollbar, .app-loading ::-webkit-scrollbar { width:10px; height:10px; }
+.app-root ::-webkit-scrollbar-track, .app-loading ::-webkit-scrollbar-track { background: transparent; }
+.app-root ::-webkit-scrollbar-thumb, .app-loading ::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 20px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.app-root ::-webkit-scrollbar-thumb:hover, .app-loading ::-webkit-scrollbar-thumb:hover { background-color: var(--text-faint); }
+.app-root ::-webkit-scrollbar-corner, .app-loading ::-webkit-scrollbar-corner { background: transparent; }
+
 .app-shell { display: grid; grid-template-columns: 232px 1fr; height: 100vh; overflow: hidden; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; height: 100%; overflow-y: auto; }
@@ -2104,6 +2150,8 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .search-input input { background:transparent; border:none; color:var(--text); font-size:13.5px; width:100%; outline:none; }
 .select, .input { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; }
 .input.mono, .select.mono { font-family:'JetBrains Mono',monospace; }
+.select:hover, .input:hover { border-color: var(--text-faint); }
+.select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
 .acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
 .acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; }
@@ -2170,6 +2218,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-repeat-seg .seg-btn { flex:1 1 auto; white-space:nowrap; padding:7px 10px; }
 .plan-categories { display:flex; flex-direction:column; gap:12px; }
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
+.plan-add-category-btn { align-self:flex-start; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
