@@ -1202,6 +1202,19 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedParentId, subCategories.length]);
 
+  // If the transaction type changes (e.g. expense -> income) after a category was
+  // already picked, that category may no longer be valid for the new type (income
+  // categories shouldn't end up on expense transactions and vice versa). Clear it so
+  // the dropdown falls back to "Uncategorized" instead of silently saving a mismatched,
+  // now-invisible category selection.
+  useEffect(() => {
+    if (!categoryId || type === "transfer") return;
+    const cat = categories.find((c) => c.id === categoryId);
+    const parent = cat ? (cat.parentCategoryId ? categories.find((c) => c.id === cat.parentCategoryId) : cat) : null;
+    if (!parent || parent.type !== type) setCategoryId("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type]);
+
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
 
   const submit = () => {
@@ -1335,7 +1348,7 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
           </select>
         </div>
         <div className="form-group">
-          <label>{isCredit ? "Current balance owed" : isEdit ? "Starting balance" : "Current balance"}</label>
+          <label>{isCredit ? (isEdit ? "Starting balance owed" : "Current balance owed") : isEdit ? "Starting balance" : "Current balance"}</label>
           <input type="number" step="0.01" className="input mono" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} />
         </div>
       </div>
@@ -1592,7 +1605,20 @@ const THEME_KEY = "amble-theme-pref-v1";
 export default function App() {
   const [state, setState] = useState(null);
   const [loaded, setLoaded] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  // Read the saved theme preference synchronously (rather than via an async
+  // window.storage.get on mount) so the very first render already comes up in the
+  // right theme. Doing this asynchronously used to cause two bugs: a visible flash
+  // of light mode on every load for dark-mode users, and a race where the "save
+  // current theme" effect below would fire with the default (false) value and
+  // briefly overwrite a saved dark-mode preference before the async load resolved.
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const raw = localStorage.getItem(THEME_KEY);
+      return raw ? !!JSON.parse(raw).dark : false;
+    } catch (e) {
+      return false;
+    }
+  });
   const [view, setView] = useState("dashboard");
   const [txModal, setTxModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
@@ -1600,15 +1626,6 @@ export default function App() {
   const [planModal, setPlanModal] = useState(null);
   const [accError, setAccError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await window.storage.get(THEME_KEY, false);
-        if (res && res.value) setDarkMode(JSON.parse(res.value).dark);
-      } catch (e) { /* default to light */ }
-    })();
-  }, []);
 
   useEffect(() => {
     (async () => {
