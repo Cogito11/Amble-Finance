@@ -839,14 +839,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
   ));
 
   const renderPlanCategoryRows = (list) => list.map((c) => (
-    <tr key={c.id}>
-      <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
-      <td className="amount col-center">{fmt(c.spent)}</td>
-      <td className="amount col-center">{c.limit > 0 ? fmt(c.limit) : <span className="muted">Not set</span>}</td>
-      <td className={`amount col-center ${c.limit > 0 && c.limit - c.spent < 0 ? "tone-rust" : ""}`}>
-        {c.limit > 0 ? fmt(c.limit - c.spent) : "—"}
-      </td>
-    </tr>
+    <StatusPlanCategoryRow key={c.id} category={c} categories={categories} transactions={transactions} plans={plans} cmk={cmk} />
   ));
 
   return (
@@ -952,6 +945,60 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
         </table>
       </div>
     </div>
+  );
+}
+
+// Renders one row of the Status page's "Budget categories" table. Behaves like a
+// plain row for bulk categories, but for itemized categories (ones with mirrored
+// sub-expense categories) it becomes a click-to-expand parent row plus one sub-row
+// per item — matching the expand/collapse UX on the Budgets page.
+function StatusPlanCategoryRow({ category, categories, transactions, plans, cmk }) {
+  const [expanded, setExpanded] = useState(false);
+  const items = categories.filter((cc) => cc.parentCategoryId === category.id);
+  const isItemized = items.length > 0;
+
+  if (!isItemized) {
+    return (
+      <tr>
+        <td>{category.name}</td>
+        <td className="amount col-center">{fmt(category.spent)}</td>
+        <td className="amount col-center">{category.limit > 0 ? fmt(category.limit) : <span className="muted">Not set</span>}</td>
+        <td className={`amount col-center ${category.limit > 0 && category.limit - category.spent < 0 ? "tone-rust" : ""}`}>
+          {category.limit > 0 ? fmt(category.limit - category.spent) : "—"}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <>
+      <tr className="plan-cat-parent-row" onClick={() => setExpanded((e) => !e)}>
+        <td>
+          <span className="plan-cat-expand-cell">
+            <ChevronRight size={13} className={`plan-cat-chevron${expanded ? " expanded" : ""}`} />
+            {category.name}
+          </span>
+        </td>
+        <td className="amount col-center">{fmt(category.spent)}</td>
+        <td className="amount col-center">{category.limit > 0 ? fmt(category.limit) : <span className="muted">Not set</span>}</td>
+        <td className={`amount col-center ${category.limit > 0 && category.limit - category.spent < 0 ? "tone-rust" : ""}`}>
+          {category.limit > 0 ? fmt(category.limit - category.spent) : "—"}
+        </td>
+      </tr>
+      {expanded && items.map((it) => {
+        const itSpent = categorySpend(it, transactions, plans, cmk, categories);
+        const itRemaining = it.limit - itSpent;
+        const itOver = itRemaining < 0;
+        return (
+          <tr key={it.id} className="plan-cat-item-subrow">
+            <td className="plan-cat-item-name-cell">{it.name}</td>
+            <td className="amount col-center">{fmt(itSpent)}</td>
+            <td className="amount col-center">{it.limit > 0 ? fmt(it.limit) : <span className="muted">Not set</span>}</td>
+            <td className={`amount col-center ${itOver ? "tone-rust" : ""}`}>{it.limit > 0 ? fmt(itRemaining) : "—"}</td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
 
