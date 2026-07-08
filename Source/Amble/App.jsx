@@ -2533,6 +2533,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .about-app-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; }
 .about-details { display:flex; flex-direction:column; }
 .about-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
+.about-row > .muted:first-child { flex:0 0 100px; }
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
