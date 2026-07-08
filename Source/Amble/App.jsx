@@ -69,9 +69,13 @@ function planAllocated(plan) {
 
 // Spend for a category: if it belongs to a plan, scope to that plan's date range
 // (or all-time if the plan has no dates set); otherwise scope to the current calendar month.
-function categorySpend(category, transactions, plans, cmk) {
+// Also rolls up spend from any sub-expense categories (itemized plan line items) so a
+// parent category's total reflects money logged against its specific expenses too.
+function categorySpend(category, transactions, plans, cmk, categories) {
   const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
-  let txs = transactions.filter((t) => t.type === "expense" && t.categoryId === category.id);
+  const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
+  const idSet = new Set([category.id, ...childIds]);
+  let txs = transactions.filter((t) => t.type === "expense" && idSet.has(t.categoryId));
   if (ownerPlan) {
     if (ownerPlan.startDate) txs = txs.filter((t) => t.date >= ownerPlan.startDate);
     if (ownerPlan.endDate) txs = txs.filter((t) => t.date <= ownerPlan.endDate);
@@ -84,24 +88,52 @@ function categorySpend(category, transactions, plans, cmk) {
 // Mirrors a plan's categories into the app-wide category list so they can be
 // assigned to real transactions. Keeps existing links, creates new categories
 // for new plan categories, and unlinks (but never deletes) ones removed from the plan.
+// Itemized categories also mirror each line item as its own sub-category (linked via
+// parentCategoryId) so a specific expense, like "Netflix" under "Subscriptions", can be
+// selected directly on a transaction.
 function syncPlanCategories(plan, categories) {
   let cats = categories.slice();
   const keepIds = new Set();
   const newPlanCats = (plan.categories || []).map((pc) => {
     const total = planCategoryTotal(pc);
     const existingIdx = pc.categoryId ? cats.findIndex((c) => c.id === pc.categoryId) : -1;
+    let parentId, parentColor;
     if (existingIdx >= 0) {
-      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense" };
-      keepIds.add(pc.categoryId);
-      return pc;
+      parentId = pc.categoryId;
+      parentColor = cats[existingIdx].color;
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null };
+      keepIds.add(parentId);
+    } else {
+      parentId = uid();
+      parentColor = CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)];
+      cats.push({
+        id: parentId, name: pc.name, type: "expense", limit: total,
+        color: parentColor, planId: plan.id, parentCategoryId: null,
+      });
+      keepIds.add(parentId);
     }
-    const newId = uid();
-    cats.push({
-      id: newId, name: pc.name, type: "expense", limit: total,
-      color: CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)], planId: plan.id,
-    });
-    keepIds.add(newId);
-    return { ...pc, categoryId: newId };
+
+    let newItems = pc.items;
+    if (pc.mode === "items") {
+      newItems = (pc.items || []).map((it) => {
+        const itAmount = Number(it.amount) || 0;
+        const existingItemIdx = it.categoryId ? cats.findIndex((c) => c.id === it.categoryId) : -1;
+        if (existingItemIdx >= 0) {
+          cats[existingItemIdx] = { ...cats[existingItemIdx], name: it.name, limit: itAmount, planId: plan.id, type: "expense", parentCategoryId: parentId };
+          keepIds.add(it.categoryId);
+          return it;
+        }
+        const newItemId = uid();
+        cats.push({
+          id: newItemId, name: it.name, type: "expense", limit: itAmount,
+          color: parentColor, planId: plan.id, parentCategoryId: parentId,
+        });
+        keepIds.add(newItemId);
+        return { ...it, categoryId: newItemId };
+      });
+    }
+
+    return { ...pc, categoryId: parentId, items: newItems };
   });
   cats = cats.map((c) => (c.planId === plan.id && !keepIds.has(c.id) ? { ...c, planId: null } : c));
   return { categories: cats, plan: { ...plan, categories: newPlanCats } };
@@ -452,19 +484,26 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const monthExpense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
   const activePlanId = (plans || []).find((p) => p.active)?.id;
-  const expenseCats = categories.filter((c) => c.type === "expense");
+  // Only top-level categories here; itemized sub-expenses (e.g. "Netflix" under
+  // "Subscriptions") roll their spend up into the parent instead of appearing separately.
+  const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
+  const spentForCategory = (c) => {
+    const childIds = categories.filter((cc) => cc.parentCategoryId === c.id).map((cc) => cc.id);
+    const idSet = new Set([c.id, ...childIds]);
+    return monthTx.filter((t) => t.type === "expense" && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
+  };
   // Same rule as the Budgets tab: general categories + the active plan's categories only.
   const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
   const catSpend = budgeted.map((c) => ({
     ...c,
-    spent: monthTx.filter((t) => t.type === "expense" && t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
+    spent: spentForCategory(c),
   })).sort((a, b) => (b.spent / (b.limit || 1)) - (a.spent / (a.limit || 1))).slice(0, 4);
 
   const uncategorizedSpent = monthTx.filter((t) => t.type === "expense" && !t.categoryId).reduce((s, t) => s + t.amount, 0);
 
   const pieData = expenseCats.map((c) => ({
     name: c.name, color: c.color,
-    value: monthTx.filter((t) => t.type === "expense" && t.categoryId === c.id).reduce((s, t) => s + t.amount, 0),
+    value: spentForCategory(c),
   })).filter((d) => d.value > 0);
 
   const trendData = [];
@@ -575,7 +614,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 <tr key={t.id}>
                   <td className="muted">{fmtDate(t.date)}</td>
                   <td>{t.description || catName(t.categoryId)}</td>
-                  <td className="muted">{t.type === "transfer" ? `${accName(t.accountId)} → ${accName(t.toAccountId)}` : catName(t.categoryId)}</td>
+                  <td className="muted">{t.type === "transfer" ? `${accName(t.accountId)} → ${accName(t.toAccountId)}${t.categoryId ? ` · ${catName(t.categoryId)}` : ""}` : catName(t.categoryId)}</td>
                   <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
                     {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
                   </td>
@@ -640,7 +679,12 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
                   <td>{t.description || "—"}</td>
                   <td>
                     {t.type === "transfer" ? (
-                      <span className="pill"><ArrowRightLeft size={12} /> {accName(t.accountId)} → {accName(t.toAccountId)}</span>
+                      <div className="pill-group">
+                        <span className="pill"><ArrowRightLeft size={12} /> {accName(t.accountId)} → {accName(t.toAccountId)}</span>
+                        {t.categoryId && (
+                          <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>
                     )}
@@ -712,8 +756,9 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
   const cmk = currentMonthKey();
   const activePlan = (plans || []).find((p) => p.active);
 
-  const expenseCats = categories.filter((c) => c.type === "expense");
-  const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, cmk) }));
+  // Only top-level categories; itemized sub-expenses roll their spend up into the parent.
+  const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
+  const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, cmk, categories) }));
   // Gauges: general (non-plan) categories, plus the active plan's categories only — never other plans'.
   const gaugeCats = withSpend.filter((c) => c.limit > 0 && (!c.planId || (activePlan && c.planId === activePlan.id)));
 
@@ -871,12 +916,20 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 function PlanCategoryRow({ category, transactions }) {
   const [expanded, setExpanded] = useState(false);
   const budgeted = planCategoryTotal(category);
-  const spent = category.categoryId
-    ? transactions.filter((t) => t.type === "expense" && t.categoryId === category.categoryId).reduce((s, t) => s + t.amount, 0)
-    : null;
-  const over = spent !== null && spent > budgeted;
   const items = category.items || [];
   const isItemized = category.mode === "items" && items.length > 0;
+
+  const spendFor = (categoryId) => (categoryId
+    ? transactions.filter((t) => t.type === "expense" && t.categoryId === categoryId).reduce((s, t) => s + t.amount, 0)
+    : 0);
+
+  // Now that itemized expenses are their own selectable sub-categories, the parent's
+  // spend rolls up from both direct transactions and any of its item sub-categories.
+  const relevantIds = [category.categoryId, ...items.map((i) => i.categoryId)].filter(Boolean);
+  const spent = relevantIds.length
+    ? transactions.filter((t) => t.type === "expense" && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0)
+    : null;
+  const over = spent !== null && spent > budgeted;
 
   if (!isItemized) {
     return (
@@ -900,12 +953,18 @@ function PlanCategoryRow({ category, transactions }) {
       </button>
       {expanded && (
         <div className="plan-cat-itemized-body">
-          {items.map((it) => (
-            <div key={it.id} className="plan-cat-item-row">
-              <span className="plan-cat-item-name">{it.name}</span>
-              <span className="plan-cat-item-amt">{fmt(it.amount)}</span>
-            </div>
-          ))}
+          {items.map((it) => {
+            const itSpent = spendFor(it.categoryId);
+            const itOver = itSpent > (Number(it.amount) || 0);
+            return (
+              <div key={it.id} className="plan-cat-item-row">
+                <span className="plan-cat-item-name">{it.name}</span>
+                <span className={`plan-cat-item-amt ${itOver ? "tone-rust" : ""}`}>
+                  {itSpent > 0 ? `${fmt(itSpent)} of ${fmt(it.amount)}` : fmt(it.amount)}
+                </span>
+              </div>
+            );
+          })}
           <div className="plan-cat-item-total">
             <span>Total</span>
             <span>{fmt(budgeted)}</span>
@@ -1008,7 +1067,15 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
   const [toAccountId, setToAccountId] = useState(initial.toAccountId || "");
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
 
-  const catOptions = categories.filter((c) => c.type === type);
+  // Top-level categories selectable for this transaction type. Transfers aren't
+  // inherently income or expense, so any top-level category can be used to tag them.
+  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId);
+  // The currently selected category might itself be a specific expense (a sub-category);
+  // resolve which parent it belongs to so both dropdowns stay in sync.
+  const selectedCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
+  const selectedParentId = selectedCategory ? (selectedCategory.parentCategoryId || selectedCategory.id) : "";
+  const selectedParent = selectedParentId ? categories.find((c) => c.id === selectedParentId) : null;
+  const subCategories = selectedParentId ? categories.filter((c) => c.parentCategoryId === selectedParentId) : [];
 
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
 
@@ -1020,7 +1087,7 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
       amount: Math.abs(parseFloat(amount)),
       accountId,
       toAccountId: type === "transfer" ? toAccountId : null,
-      categoryId: type === "transfer" ? null : (categoryId || null),
+      categoryId: categoryId || null,
     });
   };
 
@@ -1064,13 +1131,31 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
           ) : (
             <div className="form-group">
               <label>Category</label>
-              <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <select className="select" value={selectedParentId} onChange={(e) => setCategoryId(e.target.value)}>
                 <option value="">Uncategorized</option>
-                {catOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {parentCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
           )}
         </div>
+        {type === "transfer" && (
+          <div className="form-group">
+            <label>Category (optional)</label>
+            <select className="select" value={selectedParentId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">Uncategorized</option>
+              {parentCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
+        {subCategories.length > 0 && (
+          <div className="form-group">
+            <label>Specific expense</label>
+            <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value={selectedParentId}>General {selectedParent?.name}</option>
+              {subCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}
@@ -1418,6 +1503,30 @@ export default function App() {
     setState((s) => (s ? rolloverDuePlans(s) : s));
   }, [loaded]);
 
+  // Re-mirror the active plan's categories on load. This is what creates the
+  // per-item sub-categories (e.g. "Netflix" under "Subscriptions") that power the
+  // "specific expense" submenu on transactions. It's idempotent (reuses existing
+  // links, never duplicates), so it also backfills plans that were set active
+  // before that feature existed, without requiring the user to manually re-save.
+  useEffect(() => {
+    if (!loaded) return;
+    setState((s) => {
+      if (!s) return s;
+      const active = s.plans.find((p) => p.active);
+      if (!active) return s;
+      const synced = syncPlanCategories(active, s.categories);
+      const unchanged =
+        JSON.stringify(synced.plan) === JSON.stringify(active) &&
+        JSON.stringify(synced.categories) === JSON.stringify(s.categories);
+      if (unchanged) return s;
+      return {
+        ...s,
+        plans: s.plans.map((p) => (p.id === active.id ? synced.plan : p)),
+        categories: synced.categories,
+      };
+    });
+  }, [loaded]);
+
   useEffect(() => {
     if (!loaded || !state) return;
     (async () => {
@@ -1645,7 +1754,7 @@ export default function App() {
         t.description || "",
         accName(t.accountId),
         t.type === "transfer" ? accName(t.toAccountId) : "",
-        t.type === "transfer" ? "" : catName(t.categoryId),
+        catName(t.categoryId),
         t.amount.toFixed(2),
       ]);
     const escape = (v) => {
@@ -1924,6 +2033,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .row-actions-cell { vertical-align:middle; }
 
 .pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:3px 9px; border-radius:20px; border:1px solid var(--border); color:var(--text-muted); }
+.pill-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 
 .filter-bar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
 .search-input { display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 12px; flex:1; min-width:220px; color:var(--text-faint); }
