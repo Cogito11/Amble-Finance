@@ -497,7 +497,7 @@ function MoreView({ onExportJSON, onImportJSON, onExportCSV, transactionCount, d
       {tab === "about" && (
         <div className="card about-card">
           <div className="about-brand">
-            <div className="brand-mark about-brand-mark">A</div>
+            <div className="brand-mark about-brand-mark">$</div>
             <div>
               <div className="about-app-name">{APP_INFO.name}</div>
               <div className="muted">{APP_INFO.tagline}</div>
@@ -1932,7 +1932,7 @@ export default function App() {
       <div className="app-shell">
         <aside className="sidebar">
           <div className="brand">
-            <div className="brand-mark">A</div>
+            <div className="brand-mark">$</div>
             <div className="brand-text">
               <div className="brand-name">AMBLE</div>
               <div className="brand-sub">personal finance</div>
@@ -2126,7 +2126,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; height: 100%; overflow-y: auto; }
 .brand { display:flex; align-items:center; gap:10px; padding: 6px 8px 20px; }
-.brand-mark { width:34px; height:34px; border-radius:8px; background: var(--brass-soft); color: var(--brass); border:1px solid var(--brass); display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600; font-size:18px; }
+.brand-mark { width:34px; height:34px; border-radius:8px; background: var(--brass-soft); color: var(--brass); border:1px solid var(--brass); display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-weight:600; font-size:22px; }
 .brand-name { font-family:'Fraunces',serif; font-weight:600; font-size:16px; letter-spacing: 0.14em; }
 .brand-sub { font-size: 11px; color: var(--text-faint); letter-spacing:0.04em; }
 
@@ -2306,7 +2306,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .about-card { display:flex; flex-direction:column; gap:16px; }
 .about-brand { display:flex; align-items:center; gap:14px; }
-.about-brand-mark { width:44px; height:44px; font-size:20px; }
+.about-brand-mark { width:44px; height:44px; font-size:26px; }
 .about-app-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; }
 .about-details { display:flex; flex-direction:column; }
 .about-row { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
