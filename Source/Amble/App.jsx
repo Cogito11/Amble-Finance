@@ -67,6 +67,13 @@ function planAllocated(plan) {
   return (plan.categories || []).reduce((s, c) => s + planCategoryTotal(c), 0);
 }
 
+// A transaction counts toward category spend if it's a normal expense, or if it's a
+// transfer that's been explicitly tagged with a category (e.g. moving money into a
+// dedicated savings category). Uncategorized transfers never count as spend.
+function isSpendTx(t) {
+  return t.type === "expense" || (t.type === "transfer" && !!t.categoryId);
+}
+
 // Spend for a category: if it belongs to a plan, scope to that plan's date range
 // (or all-time if the plan has no dates set); otherwise scope to the current calendar month.
 // Also rolls up spend from any sub-expense categories (itemized plan line items) so a
@@ -75,7 +82,7 @@ function categorySpend(category, transactions, plans, cmk, categories) {
   const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
   const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
   const idSet = new Set([category.id, ...childIds]);
-  let txs = transactions.filter((t) => t.type === "expense" && idSet.has(t.categoryId));
+  let txs = transactions.filter((t) => isSpendTx(t) && idSet.has(t.categoryId));
   if (ownerPlan) {
     if (ownerPlan.startDate) txs = txs.filter((t) => t.date >= ownerPlan.startDate);
     if (ownerPlan.endDate) txs = txs.filter((t) => t.date <= ownerPlan.endDate);
@@ -103,14 +110,14 @@ function syncPlanCategories(plan, categories) {
     if (existingIdx >= 0) {
       parentId = pc.categoryId;
       parentColor = cats[existingIdx].color;
-      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null };
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null, date: pc.date || null };
       keepIds.add(parentId);
     } else {
       parentId = uid();
       parentColor = CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)];
       cats.push({
         id: parentId, name: pc.name, type: "expense", limit: total,
-        color: parentColor, planId: plan.id, parentCategoryId: null,
+        color: parentColor, planId: plan.id, parentCategoryId: null, date: pc.date || null,
       });
       keepIds.add(parentId);
     }
@@ -121,14 +128,14 @@ function syncPlanCategories(plan, categories) {
         const itAmount = Number(it.amount) || 0;
         const existingItemIdx = it.categoryId ? cats.findIndex((c) => c.id === it.categoryId) : -1;
         if (existingItemIdx >= 0) {
-          cats[existingItemIdx] = { ...cats[existingItemIdx], name: it.name, limit: itAmount, planId: plan.id, type: "expense", parentCategoryId: parentId };
+          cats[existingItemIdx] = { ...cats[existingItemIdx], name: it.name, limit: itAmount, planId: plan.id, type: "expense", parentCategoryId: parentId, date: it.date || null };
           keepIds.add(it.categoryId);
           return it;
         }
         const newItemId = uid();
         cats.push({
           id: newItemId, name: it.name, type: "expense", limit: itAmount,
-          color: parentColor, planId: plan.id, parentCategoryId: parentId,
+          color: parentColor, planId: plan.id, parentCategoryId: parentId, date: it.date || null,
         });
         keepIds.add(newItemId);
         return { ...it, categoryId: newItemId };
@@ -213,8 +220,8 @@ function rolloverDuePlans(state) {
         active: true,
         repeat: { ...p.repeat },
         categories: (p.categories || []).map((c) => ({
-          id: uid(), name: c.name, mode: c.mode, bulkAmount: c.bulkAmount,
-          items: (c.items || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
+          id: uid(), name: c.name, mode: c.mode, bulkAmount: c.bulkAmount, date: c.date || null,
+          items: (c.items || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount, date: it.date || null })),
         })),
       };
       cur = lastNew;
@@ -506,7 +513,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const spentForCategory = (c) => {
     const childIds = categories.filter((cc) => cc.parentCategoryId === c.id).map((cc) => cc.id);
     const idSet = new Set([c.id, ...childIds]);
-    return monthTx.filter((t) => t.type === "expense" && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
+    return monthTx.filter((t) => isSpendTx(t) && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
   };
   // Same rule as the Budgets tab: general categories + the active plan's categories only.
   const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
@@ -925,71 +932,94 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
 /* ---------------------------------- plans view ---------------------------------- */
 
-// Renders a single plan category within a plan card. Itemized categories are
-// shown as an expand/collapse block: click the top bar (category name) to
-// reveal each expense line, with the category total pinned to the bottom.
-// Bulk categories keep the simple single-line summary.
-function PlanCategoryRow({ category, transactions }) {
+// Renders a plan's budget categories as a table with Name / Date / Spent / Amount /
+// Remaining columns. Bulk categories are a single row; itemized categories get a
+// summary row (click to expand) plus one row per sub-expense, each with its own
+// optional renewal date, spent, budgeted amount, and remaining balance.
+function PlanCategoryTable({ categories, transactions }) {
+  return (
+    <table className="table plan-cat-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Date</th>
+          <th className="col-center">Spent</th>
+          <th className="col-center">Amount</th>
+          <th className="col-center">Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        {categories.map((c) => <PlanCategoryRows key={c.id} category={c} transactions={transactions} />)}
+      </tbody>
+    </table>
+  );
+}
+
+function spendForCategoryId(transactions, categoryId) {
+  if (!categoryId) return 0;
+  return transactions.filter((t) => isSpendTx(t) && t.categoryId === categoryId).reduce((s, t) => s + t.amount, 0);
+}
+
+function PlanCategoryRows({ category, transactions }) {
   const [expanded, setExpanded] = useState(false);
   const budgeted = planCategoryTotal(category);
   const items = category.items || [];
   const isItemized = category.mode === "items" && items.length > 0;
 
-  const spendFor = (categoryId) => (categoryId
-    ? transactions.filter((t) => t.type === "expense" && t.categoryId === categoryId).reduce((s, t) => s + t.amount, 0)
-    : 0);
-
   // Now that itemized expenses are their own selectable sub-categories, the parent's
   // spend rolls up from both direct transactions and any of its item sub-categories.
   const relevantIds = [category.categoryId, ...items.map((i) => i.categoryId)].filter(Boolean);
   const spent = relevantIds.length
-    ? transactions.filter((t) => t.type === "expense" && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0)
+    ? transactions.filter((t) => isSpendTx(t) && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0)
     : null;
-  const over = spent !== null && spent > budgeted;
+  const remaining = spent !== null ? budgeted - spent : null;
+  const over = remaining !== null && remaining < 0;
 
   if (!isItemized) {
     return (
-      <div className="plan-cat-mini">
-        <span className="plan-cat-mini-name">{category.name}</span>
-        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
-          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
-        </span>
-      </div>
+      <tr>
+        <td>{category.name}</td>
+        <td className="muted">{category.date ? fmtDate(category.date) : "—"}</td>
+        <td className="amount col-center">{spent !== null ? fmt(spent) : "—"}</td>
+        <td className="amount col-center">{fmt(budgeted)}</td>
+        <td className={`amount col-center ${over ? "tone-rust" : ""}`}>{remaining !== null ? fmt(remaining) : "—"}</td>
+      </tr>
     );
   }
 
   return (
-    <div className={`plan-cat-itemized${expanded ? " expanded" : ""}`}>
-      <button type="button" className="plan-cat-itemized-bar" onClick={() => setExpanded((e) => !e)}>
-        <ChevronRight size={13} className="plan-cat-chevron" />
-        <span className="plan-cat-mini-name">{category.name}</span>
-        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
-          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
-        </span>
-      </button>
-      {expanded && (
-        <div className="plan-cat-itemized-body">
-          {items.map((it) => {
-            const itSpent = spendFor(it.categoryId);
-            const itOver = itSpent > (Number(it.amount) || 0);
-            return (
-              <div key={it.id} className="plan-cat-item-row">
-                <span className="plan-cat-item-name">{it.name}</span>
-                <span className={`plan-cat-item-amt ${itOver ? "tone-rust" : ""}`}>
-                  {itSpent > 0 ? `${fmt(itSpent)} of ${fmt(it.amount)}` : fmt(it.amount)}
-                </span>
-              </div>
-            );
-          })}
-          <div className="plan-cat-item-total">
-            <span>Total</span>
-            <span>{fmt(budgeted)}</span>
-          </div>
-        </div>
-      )}
-    </div>
+    <>
+      <tr className="plan-cat-parent-row" onClick={() => setExpanded((e) => !e)}>
+        <td>
+          <span className="plan-cat-expand-cell">
+            <ChevronRight size={13} className={`plan-cat-chevron${expanded ? " expanded" : ""}`} />
+            {category.name}
+          </span>
+        </td>
+        <td className="muted">—</td>
+        <td className="amount col-center">{spent !== null ? fmt(spent) : "—"}</td>
+        <td className="amount col-center">{fmt(budgeted)}</td>
+        <td className={`amount col-center ${over ? "tone-rust" : ""}`}>{remaining !== null ? fmt(remaining) : "—"}</td>
+      </tr>
+      {expanded && items.map((it) => {
+        const itBudget = Number(it.amount) || 0;
+        const itSpent = spendForCategoryId(transactions, it.categoryId);
+        const itRemaining = itBudget - itSpent;
+        const itOver = itRemaining < 0;
+        return (
+          <tr key={it.id} className="plan-cat-item-subrow">
+            <td className="plan-cat-item-name-cell">{it.name}</td>
+            <td className="muted">{it.date ? fmtDate(it.date) : "—"}</td>
+            <td className="amount col-center">{fmt(itSpent)}</td>
+            <td className="amount col-center">{fmt(itBudget)}</td>
+            <td className={`amount col-center ${itOver ? "tone-rust" : ""}`}>{fmt(itRemaining)}</td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
+
 
 function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate }) {
   if (plans.length === 0) {
@@ -1053,9 +1083,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
               </div>
               {p.categories && p.categories.length > 0 && (
                 <div className="plan-card-catlist">
-                  {p.categories.map((c) => (
-                    <PlanCategoryRow key={c.id} category={c} transactions={transactions} />
-                  ))}
+                  <PlanCategoryTable categories={p.categories} transactions={transactions} />
                 </div>
               )}
               <div className="plan-card-footer">
@@ -1324,7 +1352,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const remaining = (Number(income) || 0) - allocated;
 
   const addCategory = () => {
-    setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, items: [] }]);
+    setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [] }]);
   };
   const updateCategory = (id, patch) => {
     setCats((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -1333,7 +1361,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
     setCats((cs) => cs.filter((c) => c.id !== id));
   };
   const addItem = (catId) => {
-    setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: [...(c.items || []), { id: uid(), name: "", amount: 0 }] } : c)));
+    setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: [...(c.items || []), { id: uid(), name: "", amount: 0, date: "" }] } : c)));
   };
   const updateItem = (catId, itemId, patch) => {
     setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: (c.items || []).map((i) => (i.id === itemId ? { ...i, ...patch } : i)) } : c)));
@@ -1359,7 +1387,8 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         name: c.name.trim() || "Untitled category",
         mode: c.mode === "items" ? "items" : "bulk",
         bulkAmount: Number(c.bulkAmount) || 0,
-        items: (c.items || []).map((i) => ({ id: i.id, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0 })),
+        date: c.date || null,
+        items: (c.items || []).map((i) => ({ id: i.id, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
       })),
     });
   };
@@ -1446,6 +1475,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                   {(c.items || []).map((it) => (
                     <div key={it.id} className="plan-item-row">
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
+                      <input type="date" className="input mono plan-item-date" title="Renewal date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
                       <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} />
                       <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
                     </div>
@@ -1456,9 +1486,15 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                   </div>
                 </div>
               ) : (
-                <div className="form-group plan-cat-bulk">
-                  <label>Budget amount</label>
-                  <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} />
+                <div className="form-row">
+                  <div className="form-group plan-cat-bulk">
+                    <label>Budget amount</label>
+                    <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} />
+                  </div>
+                  <div className="form-group plan-cat-bulk">
+                    <label>Renewal date (optional)</label>
+                    <input type="date" className="input mono" value={c.date || ""} onChange={(e) => updateCategory(c.id, { date: e.target.value })} />
+                  </div>
                 </div>
               )}
             </div>
@@ -1723,7 +1759,8 @@ export default function App() {
         name: c.name,
         mode: c.mode,
         bulkAmount: c.bulkAmount,
-        items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount })),
+        date: c.date || null,
+        items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount, date: i.date || null })),
       })),
     });
   };
@@ -2105,21 +2142,16 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-stat-value { font-family:'JetBrains Mono',monospace; font-size:16.5px; font-weight:600; margin-top:2px; }
 .plan-card-cats { display:flex; gap:6px; flex-wrap:wrap; }
 .plan-card-footer { display:flex; justify-content:flex-end; }
-.plan-card-catlist { display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--border); padding-top:10px; }
-.plan-cat-mini { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding: 2px 0; }
-.plan-cat-mini-name { color:var(--text-muted); }
-.plan-cat-mini-amt { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
-
-.plan-cat-itemized { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
-.plan-cat-itemized-bar { display:flex; align-items:center; gap:8px; width:100%; background: var(--surface-2); border:none; padding:8px 10px; cursor:pointer; text-align:left; font-family:'Inter',sans-serif; color:inherit; }
-.plan-cat-itemized-bar:hover { background: var(--brass-soft); }
-.plan-cat-itemized-bar .plan-cat-mini-name { flex:1; color:var(--text); font-weight:500; }
+.plan-card-catlist { border-top:1px solid var(--border); padding-top:10px; }
+.plan-cat-table th, .plan-cat-table td { font-size:12.5px; }
+.plan-cat-parent-row { cursor:pointer; }
+.plan-cat-parent-row:hover { background: var(--brass-soft); }
+.plan-cat-expand-cell { display:inline-flex; align-items:center; gap:6px; font-weight:500; }
 .plan-cat-chevron { color: var(--text-faint); flex-shrink:0; transition: transform .15s ease; }
-.plan-cat-itemized.expanded .plan-cat-chevron { transform: rotate(90deg); }
-.plan-cat-itemized-body { padding: 8px 10px 10px 31px; display:flex; flex-direction:column; gap:6px; background: var(--surface); }
-.plan-cat-item-row { display:flex; justify-content:space-between; gap:12px; font-size:12px; color:var(--text-muted); }
-.plan-cat-item-amt { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
-.plan-cat-item-total { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; font-weight:600; color:var(--text); padding-top:7px; margin-top:1px; border-top:1px solid var(--border); }
+.plan-cat-chevron.expanded { transform: rotate(90deg); }
+.plan-cat-item-subrow { background: var(--surface-2); }
+.plan-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
+
 
 .plan-active-card { display:flex; flex-direction:column; gap:10px; }
 .plan-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
@@ -2147,6 +2179,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-item-row { display:flex; align-items:center; gap:8px; }
 .plan-item-row .input { flex:1; }
 .plan-item-amount { width:110px; flex-shrink:0; }
+.plan-item-date { width:150px; flex-shrink:0; }
 .plan-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .plan-cat-subtotal { font-size:12px; }
 
