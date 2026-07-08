@@ -400,7 +400,7 @@ function Gauge({ spent, limit, label, size = 148, footnote }) {
       ) : over ? (
         <div className="gauge-over">+{fmt(spent - limit)} over</div>
       ) : (
-        <div className="gauge-remaining">{fmt(remaining)} left</div>
+        <div className="gauge-remaining">{fmt(remaining)} remaining</div>
       )}
     </div>
   );
@@ -1009,7 +1009,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
         </div>
         {activePlan && planCats.length > 0 ? (
           <table className="table full">
-            <thead><tr><th>Name</th><th className="col-center">Spent</th><th className="col-center">Budgeted</th><th className="col-center">Remaining balance</th></tr></thead>
+            <thead><tr><th>Name</th><th className="col-center">Spent</th><th className="col-center">Budgeted</th><th className="col-center">Remaining</th></tr></thead>
             <tbody>{renderPlanCategoryRows(planCats)}</tbody>
           </table>
         ) : (
@@ -1025,7 +1025,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
           <button className="btn btn-ghost btn-sm" onClick={onAdd}><Plus size={14} /> Add category</button>
         </div>
         <table className="table full">
-          <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent</th><th className="col-center">Limit</th><th className="col-center">Remaining balance</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent</th><th className="col-center">Budgeted</th><th className="col-center">Remaining</th><th></th></tr></thead>
           <tbody>
             {renderCategoryRows(generalExpenseCats)}
             {incomeCats.map((c) => (
@@ -1106,7 +1106,7 @@ function StatusPlanCategoryRow({ category, categories, transactions, plans, cmk 
 
 /* ---------------------------------- plans view ---------------------------------- */
 
-// Renders a plan's budget categories as a table with Name / Date / Spent / Amount /
+// Renders a plan's budget categories as a table with Name / Date / Spent / Budgeted /
 // Remaining columns. Bulk categories are a single row; itemized categories get a
 // summary row (click to expand) plus one row per sub-expense, each with its own
 // optional renewal date, spent, budgeted amount, and remaining balance.
@@ -1118,7 +1118,7 @@ function PlanCategoryTable({ categories, transactions }) {
           <th>Name</th>
           <th>Date</th>
           <th className="col-center">Spent</th>
-          <th className="col-center">Amount</th>
+          <th className="col-center">Budgeted</th>
           <th className="col-center">Remaining</th>
         </tr>
       </thead>
@@ -1886,7 +1886,7 @@ export default function App() {
         transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
       }
       const exists = s.plans.some((x) => x.id === planToSave.id);
-      let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [...s.plans, planToSave];
+      let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [planToSave, ...s.plans];
       if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
       return { ...s, plans, categories, transactions };
     });
@@ -2533,7 +2533,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .about-app-name { font-family:'Fraunces',serif; font-weight:600; font-size:19px; }
 .about-details { display:flex; flex-direction:column; }
 .about-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
-.about-row > .muted:first-child { flex:0 0 100px; }
+.about-row > .muted:first-child { flex:0 0 140px; }
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }

@@ -19,6 +19,9 @@ function createWindow() {
     minWidth: 400,
     minHeight: 300,
 
+    autoHideMenuBar: true,
+    titleBarStyle: "hidden",
+
     title: "Amble Finance",
     icon: getIconPath(),
     backgroundColor: "#f4f9fd",
