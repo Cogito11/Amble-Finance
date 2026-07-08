@@ -4,7 +4,7 @@ import {
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
-  Sliders, Database, Info, Github, Globe
+  Sliders, Database, Info, Github, Globe, ChevronRight
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -864,6 +864,58 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
 /* ---------------------------------- plans view ---------------------------------- */
 
+// Renders a single plan category within a plan card. Itemized categories are
+// shown as an expand/collapse block: click the top bar (category name) to
+// reveal each expense line, with the category total pinned to the bottom.
+// Bulk categories keep the simple single-line summary.
+function PlanCategoryRow({ category, transactions }) {
+  const [expanded, setExpanded] = useState(false);
+  const budgeted = planCategoryTotal(category);
+  const spent = category.categoryId
+    ? transactions.filter((t) => t.type === "expense" && t.categoryId === category.categoryId).reduce((s, t) => s + t.amount, 0)
+    : null;
+  const over = spent !== null && spent > budgeted;
+  const items = category.items || [];
+  const isItemized = category.mode === "items" && items.length > 0;
+
+  if (!isItemized) {
+    return (
+      <div className="plan-cat-mini">
+        <span className="plan-cat-mini-name">{category.name}</span>
+        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
+          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`plan-cat-itemized${expanded ? " expanded" : ""}`}>
+      <button type="button" className="plan-cat-itemized-bar" onClick={() => setExpanded((e) => !e)}>
+        <ChevronRight size={13} className="plan-cat-chevron" />
+        <span className="plan-cat-mini-name">{category.name}</span>
+        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
+          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
+        </span>
+      </button>
+      {expanded && (
+        <div className="plan-cat-itemized-body">
+          {items.map((it) => (
+            <div key={it.id} className="plan-cat-item-row">
+              <span className="plan-cat-item-name">{it.name}</span>
+              <span className="plan-cat-item-amt">{fmt(it.amount)}</span>
+            </div>
+          ))}
+          <div className="plan-cat-item-total">
+            <span>Total</span>
+            <span>{fmt(budgeted)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate }) {
   if (plans.length === 0) {
     return (
@@ -926,21 +978,9 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
               </div>
               {p.categories && p.categories.length > 0 && (
                 <div className="plan-card-catlist">
-                  {p.categories.map((c) => {
-                    const budgeted = planCategoryTotal(c);
-                    const spent = c.categoryId
-                      ? transactions.filter((t) => t.type === "expense" && t.categoryId === c.categoryId).reduce((s, t) => s + t.amount, 0)
-                      : null;
-                    const over = spent !== null && spent > budgeted;
-                    return (
-                      <div key={c.id} className="plan-cat-mini">
-                        <span className="plan-cat-mini-name">{c.name}</span>
-                        <span className={`plan-cat-mini-amt ${over ? "tone-rust" : ""}`}>
-                          {spent !== null ? `${fmt(spent)} of ${fmt(budgeted)}` : fmt(budgeted)}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  {p.categories.map((c) => (
+                    <PlanCategoryRow key={c.id} category={c} transactions={transactions} />
+                  ))}
                 </div>
               )}
               <div className="plan-card-footer">
@@ -1928,10 +1968,21 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-stat-value { font-family:'JetBrains Mono',monospace; font-size:16.5px; font-weight:600; margin-top:2px; }
 .plan-card-cats { display:flex; gap:6px; flex-wrap:wrap; }
 .plan-card-footer { display:flex; justify-content:flex-end; }
-.plan-card-catlist { display:flex; flex-direction:column; gap:5px; border-top:1px solid var(--border); padding-top:10px; }
-.plan-cat-mini { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; }
+.plan-card-catlist { display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--border); padding-top:10px; }
+.plan-cat-mini { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding: 2px 0; }
 .plan-cat-mini-name { color:var(--text-muted); }
-.plan-cat-mini-amt { font-family:'JetBrains Mono',monospace; }
+.plan-cat-mini-amt { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+
+.plan-cat-itemized { border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.plan-cat-itemized-bar { display:flex; align-items:center; gap:8px; width:100%; background: var(--surface-2); border:none; padding:8px 10px; cursor:pointer; text-align:left; font-family:'Inter',sans-serif; color:inherit; }
+.plan-cat-itemized-bar:hover { background: var(--brass-soft); }
+.plan-cat-itemized-bar .plan-cat-mini-name { flex:1; color:var(--text); font-weight:500; }
+.plan-cat-chevron { color: var(--text-faint); flex-shrink:0; transition: transform .15s ease; }
+.plan-cat-itemized.expanded .plan-cat-chevron { transform: rotate(90deg); }
+.plan-cat-itemized-body { padding: 8px 10px 10px 31px; display:flex; flex-direction:column; gap:6px; background: var(--surface); }
+.plan-cat-item-row { display:flex; justify-content:space-between; gap:12px; font-size:12px; color:var(--text-muted); }
+.plan-cat-item-amt { font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+.plan-cat-item-total { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; font-weight:600; color:var(--text); padding-top:7px; margin-top:1px; border-top:1px solid var(--border); }
 
 .plan-active-card { display:flex; flex-direction:column; gap:10px; }
 .plan-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }
