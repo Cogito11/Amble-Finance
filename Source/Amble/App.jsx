@@ -20,6 +20,12 @@ const CAT_PALETTE = [
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+// Number inputs change their value when the user scrolls over them while focused,
+// which is an easy way to accidentally mangle an amount. Blurring on wheel stops
+// the browser's default "scroll to change value" behavior for that field while
+// still letting the scroll gesture itself pass through to scroll the page.
+const blurOnWheel = (e) => e.target.blur();
+
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
@@ -1565,7 +1571,7 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
           </div>
           <div className="form-group">
             <label>Amount</label>
-            <input type="number" min="0" step="0.01" placeholder="0.00" className="input mono" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <input type="number" min="0" step="0.01" placeholder="0.00" className="input mono" value={amount} onChange={(e) => setAmount(e.target.value)} onWheel={blurOnWheel} />
           </div>
         </div>
         <div className="form-group">
@@ -1670,7 +1676,7 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
         </div>
         <div className="form-group">
           <label>{isCredit ? (isEdit ? "Starting balance owed" : "Current balance owed") : isEdit ? "Starting balance" : "Current balance"}</label>
-          <input type="number" step="0.01" className="input mono" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} />
+          <input type="number" step="0.01" className="input mono" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} onWheel={blurOnWheel} />
         </div>
       </div>
       <div className="modal-footer">
@@ -1721,7 +1727,7 @@ function CategoryModal({ initial, onSave, onClose, onDelete }) {
         {type === "expense" && (
           <div className="form-group">
             <label>Monthly budget limit</label>
-            <input type="number" min="0" step="1" className="input mono" placeholder="0.00" value={limit} onChange={(e) => setLimit(e.target.value)} />
+            <input type="number" min="0" step="1" className="input mono" placeholder="0.00" value={limit} onChange={(e) => setLimit(e.target.value)} onWheel={blurOnWheel} />
           </div>
         )}
       </div>
@@ -1794,7 +1800,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         mode: c.mode === "items" ? "items" : "bulk",
         bulkAmount: Number(c.bulkAmount) || 0,
         date: c.date || null,
-        items: (c.items || []).map((i) => ({ id: i.id, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
+        items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
       })),
     });
   };
@@ -1818,7 +1824,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         </div>
         <div className="form-group">
           <label>Income</label>
-          <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={income} onChange={(e) => setIncome(e.target.value)} />
+          <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={income} onChange={(e) => setIncome(e.target.value)} onWheel={blurOnWheel} />
         </div>
 
         <div className="plan-repeat-block">
@@ -1881,7 +1887,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                     <div key={it.id} className="plan-item-row">
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
                       <input type="date" className="input mono plan-item-date" title="Renewal date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
-                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} />
+                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                       <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
                     </div>
                   ))}
@@ -1894,7 +1900,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                 <div className="form-row">
                   <div className="form-group plan-cat-bulk">
                     <label>Budget amount</label>
-                    <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} />
+                    <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} onWheel={blurOnWheel} />
                   </div>
                   <div className="form-group plan-cat-bulk">
                     <label>Renewal date (optional)</label>
@@ -2710,6 +2716,11 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .search-input input { background:transparent; border:none; color:var(--text); font-size:13.5px; width:100%; outline:none; }
 .select, .input { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; }
 .input.mono, .select.mono { font-family:'JetBrains Mono',monospace; }
+/* Hide the native up/down stepper on number inputs, and stop mouse-wheel scroll
+   from silently changing their value (see onWheel={blurOnWheel} on each input). */
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .select:hover, .input:hover { border-color: var(--text-faint); }
 .select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
