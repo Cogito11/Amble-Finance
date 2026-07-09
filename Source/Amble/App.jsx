@@ -30,6 +30,16 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
+// A trailing 30-day window (today and the 29 days before it), used to scope spend
+// for budgets/categories that don't have a fixed time frame — so their gauges track
+// a consistent rolling month instead of resetting on the 1st of the calendar month.
+function isWithinRolling30Days(dateStr) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 29);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  return dateStr >= cutoffStr && dateStr <= todayStr();
+}
+
 // Sorts transactions newest first. Sorting on `date` alone leaves same-day
 // transactions in whatever order they happened to already be in, so a transaction
 // just added for today (or any date shared with existing entries) could land
@@ -166,21 +176,20 @@ function isSpendTx(t) {
   return t.type === "expense" || (t.type === "transfer" && !!t.categoryId);
 }
 
-// Spend for a category: if it belongs to a plan, scope to that plan's date range
-// (or all-time if the plan has no dates set); otherwise scope to the current calendar month.
-// Also rolls up spend from any sub-expense categories (itemized plan line items) so a
-// parent category's total reflects money logged against its specific expenses too.
-function categorySpend(category, transactions, plans, cmk, categories) {
+// Spend for a category: if it belongs to a plan that has a time frame (a start
+// and/or end date set), track every transaction ever assigned to it, all-time —
+// gauges for a dated budget shouldn't reset just because the calendar month rolled
+// over. If it belongs to a plan with no time frame, or isn't tied to a plan at all
+// (a general category), scope it to a rolling 30-day window instead. Also rolls up
+// spend from any sub-expense categories (itemized plan line items) so a parent
+// category's total reflects money logged against its specific expenses too.
+function categorySpend(category, transactions, plans, categories) {
   const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
   const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
   const idSet = new Set([category.id, ...childIds]);
   let txs = transactions.filter((t) => isSpendTx(t) && idSet.has(t.categoryId));
-  if (ownerPlan) {
-    if (ownerPlan.startDate) txs = txs.filter((t) => t.date >= ownerPlan.startDate);
-    if (ownerPlan.endDate) txs = txs.filter((t) => t.date <= ownerPlan.endDate);
-  } else {
-    txs = txs.filter((t) => monthKeyOf(t.date) === cmk);
-  }
+  const hasTimeFrame = !!(ownerPlan && (ownerPlan.startDate || ownerPlan.endDate));
+  if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
   return txs.reduce((s, t) => s + t.amount, 0);
 }
 
@@ -383,7 +392,7 @@ const DASHBOARD_WIDGETS = [
   { id: "stats", label: "Overview stats", description: "Net worth, total assets, total debt, and this month's net" },
   { id: "accounts", label: "Accounts", description: "A quick list of your accounts and their current balances" },
   { id: "budgetProgress", label: "Active budget progress", description: "Spent vs. budgeted progress bar for your active budget" },
-  { id: "budgetGauges", label: "Budget gauges", description: "Progress gauges for your top budget categories this month" },
+  { id: "budgetGauges", label: "Budget gauges", description: "Progress gauges for your top budget categories" },
   { id: "netWorthTrend", label: "Net worth trend", description: "Chart of your net worth over the last 6 months" },
   { id: "categoryPie", label: "Spending by category", description: "Pie chart breakdown of this month's expenses" },
   { id: "trend", label: "Income vs. expenses trend", description: "Bar chart comparing income and spending over the last 6 months" },
@@ -678,19 +687,27 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   // Only top-level categories here; itemized sub-expenses (e.g. "Netflix" under
   // "Subscriptions") roll their spend up into the parent instead of appearing separately.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
-  const spentForCategory = (c) => {
+  // The "Spending by category" pie is explicitly a this-month breakdown, so it keeps
+  // its own calendar-month spend function rather than the gauges' time-frame rule below.
+  const pieSpentForCategory = (c) => {
     const childIds = categories.filter((cc) => cc.parentCategoryId === c.id).map((cc) => cc.id);
     const idSet = new Set([c.id, ...childIds]);
     return monthTx.filter((t) => isSpendTx(t) && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
   };
   // Same rule as the Status tab: general categories + the active plan's categories only.
   const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
+  // Gauges track all-time spend for dated budgets, and a rolling 30 days for
+  // everything else (undated budgets and general categories) — see categorySpend.
   const catSpend = budgeted.map((c) => ({
     ...c,
-    spent: spentForCategory(c),
+    spent: categorySpend(c, transactions, plans, categories),
   })).sort((a, b) => (b.spent / (b.limit || 1)) - (a.spent / (a.limit || 1))).slice(0, 4);
 
-  const uncategorizedSpent = monthTx.filter((t) => t.type === "expense" && !t.categoryId).reduce((s, t) => s + t.amount, 0);
+  // "Uncategorized" isn't tied to any budget, so — like any category with no time
+  // frame — its gauge is scoped to a rolling 30 days rather than the calendar month.
+  const rolling30Tx = transactions.filter((t) => t.type === "expense" && isWithinRolling30Days(t.date));
+  const uncategorizedSpentRolling = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
+  const rolling30Expense = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
   // Same rule as the budget gauges above: general categories + the active plan's
   // categories only, so a deactivated budget's spend doesn't linger in the pie.
@@ -698,7 +715,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     .filter((c) => !c.planId || c.planId === activePlanId)
     .map((c) => ({
       name: c.name, color: c.color,
-      value: spentForCategory(c),
+      value: pieSpentForCategory(c),
     })).filter((d) => d.value > 0);
 
   const trendData = [];
@@ -859,17 +876,17 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
         </div>
       )}
 
-      {w.budgetGauges && (budgeted.length > 0 || uncategorizedSpent > 0) && (
+      {w.budgetGauges && (budgeted.length > 0 || uncategorizedSpentRolling > 0) && (
         <div className="card">
-          <div className="card-title">Budgets this month</div>
+          <div className="card-title">Budget progress</div>
           <div className="gauge-row">
             {catSpend.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
-            {uncategorizedSpent > 0 && (
+            {uncategorizedSpentRolling > 0 && (
               <Gauge
-                spent={uncategorizedSpent}
-                limit={monthExpense}
+                spent={uncategorizedSpentRolling}
+                limit={rolling30Expense}
                 label="Uncategorized"
-                footnote={`${Math.round((uncategorizedSpent / monthExpense) * 100)}% of spending`}
+                footnote={`${Math.round((uncategorizedSpentRolling / rolling30Expense) * 100)}% of spending`}
               />
             )}
           </div>
@@ -1139,12 +1156,11 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, error }) {
 /* ---------------------------------- budgets view ---------------------------------- */
 
 function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
-  const cmk = currentMonthKey();
   const activePlan = (plans || []).find((p) => p.active);
 
   // Only top-level categories; itemized sub-expenses roll their spend up into the parent.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
-  const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, cmk, categories) }));
+  const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, categories) }));
   // Gauges: general (non-plan) categories, plus the active plan's categories only — never other plans'.
   const gaugeCats = withSpend.filter((c) => c.limit > 0 && (!c.planId || (activePlan && c.planId === activePlan.id)));
 
@@ -1154,9 +1170,11 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
   const generalExpenseCats = withSpend.filter((c) => !c.planId);
   const incomeCats = categories.filter((c) => c.type === "income");
 
-  const monthTx = transactions.filter((t) => t.type === "expense" && monthKeyOf(t.date) === cmk);
-  const uncategorizedSpent = monthTx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
-  const totalMonthSpent = monthTx.reduce((s, t) => s + t.amount, 0);
+  // "Uncategorized" isn't tied to any budget, so — like any category with no time
+  // frame — it's scoped to a rolling 30 days rather than the calendar month.
+  const rolling30Tx = transactions.filter((t) => t.type === "expense" && isWithinRolling30Days(t.date));
+  const uncategorizedSpent = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
+  const totalRollingSpent = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
   const renderCategoryRows = (list) => list.map((c) => (
     <tr key={c.id}>
@@ -1177,7 +1195,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
   ));
 
   const renderPlanCategoryRows = (list) => list.map((c) => (
-    <StatusPlanCategoryRow key={c.id} category={c} categories={categories} transactions={transactions} plans={plans} cmk={cmk} />
+    <StatusPlanCategoryRow key={c.id} category={c} categories={categories} transactions={transactions} plans={plans} />
   ));
 
   return (
@@ -1229,9 +1247,9 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
             {uncategorizedSpent > 0 && (
               <Gauge
                 spent={uncategorizedSpent}
-                limit={totalMonthSpent}
+                limit={totalRollingSpent}
                 label="Uncategorized"
-                footnote={`${Math.round((uncategorizedSpent / totalMonthSpent) * 100)}% of spending`}
+                footnote={`${Math.round((uncategorizedSpent / totalRollingSpent) * 100)}% of spending`}
               />
             )}
           </div>
@@ -1290,7 +1308,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 // plain row for bulk categories, but for itemized categories (ones with mirrored
 // sub-expense categories) it becomes a click-to-expand parent row plus one sub-row
 // per item — matching the expand/collapse UX on the Budgets page.
-function StatusPlanCategoryRow({ category, categories, transactions, plans, cmk }) {
+function StatusPlanCategoryRow({ category, categories, transactions, plans }) {
   const [expanded, setExpanded] = useState(false);
   const items = categories.filter((cc) => cc.parentCategoryId === category.id);
   const isItemized = items.length > 0;
@@ -1324,7 +1342,7 @@ function StatusPlanCategoryRow({ category, categories, transactions, plans, cmk 
         </td>
       </tr>
       {expanded && items.map((it) => {
-        const itSpent = categorySpend(it, transactions, plans, cmk, categories);
+        const itSpent = categorySpend(it, transactions, plans, categories);
         const itRemaining = it.limit - itSpent;
         const itOver = itRemaining < 0;
         return (
