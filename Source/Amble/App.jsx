@@ -394,7 +394,7 @@ const DASHBOARD_WIDGETS = [
   { id: "budgetProgress", label: "Active budget progress", description: "Spent vs. budgeted progress bar for your active budget" },
   { id: "budgetGauges", label: "Budget gauges", description: "Progress gauges for your top budget categories" },
   { id: "netWorthTrend", label: "Net worth trend", description: "Chart of your net worth over the last 6 months" },
-  { id: "categoryPie", label: "Spending by category", description: "Pie chart breakdown of this month's expenses" },
+  { id: "categoryPie", label: "Spending by category", description: "Pie chart breakdown of expenses, per category, over each budget's time frame (or a rolling 30 days if it has none)" },
   { id: "trend", label: "Income vs. expenses trend", description: "Bar chart comparing income and spending over the last 6 months" },
   { id: "recent", label: "Recent transactions", description: "A table of your most recent transactions" },
 ];
@@ -687,13 +687,6 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   // Only top-level categories here; itemized sub-expenses (e.g. "Netflix" under
   // "Subscriptions") roll their spend up into the parent instead of appearing separately.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
-  // The "Spending by category" pie is explicitly a this-month breakdown, so it keeps
-  // its own calendar-month spend function rather than the gauges' time-frame rule below.
-  const pieSpentForCategory = (c) => {
-    const childIds = categories.filter((cc) => cc.parentCategoryId === c.id).map((cc) => cc.id);
-    const idSet = new Set([c.id, ...childIds]);
-    return monthTx.filter((t) => isSpendTx(t) && idSet.has(t.categoryId)).reduce((s, t) => s + t.amount, 0);
-  };
   // Same rule as the Status tab: general categories + the active plan's categories only.
   const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
   // Gauges track all-time spend for dated budgets, and a rolling 30 days for
@@ -710,12 +703,15 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const rolling30Expense = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
   // Same rule as the budget gauges above: general categories + the active plan's
-  // categories only, so a deactivated budget's spend doesn't linger in the pie.
+  // categories only, so a deactivated budget's spend doesn't linger in the pie. Each
+  // slice's value follows categorySpend's time-frame rule too — all-time for a category
+  // whose plan has a start/end date, rolling 30 days for everything else — so the pie
+  // and the gauges always agree on what a given category's "spend" means.
   const pieData = expenseCats
     .filter((c) => !c.planId || c.planId === activePlanId)
     .map((c) => ({
       name: c.name, color: c.color,
-      value: pieSpentForCategory(c),
+      value: categorySpend(c, transactions, plans, categories),
     })).filter((d) => d.value > 0);
 
   const trendData = [];
@@ -929,7 +925,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
             <div className="card">
               <div className="card-title">Spending by category</div>
               {pieData.length === 0 ? (
-                <div className="chart-empty">No expenses logged this month yet.</div>
+                <div className="chart-empty">No expenses logged yet.</div>
               ) : (
                 <div className="pie-wrap">
                   <div className="pie-chart-wrap">
