@@ -4,7 +4,7 @@ import {
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
-  Sliders, Database, Info, Github, Globe, ChevronRight, Activity
+  Sliders, Database, Info, Github, Globe, ChevronRight, Activity, Monitor
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -519,8 +519,17 @@ const MORE_TABS = [
   { id: "about", label: "About", icon: Info },
 ];
 
+// The three appearance choices shown as a segmented control, matching the
+// look of the Settings/Data/About tabs above. "system" tracks the OS/browser
+// prefers-color-scheme setting instead of pinning to one theme.
+const THEME_MODE_OPTIONS = [
+  { id: "system", label: "System", icon: Monitor },
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+];
+
 function MoreView({
-  onExportJSON, onImportJSON, onExportCSV, transactionCount, darkMode, onToggleDarkMode,
+  onExportJSON, onImportJSON, onExportCSV, transactionCount, themeMode, onChangeThemeMode,
   currency, onChangeCurrency, accountCount, budgetCount, categoryCount, dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
 }) {
@@ -542,12 +551,22 @@ function MoreView({
           <div className="card-title">Appearance</div>
           <div className="settings-row">
             <div>
-              <div className="settings-row-label">Dark mode</div>
-              <div className="settings-desc">Switch between light and dark themes.</div>
+              <div className="settings-row-label">Theme</div>
+              <div className="settings-desc">Choose a theme, or match your system setting automatically.</div>
             </div>
-            <button className="icon-btn theme-toggle" onClick={onToggleDarkMode} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
-              {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-            </button>
+            <div className="seg theme-mode-seg" role="group" aria-label="Appearance">
+              {THEME_MODE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`seg-btn ${themeMode === opt.id ? "active" : ""}`}
+                  onClick={() => onChangeThemeMode(opt.id)}
+                  title={opt.label}
+                >
+                  <opt.icon size={14} /> {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
             <div>
@@ -1981,16 +2000,56 @@ export default function App() {
   // window.storage.get on mount) so the very first render already comes up in the
   // right theme. Doing this asynchronously used to cause two bugs: a visible flash
   // of light mode on every load for dark-mode users, and a race where the "save
-  // current theme" effect below would fire with the default (false) value and
-  // briefly overwrite a saved dark-mode preference before the async load resolved.
-  const [darkMode, setDarkMode] = useState(() => {
+  // current theme" effect below would fire with the default value and briefly
+  // overwrite a saved preference before the async load resolved.
+  //
+  // themeMode is the user's explicit choice: "system" | "light" | "dark". A
+  // fresh install (nothing saved yet) defaults to "system" so Amble matches
+  // the OS/browser preference on first boot rather than assuming light mode.
+  const [themeMode, setThemeMode] = useState(() => {
     try {
       const raw = localStorage.getItem(THEME_KEY);
-      return raw ? !!JSON.parse(raw).dark : false;
+      if (!raw) return "system";
+      const parsed = JSON.parse(raw);
+      if (parsed.mode === "system" || parsed.mode === "light" || parsed.mode === "dark") {
+        return parsed.mode;
+      }
+      // Migrate the old boolean-only { dark } preference (pre-tri-state Amble
+      // versions) into an explicit light/dark choice, preserving what the
+      // user last saw rather than silently switching them to "system".
+      if (typeof parsed.dark === "boolean") return parsed.dark ? "dark" : "light";
+      return "system";
+    } catch (e) {
+      return "system";
+    }
+  });
+
+  // Tracks the OS/browser prefers-color-scheme setting so "system" mode can
+  // resolve to an actual theme and update live if the user changes it while
+  // Amble is open.
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.matchMedia
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        : false;
     } catch (e) {
       return false;
     }
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e) => setSystemPrefersDark(e.matches);
+    if (mql.addEventListener) mql.addEventListener("change", handleChange);
+    else mql.addListener(handleChange); // Safari <14 fallback
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener("change", handleChange);
+      else mql.removeListener(handleChange);
+    };
+  }, []);
+
+  const darkMode = themeMode === "system" ? systemPrefersDark : themeMode === "dark";
   const [view, setView] = useState("dashboard");
   const [txModal, setTxModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
@@ -2012,10 +2071,10 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      try { await window.storage.set(THEME_KEY, JSON.stringify({ dark: darkMode }), false); }
+      try { await window.storage.set(THEME_KEY, JSON.stringify({ mode: themeMode }), false); }
       catch (e) { /* silent */ }
     })();
-  }, [darkMode]);
+  }, [themeMode]);
 
   useEffect(() => {
     (async () => {
@@ -2420,7 +2479,7 @@ export default function App() {
       confirmLabel: "Factory reset",
       onConfirm: () => {
         setState(defaultState());
-        setDarkMode(false);
+        setThemeMode("system");
         setView("dashboard");
         setConfirmDialog(null);
       },
@@ -2461,7 +2520,11 @@ export default function App() {
           <header className="topbar">
             <h1 className="view-title">{VIEW_TITLES[view]}</h1>
             <div className="topbar-actions">
-              <button className="icon-btn theme-toggle" onClick={() => setDarkMode((d) => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+              <button
+                className="icon-btn theme-toggle"
+                onClick={() => setThemeMode(darkMode ? "light" : "dark")}
+                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+              >
                 {darkMode ? <Sun size={17} /> : <Moon size={17} />}
               </button>
               {view === "dashboard" && (
@@ -2521,8 +2584,8 @@ export default function App() {
                 onImportJSON={requestImportJSON}
                 onExportCSV={exportTransactionsCSV}
                 transactionCount={state.transactions.length}
-                darkMode={darkMode}
-                onToggleDarkMode={() => setDarkMode((d) => !d)}
+                themeMode={themeMode}
+                onChangeThemeMode={setThemeMode}
                 currency={state.currency || "USD"}
                 onChangeCurrency={setCurrency}
                 accountCount={state.accounts.length}
@@ -2860,7 +2923,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .more-tabs { max-width:360px; margin-bottom:2px; }
 .settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }
 .settings-actions { display:flex; gap:8px; flex-wrap:wrap; }
-.settings-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px solid var(--border); }
+.settings-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:14px; margin-bottom:14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.theme-mode-seg { flex:0 0 auto; }
+.theme-mode-seg .seg-btn { white-space:nowrap; padding:7px 12px; }
 .settings-row-label { font-size:13.5px; font-weight:500; margin-bottom:2px; }
 .more-tab-placeholder { margin:0; }
 
