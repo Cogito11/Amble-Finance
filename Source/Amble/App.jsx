@@ -355,7 +355,7 @@ function computeBalance(account, transactions) {
 
 const APP_INFO = {
   name: "Amble",
-  tagline: "Personal Finances Made Easy.",
+  tagline: "Personal Finances Made Easy",
   version: "0.1.0",
   maintainerName: "Cole Bishop",
   maintainerHandle: "@cogito11",
@@ -674,7 +674,7 @@ function MoreView({
           </div>
           <div className="about-details">
             <div className="about-row"><span className="muted">Version</span><span>{APP_INFO.version}</span></div>
-            <div className="about-row"><span className="muted">Maintainer</span><span>{APP_INFO.maintainerName} ({APP_INFO.maintainerHandle})</span></div>
+            <div className="about-row"><span className="muted">Developed By</span><span>{APP_INFO.maintainerName} ({APP_INFO.maintainerHandle})</span></div>
           </div>
           <div className="settings-actions about-links">
             <a className="btn btn-ghost" href={APP_INFO.githubUrl} target="_blank" rel="noreferrer"><Github size={14} /> GitHub</a>
