@@ -709,6 +709,22 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     netWorthTrendData.push({ month: label, netWorth: nw });
   }
 
+  // By default a value axis starts at 0, which flattens a high net worth's small
+  // month-to-month swings into an almost-straight line. Instead, raise the floor to
+  // just under the lowest value in the series (with a little padding above/below so
+  // the line never touches the edges), leaving the top essentially as-is.
+  const nwValues = netWorthTrendData.map((d) => d.netWorth);
+  const nwMin = Math.min(...nwValues);
+  const nwMax = Math.max(...nwValues);
+  const nwRange = nwMax - nwMin;
+  const nwPadding = nwRange > 0 ? nwRange * 0.15 : Math.max(Math.abs(nwMax) * 0.05, 50);
+  const nwDomain = [nwMin - nwPadding, nwMax + nwPadding];
+  // Since nwDomain's bounds are arbitrary (not "round" numbers), letting the axis
+  // auto-generate ticks can produce an uneven extra gridline wedged in near the
+  // bottom. Pinning exactly 3 ticks — floor, midpoint, ceiling — keeps the grid to
+  // a clean top/middle/bottom with nothing stray in between.
+  const nwTicks = [nwDomain[0], (nwDomain[0] + nwDomain[1]) / 2, nwDomain[1]];
+
   const planBudgeted = activePlan ? planAllocated(activePlan) : 0;
   const planSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
   const planRemaining = planBudgeted - planSpent;
@@ -845,7 +861,16 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-              <YAxis stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${Math.abs(v) >= 1000 ? (v / 1000) + "k" : v}`} width={48} />
+              <YAxis
+                domain={nwDomain}
+                ticks={nwTicks}
+                stroke="var(--text-faint)"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v < 0 ? "-" : ""}$${Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(Math.abs(v))}`}
+                width={48}
+              />
               <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
               <Area type="monotone" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={{ r: 3, fill: "var(--brass)", strokeWidth: 0 }} activeDot={{ r: 5 }} />
             </AreaChart>
