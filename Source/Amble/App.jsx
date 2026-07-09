@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid
+  XAxis, YAxis, CartesianGrid, AreaChart, Area
 } from "recharts";
 
 /* ---------------------------------- helpers ---------------------------------- */
@@ -362,7 +362,10 @@ const VIEW_TITLES = {
 // reads top to bottom the same way).
 const DASHBOARD_WIDGETS = [
   { id: "stats", label: "Overview stats", description: "Net worth, total assets, total debt, and this month's net" },
+  { id: "accounts", label: "Accounts", description: "A quick list of your accounts and their current balances" },
+  { id: "budgetProgress", label: "Active budget progress", description: "Spent vs. budgeted progress bar for your active budget" },
   { id: "budgetGauges", label: "Budget gauges", description: "Progress gauges for your top budget categories this month" },
+  { id: "netWorthTrend", label: "Net worth trend", description: "Chart of your net worth over the last 6 months" },
   { id: "categoryPie", label: "Spending by category", description: "Pie chart breakdown of this month's expenses" },
   { id: "trend", label: "Income vs. expenses trend", description: "Bar chart comparing income and spending over the last 6 months" },
   { id: "recent", label: "Recent transactions", description: "A table of your most recent transactions" },
@@ -640,7 +643,7 @@ function MoreView({
 
 /* ---------------------------------- dashboard ---------------------------------- */
 
-function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx, widgets, onCustomize }) {
+function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx, onNavigate, widgets, onCustomize }) {
   const w = widgets || defaultWidgetPrefs();
   const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
   const totalAssets = accounts.filter((a) => a.type !== "credit").reduce((s, a) => s + balances[a.id], 0);
@@ -651,7 +654,8 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const monthIncome = monthTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const monthExpense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
-  const activePlanId = (plans || []).find((p) => p.active)?.id;
+  const activePlan = (plans || []).find((p) => p.active) || null;
+  const activePlanId = activePlan?.id;
   // Only top-level categories here; itemized sub-expenses (e.g. "Netflix" under
   // "Subscriptions") roll their spend up into the parent instead of appearing separately.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
@@ -689,6 +693,28 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     });
   }
 
+  // Net worth as of the end of each of the last 6 months (today, for the current
+  // month, since its end hasn't happened yet), reconstructed by replaying only the
+  // transactions dated on or before each cutoff through computeBalance.
+  const netWorthTrendData = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    const label = d.toLocaleString("default", { month: "short" });
+    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const cutoff = i === 0 ? todayStr() : monthEnd.toISOString().slice(0, 10);
+    const txUpTo = transactions.filter((t) => t.date <= cutoff);
+    const nw = accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0);
+    netWorthTrendData.push({ month: label, netWorth: nw });
+  }
+
+  const planBudgeted = activePlan ? planAllocated(activePlan) : 0;
+  const planSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
+  const planRemaining = planBudgeted - planSpent;
+  const planPct = planBudgeted > 0 ? planSpent / planBudgeted : 0;
+  const planBarColor = planPct > 1 ? "var(--rust)" : planPct > 0.85 ? "var(--amber)" : "var(--teal)";
+
   const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 6);
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
@@ -724,6 +750,71 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
         </div>
       )}
 
+      {(w.accounts || w.budgetProgress) && (
+        <div className={`grid-2${w.accounts && w.budgetProgress ? "" : " grid-2-single"}`}>
+          {w.accounts && (
+            <div className="card">
+              <div className="card-title">
+                Accounts
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("accounts")}>View all <ChevronRight size={14} /></button>
+              </div>
+              <div className="dash-acc-list">
+                {accounts.map((a) => {
+                  const Icon = ACCOUNT_ICONS[a.type];
+                  const bal = balances[a.id];
+                  const isDebt = a.type === "credit";
+                  return (
+                    <div key={a.id} className="dash-acc-row">
+                      <div className="dash-acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={16} /></div>
+                      <div className="dash-acc-info">
+                        <div className="dash-acc-name">{a.name}</div>
+                        <div className="dash-acc-type muted">{ACCOUNT_LABELS[a.type]}</div>
+                      </div>
+                      <div className={`dash-acc-balance ${isDebt || bal < 0 ? "tone-rust" : "tone-brass"}`}>
+                        {isDebt ? fmt(Math.max(0, -bal)) : fmt(bal)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {w.budgetProgress && (
+            <div className="card">
+              <div className="card-title">
+                Active budget
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("plans")}>View budgets <ChevronRight size={14} /></button>
+              </div>
+              {activePlan ? (
+                <div className="dash-budget">
+                  <div className="dash-budget-name">{activePlan.name}</div>
+                  <div className="dash-budget-bar-track">
+                    <div className="dash-budget-bar-fill" style={{ width: `${Math.min(planPct, 1) * 100}%`, background: planBarColor }} />
+                  </div>
+                  <div className="plan-summary-bar">
+                    <div>
+                      <span className="muted">Budgeted</span>
+                      <strong>{fmt(planBudgeted)}</strong>
+                    </div>
+                    <div>
+                      <span className="muted">Spent</span>
+                      <strong>{fmt(planSpent)}</strong>
+                    </div>
+                    <div>
+                      <span className="muted">Remaining</span>
+                      <strong className={planRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(planRemaining)}</strong>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="chart-empty">No active budget. Set one as active in Budgets to track it here.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {w.budgetGauges && (budgeted.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
           <div className="card-title">Budgets this month</div>
@@ -738,6 +829,27 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
               />
             )}
           </div>
+        </div>
+      )}
+
+      {w.netWorthTrend && (
+        <div className="card">
+          <div className="card-title">Net worth, last 6 months</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={netWorthTrendData}>
+              <defs>
+                <linearGradient id="netWorthFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--brass)" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="var(--brass)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+              <YAxis stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${Math.abs(v) >= 1000 ? (v / 1000) + "k" : v}`} width={48} />
+              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
+              <Area type="monotone" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={{ r: 3, fill: "var(--brass)", strokeWidth: 0 }} activeDot={{ r: 5 }} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       )}
 
@@ -1202,6 +1314,18 @@ function PlanCategoryTable({ categories, transactions }) {
 function spendForCategoryId(transactions, categoryId) {
   if (!categoryId) return 0;
   return transactions.filter((t) => isSpendTx(t) && t.categoryId === categoryId).reduce((s, t) => s + t.amount, 0);
+}
+
+// Total actual spend logged against a plan, across all its categories (and, for
+// itemized categories, their line-item sub-categories). Mirrors the per-row logic
+// in PlanCategoryRows so the dashboard's "spent" figure always matches the Budgets tab.
+function planTotalSpent(plan, transactions) {
+  return (plan.categories || []).reduce((total, c) => {
+    const items = c.items || [];
+    const relevantIds = [c.categoryId, ...items.map((i) => i.categoryId)].filter(Boolean);
+    if (!relevantIds.length) return total;
+    return total + transactions.filter((t) => isSpendTx(t) && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0);
+  }, 0);
 }
 
 function PlanCategoryRows({ category, transactions }) {
@@ -2282,6 +2406,7 @@ export default function App() {
                 balances={balances}
                 plans={state.plans}
                 onGoTx={() => { setView("accounts"); setAccModal({}); }}
+                onNavigate={setView}
                 widgets={dashboardWidgets}
                 onCustomize={() => setWidgetModalOpen(true)}
               />
@@ -2509,6 +2634,20 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .grid-2-single { grid-template-columns: 1fr; }
 
 .gauge-row { display:flex; gap:22px; flex-wrap:wrap; }
+
+.dash-acc-list { display:flex; flex-direction:column; }
+.dash-acc-row { display:flex; align-items:center; gap:12px; padding:10px 2px; border-bottom:1px solid var(--border); }
+.dash-acc-row:last-child { border-bottom:none; }
+.dash-acc-icon { background: var(--surface-2); border-radius:8px; width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.dash-acc-info { flex:1; min-width:0; }
+.dash-acc-name { font-size:13.5px; font-weight:600; }
+.dash-acc-type { font-size:11.5px; text-transform:uppercase; letter-spacing:0.03em; margin-top:1px; }
+.dash-acc-balance { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:14px; flex-shrink:0; }
+
+.dash-budget { display:flex; flex-direction:column; gap:12px; }
+.dash-budget-name { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; }
+.dash-budget-bar-track { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; height:10px; overflow:hidden; }
+.dash-budget-bar-fill { height:100%; border-radius:8px; transition: width .3s ease; }
 .gauge { display:flex; flex-direction:column; align-items:center; width:150px; }
 .gauge-amount { font-family:'JetBrains Mono',monospace; fill: var(--text); font-size:16px; font-weight:600; }
 .gauge-sub { font-family:'JetBrains Mono',monospace; fill: var(--text-faint); font-size:10.5px; }
