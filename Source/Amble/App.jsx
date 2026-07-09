@@ -355,7 +355,7 @@ function computeBalance(account, transactions) {
 
 const APP_INFO = {
   name: "Amble",
-  tagline: "A calm, local-first personal finance & budget tracker.",
+  tagline: "Personal Finances Made Easy.",
   version: "0.1.0",
   maintainerName: "Cole Bishop",
   maintainerHandle: "@cogito11",
