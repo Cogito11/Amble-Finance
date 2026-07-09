@@ -30,6 +30,19 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
+// Sorts transactions newest first. Sorting on `date` alone leaves same-day
+// transactions in whatever order they happened to already be in, so a transaction
+// just added for today (or any date shared with existing entries) could land
+// underneath older same-day entries instead of on top. Breaking ties by each
+// transaction's position in the list (transactions are appended when created)
+// puts the most recently created entry first within its date.
+function sortTransactionsNewestFirst(list) {
+  return list
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => b.t.date.localeCompare(a.t.date) || b.i - a.i)
+    .map(({ t }) => t);
+}
+
 const CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$" },
   { code: "EUR", name: "Euro", symbol: "€" },
@@ -746,7 +759,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const planPct = planBudgeted > 0 ? planSpent / planBudgeted : 0;
   const planBarColor = planPct > 1 ? "var(--rust)" : planPct > 0.85 ? "var(--amber)" : "var(--teal)";
 
-  const recent = [...transactions].sort((a, b) => b.date.localeCompare(a.date) || 0).slice(0, 6);
+  const recent = sortTransactionsNewestFirst(transactions).slice(0, 6);
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
 
@@ -1007,11 +1020,12 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
 
-  const filtered = transactions
-    .filter((t) => filter.accountId === "all" || t.accountId === filter.accountId || t.toAccountId === filter.accountId)
-    .filter((t) => filter.type === "all" || t.type === filter.type)
-    .filter((t) => !filter.search || (t.description || "").toLowerCase().includes(filter.search.toLowerCase()) || catName(t.categoryId).toLowerCase().includes(filter.search.toLowerCase()))
-    .sort((a, b) => b.date.localeCompare(a.date));
+  const filtered = sortTransactionsNewestFirst(
+    transactions
+      .filter((t) => filter.accountId === "all" || t.accountId === filter.accountId || t.toAccountId === filter.accountId)
+      .filter((t) => filter.type === "all" || t.type === filter.type)
+      .filter((t) => !filter.search || (t.description || "").toLowerCase().includes(filter.search.toLowerCase()) || catName(t.categoryId).toLowerCase().includes(filter.search.toLowerCase()))
+  );
 
   if (accounts.length === 0) {
     return <EmptyState icon={Receipt} title="No accounts yet" message="Add an account first, then you can start logging transactions against it." />;
