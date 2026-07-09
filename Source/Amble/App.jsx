@@ -679,10 +679,14 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
 
   const uncategorizedSpent = monthTx.filter((t) => t.type === "expense" && !t.categoryId).reduce((s, t) => s + t.amount, 0);
 
-  const pieData = expenseCats.map((c) => ({
-    name: c.name, color: c.color,
-    value: spentForCategory(c),
-  })).filter((d) => d.value > 0);
+  // Same rule as the budget gauges above: general categories + the active plan's
+  // categories only, so a deactivated budget's spend doesn't linger in the pie.
+  const pieData = expenseCats
+    .filter((c) => !c.planId || c.planId === activePlanId)
+    .map((c) => ({
+      name: c.name, color: c.color,
+      value: spentForCategory(c),
+    })).filter((d) => d.value > 0);
 
   const trendData = [];
   for (let i = 5; i >= 0; i--) {
@@ -724,7 +728,12 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   const nwMax = Math.max(...nwValues);
   const nwRange = nwMax - nwMin;
   const nwPadding = nwRange > 0 ? nwRange * 0.15 : Math.max(Math.abs(nwMax) * 0.05, 50);
-  const nwDomain = [nwMin - nwPadding, nwMax + nwPadding];
+  const nwFloor = nwMin - nwPadding;
+  // Net worth is usually non-negative, so a padded floor that dips below 0 just
+  // reads as a confusing negative axis label. Clamp it at 0 — unless net worth
+  // itself actually went negative, in which case flooring at 0 would clip that
+  // real data off the chart, so let the floor track it in that case.
+  const nwDomain = [nwMin < 0 ? nwFloor : Math.max(0, nwFloor), nwMax + nwPadding];
   // Since nwDomain's bounds are arbitrary (not "round" numbers), letting the axis
   // auto-generate ticks can produce an uneven extra gridline wedged in near the
   // bottom. Pinning exactly 3 ticks — floor, midpoint, ceiling — keeps the grid to
