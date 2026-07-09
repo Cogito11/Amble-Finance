@@ -355,6 +355,23 @@ const VIEW_TITLES = {
   more: "More",
 };
 
+// Catalog of dashboard widgets the user can toggle on/off. `id` is the key used
+// in the persisted preference object; order here also controls the order the
+// checkboxes appear in the customize modal (not the render order, which stays
+// fixed so the layout — stat row, then gauges, then charts, then table — always
+// reads top to bottom the same way).
+const DASHBOARD_WIDGETS = [
+  { id: "stats", label: "Overview stats", description: "Net worth, total assets, total debt, and this month's net" },
+  { id: "budgetGauges", label: "Budget gauges", description: "Progress gauges for your top budget categories this month" },
+  { id: "categoryPie", label: "Spending by category", description: "Pie chart breakdown of this month's expenses" },
+  { id: "trend", label: "Income vs. expenses trend", description: "Bar chart comparing income and spending over the last 6 months" },
+  { id: "recent", label: "Recent transactions", description: "A table of your most recent transactions" },
+];
+
+function defaultWidgetPrefs() {
+  return DASHBOARD_WIDGETS.reduce((acc, w) => { acc[w.id] = true; return acc; }, {});
+}
+
 /* ---------------------------------- gauge ---------------------------------- */
 
 function polarToCartesian(cx, cy, r, angleDeg) {
@@ -623,7 +640,8 @@ function MoreView({
 
 /* ---------------------------------- dashboard ---------------------------------- */
 
-function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx }) {
+function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx, widgets, onCustomize }) {
+  const w = widgets || defaultWidgetPrefs();
   const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
   const totalAssets = accounts.filter((a) => a.type !== "credit").reduce((s, a) => s + balances[a.id], 0);
   const totalDebt = accounts.filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -balances[a.id]), 0);
@@ -679,16 +697,34 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     return <EmptyState icon={Wallet} title="Set up your first account" message="Add a checking, savings, or credit card account to start tracking your money." actionLabel="Add account" onAction={onGoTx} />;
   }
 
+  const anyWidgetOn = DASHBOARD_WIDGETS.some((d) => w[d.id]);
+  if (!anyWidgetOn) {
+    return (
+      <EmptyState
+        icon={Sliders}
+        title="Your dashboard is empty"
+        message="Every widget is currently hidden. Turn some back on to see your finances at a glance."
+        actionLabel="Customize dashboard"
+        onAction={onCustomize}
+      />
+    );
+  }
+
+  const showPie = w.categoryPie;
+  const showTrend = w.trend;
+
   return (
     <div className="dash">
-      <div className="stat-row">
-        <StatCard label="Net worth" value={fmt(netWorth)} tone="brass" icon={Wallet} />
-        <StatCard label="Total assets" value={fmt(totalAssets)} tone="teal" icon={ArrowUpRight} />
-        <StatCard label="Total debt" value={fmt(totalDebt)} tone={totalDebt === 0 ? "teal" : "rust"} icon={CreditCard} />
-        <StatCard label="This month, net" value={fmt(monthIncome - monthExpense)} tone={monthIncome - monthExpense >= 0 ? "teal" : "rust"} icon={monthIncome - monthExpense >= 0 ? ArrowUpRight : ArrowDownRight} />
-      </div>
+      {w.stats && (
+        <div className="stat-row">
+          <StatCard label="Net worth" value={fmt(netWorth)} tone="brass" icon={Wallet} />
+          <StatCard label="Total assets" value={fmt(totalAssets)} tone="teal" icon={ArrowUpRight} />
+          <StatCard label="Total debt" value={fmt(totalDebt)} tone={totalDebt === 0 ? "teal" : "rust"} icon={CreditCard} />
+          <StatCard label="This month, net" value={fmt(monthIncome - monthExpense)} tone={monthIncome - monthExpense >= 0 ? "teal" : "rust"} icon={monthIncome - monthExpense >= 0 ? ArrowUpRight : ArrowDownRight} />
+        </div>
+      )}
 
-      {(budgeted.length > 0 || uncategorizedSpent > 0) && (
+      {w.budgetGauges && (budgeted.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
           <div className="card-title">Budgets this month</div>
           <div className="gauge-row">
@@ -705,76 +741,110 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
         </div>
       )}
 
-      <div className="grid-2">
-        <div className="card">
-          <div className="card-title">Spending by category</div>
-          {pieData.length === 0 ? (
-            <div className="chart-empty">No expenses logged this month yet.</div>
-          ) : (
-            <div className="pie-wrap">
-              <div className="pie-chart-wrap">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="92%" paddingAngle={2}>
-                      {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" strokeWidth={2} />)}
-                    </Pie>
-                    <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="pie-legend">
-                {[...pieData].sort((a, b) => b.value - a.value).map((d, i) => (
-                  <div key={i} className="legend-row">
-                    <span className="legend-dot" style={{ background: d.color }} />
-                    <span className="legend-name">{d.name}</span>
-                    <span className="legend-val">{fmt(d.value)}</span>
+      {(showPie || showTrend) && (
+        <div className={`grid-2${showPie && showTrend ? "" : " grid-2-single"}`}>
+          {showPie && (
+            <div className="card">
+              <div className="card-title">Spending by category</div>
+              {pieData.length === 0 ? (
+                <div className="chart-empty">No expenses logged this month yet.</div>
+              ) : (
+                <div className="pie-wrap">
+                  <div className="pie-chart-wrap">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie data={pieData} dataKey="value" nameKey="name" innerRadius="60%" outerRadius="92%" paddingAngle={2}>
+                          {pieData.map((d, i) => <Cell key={i} fill={d.color} stroke="var(--surface)" strokeWidth={2} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
+                  <div className="pie-legend">
+                    {[...pieData].sort((a, b) => b.value - a.value).map((d, i) => (
+                      <div key={i} className="legend-row">
+                        <span className="legend-dot" style={{ background: d.color }} />
+                        <span className="legend-name">{d.name}</span>
+                        <span className="legend-val">{fmt(d.value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showTrend && (
+            <div className="card">
+              <div className="card-title">Income vs. expenses, last 6 months</div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={trendData} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+                  <YAxis stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v / 1000) + "k" : v}`} width={44} />
+                  <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} cursor={{ fill: "var(--brass-soft)" }} />
+                  <Bar dataKey="income" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                  <Bar dataKey="expense" fill="var(--rust)" radius={[3, 3, 0, 0]} maxBarSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>
+      )}
 
+      {w.recent && (
         <div className="card">
-          <div className="card-title">Income vs. expenses, last 6 months</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={trendData} barGap={2}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
-              <YAxis stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v / 1000) + "k" : v}`} width={44} />
-              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} cursor={{ fill: "var(--brass-soft)" }} />
-              <Bar dataKey="income" fill="var(--teal)" radius={[3, 3, 0, 0]} maxBarSize={18} />
-              <Bar dataKey="expense" fill="var(--rust)" radius={[3, 3, 0, 0]} maxBarSize={18} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="card-title">Recent transactions</div>
+          {recent.length === 0 ? (
+            <div className="chart-empty">No transactions yet.</div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="amount">Amount</th></tr>
+              </thead>
+              <tbody>
+                {recent.map((t) => (
+                  <tr key={t.id}>
+                    <td className="muted">{fmtDate(t.date)}</td>
+                    <td>{t.description || catName(t.categoryId)}</td>
+                    <td className="muted">{t.type === "transfer" ? `${accName(t.accountId)} → ${accName(t.toAccountId)}${t.categoryId ? ` · ${catName(t.categoryId)}` : ""}` : catName(t.categoryId)}</td>
+                    <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
+                      {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------- dashboard customize modal ---------------------------------- */
+
+function WidgetSettingsModal({ widgets, onToggle, onClose }) {
+  return (
+    <Modal title="Customize dashboard" onClose={onClose}>
+      <div className="modal-body">
+        <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data — nothing is deleted.</p>
+        <div className="widget-toggle-list">
+          {DASHBOARD_WIDGETS.map((item) => (
+            <label key={item.id} className="widget-toggle-row">
+              <input type="checkbox" checked={!!widgets[item.id]} onChange={() => onToggle(item.id)} />
+              <div className="widget-toggle-text">
+                <div className="widget-toggle-label">{item.label}</div>
+                <div className="widget-toggle-desc">{item.description}</div>
+              </div>
+            </label>
+          ))}
         </div>
       </div>
-
-      <div className="card">
-        <div className="card-title">Recent transactions</div>
-        {recent.length === 0 ? (
-          <div className="chart-empty">No transactions yet.</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="amount">Amount</th></tr>
-            </thead>
-            <tbody>
-              {recent.map((t) => (
-                <tr key={t.id}>
-                  <td className="muted">{fmtDate(t.date)}</td>
-                  <td>{t.description || catName(t.categoryId)}</td>
-                  <td className="muted">{t.type === "transfer" ? `${accName(t.accountId)} → ${accName(t.toAccountId)}${t.categoryId ? ` · ${catName(t.categoryId)}` : ""}` : catName(t.categoryId)}</td>
-                  <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
-                    {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+      <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+        <button className="btn btn-primary" onClick={onClose}>Done</button>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1703,6 +1773,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
 
 const STORAGE_KEY = "vault-finance-data-v1";
 const THEME_KEY = "amble-theme-pref-v1";
+const WIDGETS_KEY = "amble-dashboard-widgets-v1";
 
 export default function App() {
   const [state, setState] = useState(null);
@@ -1728,6 +1799,17 @@ export default function App() {
   const [planModal, setPlanModal] = useState(null);
   const [accError, setAccError] = useState("");
   const [confirmDialog, setConfirmDialog] = useState(null);
+  // Same synchronous-read pattern as darkMode above, so returning users don't see
+  // every widget flash on before their saved preference (some hidden) applies.
+  const [dashboardWidgets, setDashboardWidgets] = useState(() => {
+    try {
+      const raw = localStorage.getItem(WIDGETS_KEY);
+      return raw ? { ...defaultWidgetPrefs(), ...JSON.parse(raw) } : defaultWidgetPrefs();
+    } catch (e) {
+      return defaultWidgetPrefs();
+    }
+  });
+  const [widgetModalOpen, setWidgetModalOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -1735,6 +1817,17 @@ export default function App() {
       catch (e) { /* silent */ }
     })();
   }, [darkMode]);
+
+  useEffect(() => {
+    (async () => {
+      try { await window.storage.set(WIDGETS_KEY, JSON.stringify(dashboardWidgets), false); }
+      catch (e) { /* silent */ }
+    })();
+  }, [dashboardWidgets]);
+
+  const toggleWidget = (id) => {
+    setDashboardWidgets((w) => ({ ...w, [id]: !w[id] }));
+  };
 
   useEffect(() => {
     (async () => {
@@ -2172,6 +2265,9 @@ export default function App() {
               <button className="icon-btn theme-toggle" onClick={() => setDarkMode((d) => !d)} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
                 {darkMode ? <Sun size={17} /> : <Moon size={17} />}
               </button>
+              {view === "dashboard" && (
+                <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
+              )}
               {view !== "more" && view !== "plans" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
@@ -2179,7 +2275,16 @@ export default function App() {
           </header>
           <div className="content">
             {view === "dashboard" && (
-              <Dashboard accounts={state.accounts} categories={state.categories} transactions={state.transactions} balances={balances} plans={state.plans} onGoTx={() => { setView("accounts"); setAccModal({}); }} />
+              <Dashboard
+                accounts={state.accounts}
+                categories={state.categories}
+                transactions={state.transactions}
+                balances={balances}
+                plans={state.plans}
+                onGoTx={() => { setView("accounts"); setAccModal({}); }}
+                widgets={dashboardWidgets}
+                onCustomize={() => setWidgetModalOpen(true)}
+              />
             )}
             {view === "transactions" && (
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} />
@@ -2254,6 +2359,9 @@ export default function App() {
       )}
       {planModal !== null && (
         <PlanModal initial={planModal} onSave={savePlan} onClose={() => setPlanModal(null)} onDelete={requestDeletePlan} />
+      )}
+      {widgetModalOpen && (
+        <WidgetSettingsModal widgets={dashboardWidgets} onToggle={toggleWidget} onClose={() => setWidgetModalOpen(false)} />
       )}
       {confirmDialog && (
         <ConfirmDialog
@@ -2398,6 +2506,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .card-title.padded { padding: 18px 20px 0; }
 
 .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+.grid-2-single { grid-template-columns: 1fr; }
 
 .gauge-row { display:flex; gap:22px; flex-wrap:wrap; }
 .gauge { display:flex; flex-direction:column; align-items:center; width:150px; }
@@ -2501,6 +2610,14 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .plan-repeat-block { display:flex; flex-direction:column; gap:8px; border:1px solid var(--border); border-radius:10px; padding:12px 14px; background: var(--surface-2); }
 .checkbox-row { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; cursor:pointer; }
 .checkbox-row input[type="checkbox"] { width:15px; height:15px; accent-color: var(--brass); cursor:pointer; }
+
+.widget-toggle-list { display:flex; flex-direction:column; }
+.widget-toggle-row { display:flex; align-items:flex-start; gap:11px; padding:12px 2px; border-bottom:1px solid var(--border); cursor:pointer; }
+.widget-toggle-row:last-child { border-bottom:none; }
+.widget-toggle-row input[type="checkbox"] { width:15px; height:15px; margin-top:2px; accent-color: var(--brass); cursor:pointer; flex-shrink:0; }
+.widget-toggle-text { display:flex; flex-direction:column; gap:2px; }
+.widget-toggle-label { font-size:13.5px; font-weight:600; }
+.widget-toggle-desc { font-size:12px; color:var(--text-muted); line-height:1.45; }
 .plan-repeat-seg { flex-wrap:wrap; }
 .plan-repeat-seg .seg-btn { flex:1 1 auto; white-space:nowrap; padding:7px 10px; }
 .plan-categories { display:flex; flex-direction:column; gap:12px; }
