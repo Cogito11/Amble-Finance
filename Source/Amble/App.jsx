@@ -1500,7 +1500,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
 
 /* ---------------------------------- modals ---------------------------------- */
 
-function TransactionModal({ initial, accounts, categories, onSave, onClose, onDelete }) {
+function TransactionModal({ initial, accounts, categories, plans, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
   const [date, setDate] = useState(initial.date || todayStr());
@@ -1510,9 +1510,16 @@ function TransactionModal({ initial, accounts, categories, onSave, onClose, onDe
   const [toAccountId, setToAccountId] = useState(initial.toAccountId || "");
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
 
+  // A category that's mirrored from a budget (planId set) should only be pickable
+  // while that budget is the active one — once a budget is deactivated its
+  // categories stay in state (so existing transactions still resolve their name),
+  // but they shouldn't keep showing up as choices for new/edited transactions.
+  const activePlanId = (plans || []).find((p) => p.active)?.id;
+  const isSelectable = (c) => !c.planId || c.planId === activePlanId;
+
   // Top-level categories selectable for this transaction type. Transfers aren't
   // inherently income or expense, so any top-level category can be used to tag them.
-  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId);
+  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId && isSelectable(c));
   // The currently selected category might itself be a specific expense (a sub-category);
   // resolve which parent it belongs to so both dropdowns stay in sync.
   const selectedCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
@@ -2502,6 +2509,7 @@ export default function App() {
           initial={txModal}
           accounts={state.accounts}
           categories={state.categories}
+          plans={state.plans}
           onSave={saveTransaction}
           onClose={() => setTxModal(null)}
           onDelete={requestDeleteTransaction}
