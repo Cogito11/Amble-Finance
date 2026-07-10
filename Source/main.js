@@ -6,7 +6,7 @@ function getIconPath() {
   switch (process.platform) {
     case 'win32': return path.join(base, 'AmbleLogo.ico');
     case 'linux': return path.join(base, 'icons', '256x256.png');
-    case 'darwin': return path.join(base, 'AmbleLogo.png');
+    case 'darwin': return path.join(base, 'AmbleLogo.icns');
     default: return path.join(base, 'AmbleLogo.png');
   }
 }
