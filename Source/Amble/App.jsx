@@ -624,6 +624,7 @@ function MoreView({
   onExportJSON, onImportJSON, onExportCSV, transactionCount, themeMode, onChangeThemeMode,
   currency, onChangeCurrency, accountCount, budgetCount, categoryCount, dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
+  dashboardWidgets, onToggleWidget,
 }) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
@@ -670,6 +671,24 @@ function MoreView({
                 <option key={c.code} value={c.code}>{c.symbol} {c.code} ({c.name})</option>
               ))}
             </select>
+          </div>
+        </div>
+      )}
+
+      {tab === "settings" && (
+        <div className="card">
+          <div className="card-title">Dashboard</div>
+          <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data — nothing is deleted.</p>
+          <div className="widget-toggle-list">
+            {DASHBOARD_WIDGETS.map((item) => (
+              <label key={item.id} className="widget-toggle-row">
+                <input type="checkbox" checked={!!dashboardWidgets?.[item.id]} onChange={() => onToggleWidget(item.id)} />
+                <div className="widget-toggle-text">
+                  <div className="widget-toggle-label">{item.label}</div>
+                  <div className="widget-toggle-desc">{item.description}</div>
+                </div>
+              </label>
+            ))}
           </div>
         </div>
       )}
@@ -2800,6 +2819,8 @@ export default function App() {
                 onDeleteAllCategories={requestDeleteAllCategories}
                 onResetSampleData={requestResetSampleData}
                 onFactoryReset={requestFactoryReset}
+                dashboardWidgets={dashboardWidgets}
+                onToggleWidget={toggleWidget}
               />
             )}
           </div>
