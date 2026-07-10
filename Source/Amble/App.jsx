@@ -2934,6 +2934,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .nav-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; background:transparent; border:none; color: var(--text-muted); font-size:14px; font-weight:500; cursor:pointer; text-align:left; border-left: 2px solid transparent; transition: background .15s, color .15s; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--brass-soft); color: var(--brass); border-left: 2px solid var(--brass); }
+.nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--brass-soft); }
 
 .sidebar-footer { border-top:1px solid var(--border); padding-top:14px; margin-top:10px; }
 .nw-label { font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.06em; }
