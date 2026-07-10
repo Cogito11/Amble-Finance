@@ -26,6 +26,15 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 // still letting the scroll gesture itself pass through to scroll the page.
 const blurOnWheel = (e) => e.target.blur();
 
+// Used to keep global keyboard shortcuts from firing while the user is typing
+// somewhere — e.g. pressing "1" while entering an amount, or "?" while typing
+// "what?" into a description field, shouldn't trigger a shortcut.
+const isTypingTarget = (el) => {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!el.isContentEditable;
+};
+
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
@@ -363,6 +372,42 @@ const APP_INFO = {
   websiteUrl: "https://cogito11.github.io/Amble-Finance/",
 };
 
+// Mac uses the ⌘ glyph in shortcut hints everywhere else on the platform, so
+// matching that (instead of always showing "Ctrl") makes the hints feel native
+// on each OS. Falls back to "Ctrl" anywhere navigator.platform isn't Mac-like
+// (Windows, Linux, or when running somewhere navigator is unavailable).
+const IS_MAC =
+  typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
+
+// Single source of truth for every keyboard shortcut Amble supports — driving both
+// the held-"?" preview and the reference list in About, so the two can never drift
+// out of sync with each other.
+const SHORTCUTS = [
+  {
+    group: "General",
+    items: [
+      { keys: [MOD_KEY, "N"], label: "New transaction" },
+      { keys: [MOD_KEY, "F"], label: "Search transactions" },
+      { keys: [MOD_KEY, "E"], label: "Export transactions (CSV)" },
+      { keys: [MOD_KEY, "D"], label: "Toggle dark / light mode" },
+      { keys: ["?"], label: "Hold to preview shortcuts" },
+      { keys: ["Esc"], label: "Close a dialog" },
+    ],
+  },
+  {
+    group: "Navigation",
+    items: [
+      { keys: ["1"], label: "Dashboard" },
+      { keys: ["2"], label: "Transactions" },
+      { keys: ["3"], label: "Accounts" },
+      { keys: ["4"], label: "Status" },
+      { keys: ["5"], label: "Budgets" },
+      { keys: ["6"], label: "More" },
+    ],
+  },
+];
+
 const ACCOUNT_ICONS = { checking: Landmark, savings: PiggyBank, credit: CreditCard };
 const ACCOUNT_LABELS = { checking: "Checking", savings: "Savings", credit: "Credit Card" };
 
@@ -510,6 +555,53 @@ function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger
         </div>
       </div>
     </div>
+  );
+}
+
+// Renders one shortcut's key combo as individual <kbd> badges, e.g. [⌘] + [N].
+function ShortcutKeys({ keys }) {
+  return (
+    <span className="shortcut-keys">
+      {keys.map((k, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span className="kbd-plus">+</span>}
+          <kbd className="kbd">{k}</kbd>
+        </React.Fragment>
+      ))}
+    </span>
+  );
+}
+
+// Shared between the held-"?" preview overlay and the About tab's reference
+// list, so both always show the exact same set of shortcuts.
+function ShortcutsList() {
+  return (
+    <div className="shortcuts-list">
+      {SHORTCUTS.map((g) => (
+        <div className="shortcuts-group" key={g.group}>
+          <div className="shortcuts-group-title">{g.group}</div>
+          {g.items.map((item) => (
+            <div className="shortcut-row" key={item.label}>
+              <span className="shortcut-label">{item.label}</span>
+              <ShortcutKeys keys={item.keys} />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The quick-peek panel shown while "?" is held down (see the keydown/keyup
+// handling in App). The same list is also always visible, unhidden, on the
+// About tab for reference.
+function ShortcutsModal({ onClose }) {
+  return (
+    <Modal title="Keyboard shortcuts" onClose={onClose}>
+      <div className="modal-body">
+        <ShortcutsList />
+      </div>
+    </Modal>
   );
 }
 
@@ -682,6 +774,16 @@ function MoreView({
               <a className="btn btn-ghost" href={APP_INFO.websiteUrl} target="_blank" rel="noreferrer"><Globe size={14} /> Website</a>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "about" && (
+        <div className="card">
+          <div className="card-title">Keyboard Shortcuts</div>
+          <div className="settings-desc" style={{ marginTop: -6 }}>
+            Hold <kbd className="kbd">?</kbd> anywhere in the app for a quick preview of these.
+          </div>
+          <ShortcutsList />
         </div>
       )}
     </div>
@@ -1047,7 +1149,7 @@ function WidgetSettingsModal({ widgets, onToggle, onClose }) {
 
 /* ---------------------------------- transactions view ---------------------------------- */
 
-function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, onDelete }) {
+function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, onDelete, searchInputRef }) {
   const [filter, setFilter] = useState({ accountId: "all", type: "all", search: "" });
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
@@ -1068,7 +1170,7 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />
-          <input placeholder="Search description or category" value={filter.search} onChange={(e) => setFilter({ ...filter, search: e.target.value })} />
+          <input ref={searchInputRef} placeholder="Search description or category" value={filter.search} onChange={(e) => setFilter({ ...filter, search: e.target.value })} />
         </div>
         <select className="select" value={filter.accountId} onChange={(e) => setFilter({ ...filter, accountId: e.target.value })}>
           <option value="all">All accounts</option>
@@ -1256,7 +1358,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
       {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
-          <div className="card-title">Category gauges</div>
+          <div className="card-title">Category Progress</div>
           <div className="gauge-row">
             {gaugeCats.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
             {uncategorizedSpent > 0 && (
@@ -2068,6 +2170,21 @@ export default function App() {
     }
   });
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Lets the global shortcut handler focus the transactions search box even
+  // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) — the
+  // handler flips this flag and switches views, and the effect below focuses
+  // the input once the Transactions view (and its input) actually exists.
+  const searchInputRef = useRef(null);
+  const pendingFocusSearchRef = useRef(false);
+
+  useEffect(() => {
+    if (view === "transactions" && pendingFocusSearchRef.current) {
+      pendingFocusSearchRef.current = false;
+      const raf = requestAnimationFrame(() => searchInputRef.current?.focus());
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [view]);
 
   useEffect(() => {
     (async () => {
@@ -2137,6 +2254,91 @@ export default function App() {
       catch (e) { /* silent - keeps working in-memory */ }
     })();
   }, [state, loaded]);
+
+  // True whenever some overlay already has the user's attention — shortcuts other
+  // than Escape stay quiet in that case so they can't stack a second dialog on
+  // top or fire an action the visible modal doesn't expect.
+  const anyOverlayOpen =
+    txModal !== null || accModal !== null || catModal !== null || planModal !== null ||
+    widgetModalOpen || !!confirmDialog || shortcutsOpen;
+
+  // This must run unconditionally on every render (it's a hook), so it's declared
+  // above the loading-state early return below. It bails out immediately while
+  // data is still loading — before it touches anything that's only defined further
+  // down in this component (like exportTransactionsCSV) — so it stays safe even
+  // on that first, pre-`state` render.
+  useEffect(() => {
+    if (!loaded || !state) return;
+
+    const handleKeyDown = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key;
+
+      if (key === "Escape") {
+        if (shortcutsOpen) { setShortcutsOpen(false); return; }
+        if (confirmDialog) { setConfirmDialog(null); return; }
+        if (widgetModalOpen) { setWidgetModalOpen(false); return; }
+        if (txModal !== null) { setTxModal(null); return; }
+        if (accModal !== null) { setAccModal(null); setAccError(""); return; }
+        if (catModal !== null) { setCatModal(null); return; }
+        if (planModal !== null) { setPlanModal(null); return; }
+        return;
+      }
+
+      if (anyOverlayOpen) return;
+
+      if (mod && (key === "n" || key === "N")) {
+        e.preventDefault();
+        setTxModal({});
+        return;
+      }
+      if (mod && (key === "f" || key === "F")) {
+        e.preventDefault();
+        if (view === "transactions") searchInputRef.current?.focus();
+        else { pendingFocusSearchRef.current = true; setView("transactions"); }
+        return;
+      }
+      if (mod && (key === "e" || key === "E")) {
+        e.preventDefault();
+        if (state.transactions.length > 0) exportTransactionsCSV();
+        return;
+      }
+      if (mod && (key === "d" || key === "D")) {
+        e.preventDefault();
+        setThemeMode(darkMode ? "light" : "dark");
+        return;
+      }
+      if (!mod && !isTypingTarget(document.activeElement)) {
+        if (key === "?" && !e.repeat) {
+          e.preventDefault();
+          setShortcutsOpen(true);
+          return;
+        }
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "budgets", "5": "plans", "6": "more" };
+        if (navByKey[key]) {
+          setView(navByKey[key]);
+          return;
+        }
+      }
+    };
+
+    // Releasing "?" ends the preview — this is what makes it a "hold to see"
+    // panel rather than a toggle. A window blur (e.g. alt-tabbing away while
+    // still holding the key) also closes it, since no keyup will otherwise fire.
+    const handleKeyUp = (e) => {
+      if (e.key === "?") setShortcutsOpen(false);
+    };
+    const handleBlur = () => setShortcutsOpen(false);
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -2550,7 +2752,7 @@ export default function App() {
               />
             )}
             {view === "transactions" && (
-              <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} />
+              <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {view === "accounts" && (
               <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} error={accError} />
@@ -2626,6 +2828,9 @@ export default function App() {
       )}
       {widgetModalOpen && (
         <WidgetSettingsModal widgets={dashboardWidgets} onToggle={toggleWidget} onClose={() => setWidgetModalOpen(false)} />
+      )}
+      {shortcutsOpen && (
+        <ShortcutsModal onClose={() => setShortcutsOpen(false)} />
       )}
       {confirmDialog && (
         <ConfirmDialog
@@ -2938,6 +3143,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .about-row > .muted:first-child { flex:0 0 140px; }
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
+
+.kbd {
+  display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px;
+  padding:0 6px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11.5px; font-weight:600;
+  color: var(--text); background: var(--surface-2); border:1px solid var(--border);
+  box-shadow: 0 1.5px 0 var(--border);
+}
+.kbd-plus { color: var(--text-faint); font-size:11px; }
+.shortcuts-list { display:flex; flex-direction:column; gap:18px; }
+.shortcuts-group-title { font-size:11.5px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; color: var(--text-faint); margin-bottom:8px; }
+.shortcut-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:7px 0; border-bottom:1px solid var(--border); }
+.shortcut-row:last-child { border-bottom:none; }
+.shortcut-label { font-size:13px; }
+.shortcut-keys { display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
 .modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; }
