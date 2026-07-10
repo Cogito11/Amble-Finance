@@ -2172,6 +2172,14 @@ export default function App() {
 
   const darkMode = themeMode === "system" ? systemPrefersDark : themeMode === "dark";
   const [view, setView] = useState("dashboard");
+  const contentRef = useRef(null);
+  // Each view (dashboard, transactions, more, etc.) reuses the same scrollable
+  // .content container, so switching views would otherwise leave you exactly
+  // as scrolled as you were on the previous one. Snap back to the top whenever
+  // the active view changes so every view is entered fresh.
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [view]);
   const [txModal, setTxModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
@@ -2756,7 +2764,7 @@ export default function App() {
               )}
             </div>
           </header>
-          <div className="content">
+          <div className="content" ref={contentRef}>
             {view === "dashboard" && (
               <Dashboard
                 accounts={state.accounts}
