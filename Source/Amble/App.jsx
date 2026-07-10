@@ -1358,7 +1358,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
       {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
-          <div className="card-title">Category Progress</div>
+          <div className="card-title">Category gauges</div>
           <div className="gauge-row">
             {gaugeCats.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
             {uncategorizedSpent > 0 && (
@@ -3026,7 +3026,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .filter-bar { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
 .search-input { display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 12px; flex:1; min-width:220px; color:var(--text-faint); }
+.search-input:focus-within { border-color: var(--brass); box-shadow: 0 0 0 3px var(--brass-soft); }
 .search-input input { background:transparent; border:none; color:var(--text); font-size:13.5px; width:100%; outline:none; }
+.search-input input:focus, .search-input input:focus-visible { outline:none; }
 .select, .input { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; }
 .input.mono, .select.mono { font-family:'JetBrains Mono',monospace; }
 /* Hide the native up/down stepper on number inputs, and stop mouse-wheel scroll
