@@ -4,7 +4,7 @@ import {
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
-  Sliders, Database, Info, Github, Globe, ChevronRight, Activity, Monitor
+  Sliders, Database, Info, Github, Globe, ChevronRight, Activity, Monitor, FolderOpen
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -378,7 +378,11 @@ const APP_INFO = {
 // (Windows, Linux, or when running somewhere navigator is unavailable).
 const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+const IS_WIN = typeof navigator !== "undefined" && /Win/.test(navigator.platform || navigator.userAgent || "");
 const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
+// Matches each OS's own terminology for "show me this folder" so the button in
+// Data > Storage doesn't read like a generic, un-native web-app label.
+const OPEN_FOLDER_LABEL = IS_MAC ? "Reveal in Finder" : IS_WIN ? "Open in File Explorer" : "Open in file manager";
 
 // Single source of truth for every keyboard shortcut Amble supports — driving both
 // the held-"?" preview and the reference list in About, so the two can never drift
@@ -628,6 +632,33 @@ function MoreView({
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
 
+  // window.storageInfo comes from the Electron preload script and won't exist
+  // outside a packaged/dev Electron shell (e.g. a plain browser tab) — the UI
+  // below just quietly omits the storage-location row in that case rather than
+  // showing a broken button.
+  const [storageInfo, setStorageInfo] = useState(null);
+  const [storageInfoUnavailable, setStorageInfoUnavailable] = useState(false);
+  const [pathCopied, setPathCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!window.storageInfo?.get) { setStorageInfoUnavailable(true); return; }
+    window.storageInfo.get()
+      .then((info) => { if (!cancelled) setStorageInfo(info); })
+      .catch(() => { if (!cancelled) setStorageInfoUnavailable(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const openStorageFolder = () => { window.storageInfo?.openFolder?.(); };
+  const copyStoragePath = async () => {
+    if (!storageInfo?.path) return;
+    try {
+      await navigator.clipboard.writeText(storageInfo.path);
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 1500);
+    } catch (e) { /* clipboard permission denied — the path is still visible to copy by hand */ }
+  };
+
   return (
     <div className="more-view">
       <div className="seg more-tabs">
@@ -683,7 +714,24 @@ function MoreView({
               <div className="about-row"><span className="muted">Transactions</span><span>{transactionCount.toLocaleString()}</span></div>
               <div className="about-row"><span className="muted">Accounts</span><span>{accountCount.toLocaleString()}</span></div>
               <div className="about-row"><span className="muted">Budgets</span><span>{budgetCount.toLocaleString()}</span></div>
+              {storageInfo && (
+                <div className="about-row">
+                  <span className="muted">{storageInfo.portable ? "Data folder (portable)" : "Data folder"}</span>
+                  <span className="storage-path" title={storageInfo.path}>{storageInfo.path}</span>
+                </div>
+              )}
             </div>
+            {storageInfo && (
+              <div className="settings-actions">
+                <button className="btn btn-ghost" onClick={openStorageFolder}><FolderOpen size={14} /> {OPEN_FOLDER_LABEL}</button>
+                <button className="btn btn-ghost" onClick={copyStoragePath}><Copy size={14} /> {pathCopied ? "Copied!" : "Copy path"}</button>
+              </div>
+            )}
+            {storageInfoUnavailable && (
+              <p className="settings-desc" style={{ margin: 0 }}>
+                Storage location isn't available in this build.
+              </p>
+            )}
           </div>
           <div className="card">
             <div className="card-title">Backup &amp; restore</div>
@@ -1358,7 +1406,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 
       {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
-          <div className="card-title">Category gauges</div>
+          <div className="card-title">Category Progress</div>
           <div className="gauge-row">
             {gaugeCats.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
             {uncategorizedSpent > 0 && (
@@ -3146,6 +3194,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .about-row > .muted:first-child { flex:0 0 140px; }
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
+.storage-path {
+  flex:1; min-width:0; font-family:'JetBrains Mono',monospace; font-size:12px; text-align:right;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
 
 .kbd {
   display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px;
