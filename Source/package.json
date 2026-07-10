@@ -8,7 +8,7 @@
     "name": "Cole Bishop",
     "email": "cdbishop2005@gmail.com"
   },
-  "description": "Amble - a personal finance and budget tracker",
+  "description": "A personal finance tracker and budget tool",
   "main": "main.js",
   "scripts": {
     "start": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
