@@ -2456,15 +2456,14 @@ export default function App() {
 
   const savePlan = (p) => {
     setState((s) => {
-      let categories = s.categories;
-      let planToSave = p;
-      let transactions = s.transactions;
-      if (p.active) {
-        const synced = syncPlanCategories(p, categories);
-        categories = synced.categories;
-        planToSave = synced.plan;
-        transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
-      }
+      // Always sync, not just when this plan happens to be the active one.
+      // Otherwise, removing an item from an itemized category on a budget
+      // that isn't currently active leaves its mirrored category (and any
+      // transaction still linked to it) stale until the budget is reactivated.
+      const synced = syncPlanCategories(p, s.categories);
+      const categories = synced.categories;
+      const planToSave = synced.plan;
+      const transactions = clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds);
       const exists = s.plans.some((x) => x.id === planToSave.id);
       let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [planToSave, ...s.plans];
       if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
