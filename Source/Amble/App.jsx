@@ -869,21 +869,54 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     });
   }
 
-  // Net worth as of the end of each of the last 6 months (today, for the current
-  // month, since its end hasn't happened yet), reconstructed by replaying only the
-  // transactions dated on or before each cutoff through computeBalance.
-  const netWorthTrendData = [];
+  // Net worth over time, at exact granularity: one point for every date in the
+  // last 6 months that actually has a transaction, instead of a single sampled
+  // value per month. Each point is net worth as of the end of that date,
+  // reconstructed by replaying every transaction dated on or before it — same
+  // "replay through computeBalance" approach as before, just at the resolution
+  // of individual transaction dates rather than month boundaries.
+  const dateToTs = (isoDate) => new Date(`${isoDate}T00:00:00`).getTime();
+  const today = todayStr();
+  const nwTodayTs = dateToTs(today);
+
+  // The 1st of each of the last 6 months. Used both as explicit x-axis tick
+  // marks and as guaranteed "anchor" data points below, so every month has
+  // something to hover even in months with zero transactions.
+  const nwMonthStarts = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date();
+    d.setHours(0, 0, 0, 0);
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    const label = d.toLocaleString("default", { month: "short" });
-    const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-    const cutoff = i === 0 ? todayStr() : monthEnd.toISOString().slice(0, 10);
-    const txUpTo = transactions.filter((t) => t.date <= cutoff);
-    const nw = accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0);
-    netWorthTrendData.push({ month: label, netWorth: nw });
+    nwMonthStarts.push(d.toISOString().slice(0, 10));
   }
+  const nwWindowStart = nwMonthStarts[0];
+  const nwWindowStartTs = dateToTs(nwWindowStart);
+
+  // Every date the chart needs a point for: the start of each month (so a
+  // quiet month still shows its carried-forward value on hover, instead of
+  // just a long gap the line has to interpolate across) plus every date that
+  // actually has a transaction. Multiple transactions on the same day still
+  // collapse into a single point.
+  const txDatesInWindow = transactions.filter((t) => t.date >= nwWindowStart && t.date <= today).map((t) => t.date);
+  const allDatesInWindow = Array.from(new Set([...nwMonthStarts, ...txDatesInWindow])).sort();
+
+  const netWorthTrendData = allDatesInWindow.map((date) => {
+    const txUpTo = transactions.filter((t) => t.date <= date);
+    return { date, t: dateToTs(date), netWorth: accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0) };
+  });
+  // Always end on today's actual net worth, even on a day with no transactions,
+  // so the line reflects the current balance rather than stopping early.
+  if (netWorthTrendData[netWorthTrendData.length - 1].date !== today) {
+    netWorthTrendData.push({ date: today, t: nwTodayTs, netWorth });
+  }
+
+  // Explicit x-axis ticks: the 1st of each of the last 6 months. Left to its
+  // own auto-generation on a numeric time domain, Recharts (combined with
+  // minTickGap) tended to collapse down to just the first/last tick, so the
+  // month markers are pinned explicitly instead.
+  const nwMonthTicks = nwMonthStarts.map(dateToTs);
+
 
   // By default a value axis starts at 0, which flattens a high net worth's small
   // month-to-month swings into an almost-straight line. Instead, raise the floor to
@@ -1041,7 +1074,19 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="month" stroke="var(--text-faint)" fontSize={12} tickLine={false} axisLine={{ stroke: "var(--border)" }} />
+              <XAxis
+                dataKey="t"
+                type="number"
+                scale="time"
+                domain={[nwWindowStartTs, nwTodayTs]}
+                ticks={nwMonthTicks}
+                interval={0}
+                stroke="var(--text-faint)"
+                fontSize={12}
+                tickLine={false}
+                axisLine={{ stroke: "var(--border)" }}
+                tickFormatter={(ts) => new Date(ts).toLocaleString("default", { month: "short" })}
+              />
               <YAxis
                 domain={nwDomain}
                 ticks={nwTicks}
@@ -1052,8 +1097,14 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 tickFormatter={(v) => `${v < 0 ? "-" : ""}$${Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1).replace(/\.0$/, "") + "k" : Math.round(Math.abs(v))}`}
                 width={48}
               />
-              <Tooltip formatter={(v) => fmt(v)} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
-              <Area type="monotone" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={{ r: 3, fill: "var(--brass)", strokeWidth: 0 }} activeDot={{ r: 5 }} />
+              <Tooltip
+                formatter={(v) => fmt(v)}
+                labelFormatter={(ts) => new Date(ts).toLocaleDateString("default", { month: "short", day: "numeric", year: "numeric" })}
+                contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }}
+                itemStyle={{ color: "var(--text)" }}
+                labelStyle={{ color: "var(--text)" }}
+              />
+              <Area type="stepAfter" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={false} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
