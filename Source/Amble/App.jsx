@@ -876,39 +876,35 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   // "replay through computeBalance" approach as before, just at the resolution
   // of individual transaction dates rather than month boundaries.
   const dateToTs = (isoDate) => new Date(`${isoDate}T00:00:00`).getTime();
-  const nwWindowStart = (() => {
-    const d = new Date();
-    d.setDate(1);
-    d.setMonth(d.getMonth() - 5);
-    return d.toISOString().slice(0, 10);
-  })();
   const today = todayStr();
-  const nwWindowStartTs = dateToTs(nwWindowStart);
   const nwTodayTs = dateToTs(today);
 
-  // Net worth right before the window starts, so the line begins at a sensible
-  // value even if the first transaction inside the window isn't on day one.
-  const beforeWindowTx = transactions.filter((t) => t.date < nwWindowStart);
-  const startingNetWorth = accounts.reduce((s, a) => s + computeBalance(a, beforeWindowTx), 0);
-
-  // Distinct transaction dates in the window, oldest first. Multiple
-  // transactions on the same day collapse into a single point (the balance as
-  // of the end of that day) rather than plotting several points at the same
-  // x position.
-  const txDatesInWindow = Array.from(
-    new Set(transactions.filter((t) => t.date >= nwWindowStart && t.date <= today).map((t) => t.date))
-  ).sort();
-
-  // Each point carries both its date (for labels) and a numeric timestamp `t`.
-  // The chart's x-axis is plotted against `t` on a real time scale rather than
-  // by point index, so a burst of transactions in one week doesn't visually
-  // compress the rest of the 6-month window — the axis always spans the full
-  // 6 months proportionally, no matter how activity is distributed across it.
-  const netWorthTrendData = [{ date: nwWindowStart, t: nwWindowStartTs, netWorth: startingNetWorth }];
-  for (const date of txDatesInWindow) {
-    const txUpTo = transactions.filter((t) => t.date <= date);
-    netWorthTrendData.push({ date, t: dateToTs(date), netWorth: accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0) });
+  // The 1st of each of the last 6 months. Used both as explicit x-axis tick
+  // marks and as guaranteed "anchor" data points below, so every month has
+  // something to hover even in months with zero transactions.
+  const nwMonthStarts = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(1);
+    d.setMonth(d.getMonth() - i);
+    nwMonthStarts.push(d.toISOString().slice(0, 10));
   }
+  const nwWindowStart = nwMonthStarts[0];
+  const nwWindowStartTs = dateToTs(nwWindowStart);
+
+  // Every date the chart needs a point for: the start of each month (so a
+  // quiet month still shows its carried-forward value on hover, instead of
+  // just a long gap the line has to interpolate across) plus every date that
+  // actually has a transaction. Multiple transactions on the same day still
+  // collapse into a single point.
+  const txDatesInWindow = transactions.filter((t) => t.date >= nwWindowStart && t.date <= today).map((t) => t.date);
+  const allDatesInWindow = Array.from(new Set([...nwMonthStarts, ...txDatesInWindow])).sort();
+
+  const netWorthTrendData = allDatesInWindow.map((date) => {
+    const txUpTo = transactions.filter((t) => t.date <= date);
+    return { date, t: dateToTs(date), netWorth: accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0) };
+  });
   // Always end on today's actual net worth, even on a day with no transactions,
   // so the line reflects the current balance rather than stopping early.
   if (netWorthTrendData[netWorthTrendData.length - 1].date !== today) {
@@ -919,14 +915,8 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
   // own auto-generation on a numeric time domain, Recharts (combined with
   // minTickGap) tended to collapse down to just the first/last tick, so the
   // month markers are pinned explicitly instead.
-  const nwMonthTicks = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(1);
-    d.setMonth(d.getMonth() - i);
-    nwMonthTicks.push(d.getTime());
-  }
+  const nwMonthTicks = nwMonthStarts.map(dateToTs);
+
 
   // By default a value axis starts at 0, which flattens a high net worth's small
   // month-to-month swings into an almost-straight line. Instead, raise the floor to
@@ -1114,7 +1104,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 itemStyle={{ color: "var(--text)" }}
                 labelStyle={{ color: "var(--text)" }}
               />
-              <Area type="monotone" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={false} activeDot={{ r: 5 }} />
+              <Area type="stepAfter" dataKey="netWorth" stroke="var(--brass)" strokeWidth={2.5} fill="url(#netWorthFill)" dot={false} activeDot={{ r: 5 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
