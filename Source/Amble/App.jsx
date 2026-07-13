@@ -326,6 +326,7 @@ function rolloverDuePlans(state) {
         startDate: dates.startDate,
         endDate: dates.endDate,
         income: p.income,
+        incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
         dateCreated: today,
         active: true,
         repeat: { ...p.repeat },
@@ -1984,7 +1985,16 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const [name, setName] = useState(initial.name || "");
   const [startDate, setStartDate] = useState(initial.startDate || "");
   const [endDate, setEndDate] = useState(initial.endDate || "");
-  const [income, setIncome] = useState(initial.income ?? "");
+  // Income as a list of named lines (e.g. "Paycheck 1", "Rollover from last month")
+  // instead of a single number, so multiple sources add up naturally. Falls back
+  // to one line seeded from the old single `income` field for plans saved before
+  // this existed, so it behaves exactly like the old single field until someone
+  // actually adds a second line.
+  const [incomeItems, setIncomeItems] = useState(
+    initial.incomeItems && initial.incomeItems.length
+      ? initial.incomeItems
+      : [{ id: uid(), name: "Income", amount: initial.income ?? "" }]
+  );
   const [cats, setCats] = useState(
     initial.categories && initial.categories.length ? initial.categories : []
   );
@@ -1995,8 +2005,20 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const matchDays = planMatchDurationDays({ startDate, endDate });
 
   const canSave = name.trim().length > 0;
+  const totalIncome = incomeItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
   const allocated = cats.reduce((s, c) => s + planCategoryTotal(c), 0);
-  const remaining = (Number(income) || 0) - allocated;
+  const remaining = totalIncome - allocated;
+
+  const addIncomeItem = () => {
+    setIncomeItems((items) => [...items, { id: uid(), name: "", amount: "" }]);
+  };
+  const updateIncomeItem = (id, patch) => {
+    setIncomeItems((items) => items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  };
+  const removeIncomeItem = (id) => {
+    // Always leave at least one line so there's somewhere to enter an amount.
+    setIncomeItems((items) => (items.length > 1 ? items.filter((it) => it.id !== id) : items));
+  };
 
   const addCategory = () => {
     setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [] }]);
@@ -2019,12 +2041,14 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
 
   const submit = () => {
     if (!canSave) return;
+    const cleanedIncomeItems = incomeItems.map((it) => ({ id: it.id, name: it.name.trim() || "Income", amount: Number(it.amount) || 0 }));
     onSave({
       id: initial.id || uid(),
       name: name.trim(),
       startDate: startDate || null,
       endDate: endDate || null,
-      income: Number(income) || 0,
+      income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
+      incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
       active: initial.active || false,
       repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq },
@@ -2059,7 +2083,21 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         </div>
         <div className="form-group">
           <label>Income</label>
-          <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={income} onChange={(e) => setIncome(e.target.value)} onWheel={blurOnWheel} />
+          <div className="plan-items">
+            {incomeItems.map((it) => (
+              <div key={it.id} className="plan-item-row">
+                <input className="input" placeholder="e.g. Paycheck 1, Rollover from last month" value={it.name} onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })} />
+                <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
+                {incomeItems.length > 1 && (
+                  <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)}><X size={14} /></button>
+                )}
+              </div>
+            ))}
+            <div className="plan-items-footer">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
+              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
+            </div>
+          </div>
         </div>
 
         <div className="plan-repeat-block">
@@ -2091,7 +2129,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
         </div>
 
         <div className="plan-summary-bar">
-          <div><span className="muted">Income</span><strong>{fmt(Number(income) || 0)}</strong></div>
+          <div><span className="muted">Income</span><strong>{fmt(totalIncome)}</strong></div>
           <div><span className="muted">Allocated</span><strong>{fmt(allocated)}</strong></div>
           <div>
             <span className="muted">Remaining</span>
@@ -2577,6 +2615,7 @@ export default function App() {
       startDate: p.startDate || "",
       endDate: p.endDate || "",
       income: p.income,
+      incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
       active: false,
       repeat: p.repeat ? { ...p.repeat } : { enabled: false, frequency: "monthly" },
       categories: (p.categories || []).map((c) => ({
