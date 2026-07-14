@@ -24,7 +24,6 @@ function createWindow() {
     title: "Amble Finance",
     icon: getIconPath(),
     backgroundColor: "#f4f9fd",
-    titleBarStyle: "hiddenInset",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
