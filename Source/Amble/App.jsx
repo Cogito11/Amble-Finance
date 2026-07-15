@@ -37,7 +37,19 @@ const isTypingTarget = (el) => {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!el.isContentEditable;
 };
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Builds YYYY-MM-DD from a Date's *local* calendar fields. Deliberately avoids
+// toISOString(), which converts to UTC first - in timezones behind UTC that
+// flips to the next calendar day as soon as it's evening locally (and in
+// timezones ahead of UTC can flip back a day), so any default/current-day
+// logic built on it would be off by one for part of the day.
+const toLocalDateStr = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const todayStr = () => toLocalDateStr(new Date());
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
@@ -47,7 +59,7 @@ const currentMonthKey = () => monthKeyOf(todayStr());
 function isWithinRolling30Days(dateStr) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 29);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = toLocalDateStr(cutoff);
   return dateStr >= cutoffStr && dateStr <= todayStr();
 }
 
@@ -139,8 +151,7 @@ function currentMonthRange() {
   const d = new Date();
   const start = new Date(d.getFullYear(), d.getMonth(), 1);
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  const toStr = (x) => x.toISOString().slice(0, 10);
-  return { startDate: toStr(start), endDate: toStr(end) };
+  return { startDate: toLocalDateStr(start), endDate: toLocalDateStr(end) };
 }
 
 // A starter budget so a fresh install isn't empty - scoped to the current month and
@@ -304,7 +315,7 @@ function addMonthsClamped(dateStr, monthsToAdd, anchorDay) {
   const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
   const lastDayOfTargetMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
   const result = new Date(targetYear, normalizedMonth, Math.min(day, lastDayOfTargetMonth));
-  return result.toISOString().slice(0, 10);
+  return toLocalDateStr(result);
 }
 
 // The date a repeating plan becomes due to generate its next cycle. "Match time
@@ -320,12 +331,12 @@ function planDueDate(plan) {
   if (freq === "weekly") {
     const due = new Date(plan.startDate + "T00:00:00");
     due.setDate(due.getDate() + 7);
-    return due.toISOString().slice(0, 10);
+    return toLocalDateStr(due);
   }
   if (freq === "biweekly") {
     const due = new Date(plan.startDate + "T00:00:00");
     due.setDate(due.getDate() + 14);
-    return due.toISOString().slice(0, 10);
+    return toLocalDateStr(due);
   }
   if (freq === "monthly") {
     // Prefer the anchor day stored on the plan the first time repeating was set
@@ -362,8 +373,7 @@ function nextPlanDates(plan) {
   }
   const end = new Date(start);
   end.setDate(end.getDate() + durationDays);
-  const toStr = (d) => d.toISOString().slice(0, 10);
-  return { startDate: toStr(start), endDate: toStr(end) };
+  return { startDate: toLocalDateStr(start), endDate: toLocalDateStr(end) };
 }
 
 // Rolls forward any active, repeat-enabled plans that have become due (see planDueDate),
@@ -929,7 +939,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     const d = new Date();
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    const key = d.toISOString().slice(0, 7);
+    const key = toLocalDateStr(d).slice(0, 7);
     const label = d.toLocaleString("default", { month: "short" });
     const tx = transactions.filter((t) => monthKeyOf(t.date) === key);
     trendData.push({
@@ -958,7 +968,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     d.setHours(0, 0, 0, 0);
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    nwMonthStarts.push(d.toISOString().slice(0, 10));
+    nwMonthStarts.push(toLocalDateStr(d));
   }
   const nwWindowStart = nwMonthStarts[0];
   const nwWindowStartTs = dateToTs(nwWindowStart);
