@@ -1192,14 +1192,26 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="amount">Amount</th></tr>
+                <tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th className="col-right">Amount</th></tr>
               </thead>
               <tbody>
                 {recent.map((t) => (
                   <tr key={t.id}>
                     <td className="muted">{fmtDate(t.date)}</td>
                     <td>{t.description || catName(t.categoryId)}</td>
-                    <td className="muted">{t.type === "transfer" ? `${accName(t.accountId)} → ${accName(t.toAccountId)}${t.categoryId ? ` · ${catName(t.categoryId)}` : ""}` : catName(t.categoryId)}</td>
+                    <td>
+                      {t.type === "transfer" ? (
+                        <div className="pill-group">
+                          <span className="pill"><ArrowRightLeft size={12} /> {accName(t.accountId)} → {accName(t.toAccountId)}</span>
+                          {t.categoryId && (
+                            <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>
+                      )}
+                    </td>
+                    <td className="muted">{accName(t.accountId)}</td>
                     <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
                       {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
                     </td>
@@ -1283,7 +1295,7 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
         <div className="card no-pad">
           <table className="table full">
             <thead>
-              <tr><th>Date</th><th>Description</th><th>Category / route</th><th>Account</th><th>Amount</th><th></th></tr>
+              <tr><th>Date</th><th>Description</th><th>Category / route</th><th>Account</th><th className="col-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
               {filtered.map((t) => (
@@ -3207,6 +3219,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .muted { color: var(--text-muted); }
 .amount { font-family:'JetBrains Mono',monospace; font-weight:500; text-align:right; }
 .col-center { text-align:center !important; }
+.col-right { text-align:right !important; }
 .row-actions { display:flex; gap:4px; justify-content:flex-end; }
 .row-actions-cell { vertical-align:middle; }
 
