@@ -388,7 +388,10 @@ function rolloverDuePlans(state) {
 
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
-    if (!(p.active && p.repeat && p.repeat.enabled && p.startDate && p.endDate)) continue;
+    // Repeat fires regardless of whether the plan is currently active or inactive -
+    // this lets two alternating budgets (e.g. 1st & 15th paycheck) each repeat on
+    // their own schedule even while sitting inactive waiting their turn.
+    if (!(p.repeat && p.repeat.enabled && p.startDate && p.endDate)) continue;
 
     let cur = p;
     let lastNew = null;
@@ -418,7 +421,10 @@ function rolloverDuePlans(state) {
     }
     if (lastNew) {
       mutated = true;
-      plans[i] = { ...p, active: false };
+      // The old plan goes inactive AND has repeat turned off, so it fires exactly
+      // once per user-configured repeat setup. The new plan (pushed below) is the
+      // one that stays active with repeat still on, ready for its own next cycle.
+      plans[i] = { ...p, active: false, repeat: { ...p.repeat, enabled: false } };
       const synced = syncPlanCategories(lastNew, categories);
       categories = synced.categories;
       plans.push(synced.plan);
