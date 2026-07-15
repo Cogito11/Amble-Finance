@@ -272,28 +272,12 @@ function clearRemovedCategoryRefs(transactions, removedCategoryIds) {
 }
 
 const REPEAT_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", match: "Match time frame" };
+const REPEAT_DUE_PHRASES = { weekly: "a week after", biweekly: "2 weeks after", monthly: "a month after" };
 
-// Computes the next cycle's start/end dates, always starting on the previous plan's end date.
-function nextPlanDates(plan) {
-  if (!plan.endDate) return null;
-  const start = new Date(plan.endDate + "T00:00:00");
-  const end = new Date(start);
-  const freq = plan.repeat && plan.repeat.frequency;
-  if (freq === "weekly") end.setDate(end.getDate() + 7);
-  else if (freq === "biweekly") end.setDate(end.getDate() + 14);
-  else if (freq === "monthly") end.setMonth(end.getMonth() + 1);
-  else if (freq === "match") {
-    const origStart = plan.startDate ? new Date(plan.startDate + "T00:00:00") : null;
-    const origEnd = new Date(plan.endDate + "T00:00:00");
-    const durationDays = origStart ? Math.max(1, Math.round((origEnd - origStart) / 86400000)) : 7;
-    end.setDate(end.getDate() + durationDays);
-  } else {
-    return null;
-  }
-  const toStr = (d) => d.toISOString().slice(0, 10);
-  return { startDate: toStr(start), endDate: toStr(end) };
-}
-
+// How long (in days) a plan's own time frame spans. Used both to show a preview
+// in the Edit budget menu and, below, to size every repeated cycle so it always
+// matches the length of the budget it's replacing — regardless of which repeat
+// frequency was picked.
 function planMatchDurationDays(plan) {
   if (!plan.startDate || !plan.endDate) return null;
   const start = new Date(plan.startDate + "T00:00:00");
@@ -301,8 +285,42 @@ function planMatchDurationDays(plan) {
   return Math.max(1, Math.round((end - start) / 86400000));
 }
 
-// Rolls forward any active, repeat-enabled plans whose end date has passed, duplicating
-// each into a fresh plan/cycle (with its own categories) so historical data stays intact.
+// The date a repeating plan becomes due to generate its next cycle. "Match time
+// frame" waits for the plan's own end date — its length is effectively the
+// repeat interval. The fixed-interval frequencies (weekly/biweekly/monthly)
+// instead count forward from the plan's start date, so a budget set to repeat
+// weekly becomes due a week after it started, 2 weeks becomes due two weeks
+// after it started, and so on — independent of how long the budget itself runs.
+function planDueDate(plan) {
+  if (!plan.startDate || !plan.endDate) return null;
+  const freq = plan.repeat && plan.repeat.frequency;
+  if (freq === "match") return plan.endDate;
+  const due = new Date(plan.startDate + "T00:00:00");
+  if (freq === "weekly") due.setDate(due.getDate() + 7);
+  else if (freq === "biweekly") due.setDate(due.getDate() + 14);
+  else if (freq === "monthly") due.setMonth(due.getMonth() + 1);
+  else return null;
+  return due.toISOString().slice(0, 10);
+}
+
+// Computes the next cycle's start/end dates. However a plan's repeat frequency
+// determines *when* it becomes due (see planDueDate), the cycle it produces
+// always keeps the exact same length as the budget being repeated, and always
+// starts the day immediately after the current one ends — no gap, no overlap.
+function nextPlanDates(plan) {
+  const durationDays = planMatchDurationDays(plan);
+  if (!durationDays) return null;
+  const start = new Date(plan.endDate + "T00:00:00");
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + durationDays);
+  const toStr = (d) => d.toISOString().slice(0, 10);
+  return { startDate: toStr(start), endDate: toStr(end) };
+}
+
+// Rolls forward any active, repeat-enabled plans that have become due (see planDueDate),
+// duplicating each into a fresh plan/cycle (with its own categories) so historical data
+// stays intact.
 function rolloverDuePlans(state) {
   const today = todayStr();
   let categories = state.categories.slice();
@@ -312,12 +330,13 @@ function rolloverDuePlans(state) {
 
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
-    if (!(p.active && p.repeat && p.repeat.enabled && p.endDate && p.endDate < today)) continue;
+    if (!(p.active && p.repeat && p.repeat.enabled && p.startDate && p.endDate)) continue;
 
     let cur = p;
     let lastNew = null;
     let iterations = 0;
-    while (cur.endDate && cur.endDate < today && iterations < 104) {
+    let due = planDueDate(cur);
+    while (due && due < today && iterations < 104) {
       const dates = nextPlanDates(cur);
       if (!dates) break;
       iterations++;
@@ -337,6 +356,7 @@ function rolloverDuePlans(state) {
         })),
       };
       cur = lastNew;
+      due = planDueDate(cur);
     }
     if (lastNew) {
       mutated = true;
@@ -2004,6 +2024,16 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
 
   const canRepeat = !!(startDate && endDate);
   const matchDays = planMatchDurationDays({ startDate, endDate });
+  // Live preview, in the Edit budget menu, of when this cycle becomes due to
+  // repeat and what dates the next cycle would have — mirrors planDueDate /
+  // nextPlanDates exactly, using the form's current (possibly unsaved) values.
+  const repeatPreview = canRepeat
+    ? (() => {
+        const due = planDueDate({ startDate, endDate, repeat: { frequency: repeatFreq } });
+        const next = nextPlanDates({ startDate, endDate });
+        return due && next ? { due, next } : null;
+      })()
+    : null;
 
   const canSave = name.trim().length > 0;
   const totalIncome = incomeItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
@@ -2129,14 +2159,15 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
               <button type="button" className={`seg-btn ${repeatFreq === "weekly" ? "active" : ""}`} onClick={() => setRepeatFreq("weekly")}>Weekly</button>
               <button type="button" className={`seg-btn ${repeatFreq === "biweekly" ? "active" : ""}`} onClick={() => setRepeatFreq("biweekly")}>Every 2 weeks</button>
               <button type="button" className={`seg-btn ${repeatFreq === "monthly" ? "active" : ""}`} onClick={() => setRepeatFreq("monthly")}>Monthly</button>
-              <button type="button" className={`seg-btn ${repeatFreq === "match" ? "active" : ""}`} onClick={() => setRepeatFreq("match")}>
-                Match time frame{matchDays ? ` (${matchDays}d)` : ""}
-              </button>
+              <button type="button" className={`seg-btn ${repeatFreq === "match" ? "active" : ""}`} onClick={() => setRepeatFreq("match")}>Match time frame</button>
             </div>
           )}
-          {canRepeat && repeatOn && (
+          {canRepeat && repeatOn && repeatPreview && (
             <p className="settings-desc">
-              The next cycle will start on {fmtDate(endDate)} and run for the selected length, carrying forward the same income and categories as a new plan.
+              {repeatFreq === "match"
+                ? `The budget will repeat once it's set to end, on ${fmtDate(endDate)}. `
+                : `The budget will repeat ${REPEAT_DUE_PHRASES[repeatFreq]} its start date, on ${fmtDate(repeatPreview.due)}. `}
+              When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new plan.
             </p>
           )}
         </div>
