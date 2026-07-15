@@ -2254,7 +2254,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
           )}
           {repeatCutoffWarning && (
             <p className="settings-desc inline-error">
-              Warning: This budget runs is set to run for {matchDays} day{matchDays === 1 ? "" : "s"} (Ending on {fmtDate(endDate)}). Repeating {REPEAT_DUE_PHRASES[repeatFreq]} its start date means the next cycle begins on {fmtDate(repeatPreview.due)}. This budget will be cut off and end early.
+              Warning: This budget is set to run for {matchDays} day{matchDays === 1 ? "" : "s"} (Ending on {fmtDate(endDate)}). Repeating {REPEAT_DUE_PHRASES[repeatFreq]} its start date means the next cycle begins on {fmtDate(repeatPreview.due)}. This budget will be cut off and end early.
             </p>
           )}
         </div>
@@ -2315,7 +2315,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                   {(c.items || []).map((it) => (
                     <div key={it.id} className="plan-item-row">
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
-                      <input type="date" className="input mono plan-item-date" title="Renewal date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
+                      <input type="date" className="input mono plan-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
                       <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                       <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
                     </div>
@@ -2332,7 +2332,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                     <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} onWheel={blurOnWheel} />
                   </div>
                   <div className="form-group plan-cat-bulk">
-                    <label>Renewal date (optional)</label>
+                    <label>Date (optional)</label>
                     <input type="date" className="input mono" value={c.date || ""} onChange={(e) => updateCategory(c.id, { date: e.target.value })} />
                   </div>
                 </div>
