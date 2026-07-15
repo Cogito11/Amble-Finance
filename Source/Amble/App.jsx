@@ -1192,7 +1192,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
           ) : (
             <table className="table">
               <thead>
-                <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="amount">Amount</th></tr>
+                <tr><th>Date</th><th>Description</th><th>Category / Account</th><th className="col-right">Amount</th></tr>
               </thead>
               <tbody>
                 {recent.map((t) => (
@@ -1283,7 +1283,7 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
         <div className="card no-pad">
           <table className="table full">
             <thead>
-              <tr><th>Date</th><th>Description</th><th>Category / route</th><th>Account</th><th>Amount</th><th></th></tr>
+              <tr><th>Date</th><th>Description</th><th>Category / route</th><th>Account</th><th className="col-right">Amount</th><th></th></tr>
             </thead>
             <tbody>
               {filtered.map((t) => (
@@ -3207,6 +3207,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .muted { color: var(--text-muted); }
 .amount { font-family:'JetBrains Mono',monospace; font-weight:500; text-align:right; }
 .col-center { text-align:center !important; }
+.col-right { text-align:right !important; }
 .row-actions { display:flex; gap:4px; justify-content:flex-end; }
 .row-actions-cell { vertical-align:middle; }
 
