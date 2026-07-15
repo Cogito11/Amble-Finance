@@ -304,15 +304,28 @@ function planDueDate(plan) {
   return due.toISOString().slice(0, 10);
 }
 
-// Computes the next cycle's start/end dates. However a plan's repeat frequency
-// determines *when* it becomes due (see planDueDate), the cycle it produces
-// always keeps the exact same length as the budget being repeated, and always
-// starts the day immediately after the current one ends — no gap, no overlap.
+// Computes the next cycle's start/end dates. The cycle it produces always
+// keeps the exact same length as the budget being repeated, but *when* it
+// starts depends on the repeat frequency (see planDueDate): "Match time
+// frame" chains continuously off the current end date (no gap, no overlap),
+// while the fixed-interval frequencies (weekly/biweekly/monthly) anchor the
+// new cycle's start to the due date itself — a fixed interval after the
+// current cycle's *start* date, not after wherever its end date happens to
+// fall. That's what makes a 2-week budget repeating monthly actually start a
+// month after its start date, rather than the day its old cycle ends.
 function nextPlanDates(plan) {
   const durationDays = planMatchDurationDays(plan);
   if (!durationDays) return null;
-  const start = new Date(plan.endDate + "T00:00:00");
-  start.setDate(start.getDate() + 1);
+  const freq = plan.repeat && plan.repeat.frequency;
+  let start;
+  if (freq === "match") {
+    start = new Date(plan.endDate + "T00:00:00");
+    start.setDate(start.getDate() + 1);
+  } else {
+    const due = planDueDate(plan);
+    if (!due) return null;
+    start = new Date(due + "T00:00:00");
+  }
   const end = new Date(start);
   end.setDate(end.getDate() + durationDays);
   const toStr = (d) => d.toISOString().slice(0, 10);
@@ -2043,7 +2056,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const repeatPreview = canRepeat
     ? (() => {
         const due = planDueDate({ startDate, endDate, repeat: { frequency: repeatFreq } });
-        const next = nextPlanDates({ startDate, endDate });
+        const next = nextPlanDates({ startDate, endDate, repeat: { frequency: repeatFreq } });
         return due && next ? { due, next } : null;
       })()
     : null;
