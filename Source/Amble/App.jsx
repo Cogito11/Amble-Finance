@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
-  GripVertical, Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
+  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
   Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
   Monitor, ChevronUp, ChevronDown
 } from "lucide-react";
@@ -1999,7 +1999,6 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const [cats, setCats] = useState(
     initial.categories && initial.categories.length ? initial.categories : []
   );
-  const [draggedCategoryId, setDraggedCategoryId] = useState(null);
   const [repeatOn, setRepeatOn] = useState(!!(initial.repeat && initial.repeat.enabled));
   const [repeatFreq, setRepeatFreq] = useState((initial.repeat && initial.repeat.frequency) || "monthly");
 
@@ -2025,22 +2024,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const addCategory = () => {
     setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [] }]);
   };
-  const reorderCategories = (fromId, toId) => {
-    setCats((cs) => {
-      const fromIndex = cs.findIndex((c) => c.id === fromId);
-      const toIndex = cs.findIndex((c) => c.id === toId);
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return cs;
-      const next = [...cs];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      return next;
-    });
-  };
-  // Moves a category up/down by one slot. Exists alongside drag-and-drop reordering
-  // because dragging an itemized category with lots of expenses (a tall block) to
-  // the top or bottom of a long list is awkward — there's no auto-scroll while
-  // dragging, so the target position is often off-screen. These buttons let you
-  // reorder one step at a time without needing to drag anything into view.
+  // Moves a category up/down by one slot for reordering.
   const moveCategory = (id, direction) => {
     setCats((cs) => {
       const index = cs.findIndex((c) => c.id === id);
@@ -2176,31 +2160,9 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
           {cats.map((c, ci) => (
             <div
               key={c.id}
-              className={`plan-cat-block${draggedCategoryId === c.id ? " dragging" : ""}`}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", c.id);
-                setDraggedCategoryId(c.id);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const fromId = e.dataTransfer.getData("text/plain") || draggedCategoryId;
-                if (fromId && fromId !== c.id) {
-                  reorderCategories(fromId, c.id);
-                }
-                setDraggedCategoryId(null);
-              }}
-              onDragEnd={() => setDraggedCategoryId(null)}
+              className="plan-cat-block"
             >
               <div className="plan-cat-row">
-                <div className="plan-cat-handle" title="Drag to reorder" aria-label="Drag to reorder category">
-                  <GripVertical size={14} />
-                </div>
                 <div className="plan-cat-move-btns">
                   <button
                     type="button"
@@ -3309,8 +3271,6 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
-.plan-cat-block.dragging { opacity:0.65; }
-.plan-cat-handle { display:flex; align-items:center; justify-content:center; color:var(--text-faint); cursor:grab; padding:2px; border-radius:6px; flex-shrink:0; }
 .plan-cat-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
 .plan-cat-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
 .plan-cat-move-btn:disabled { opacity:0.3; cursor:default; }
