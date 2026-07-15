@@ -3,8 +3,9 @@ import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
-  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2, Copy, Repeat,
-  Sliders, Database, Info, Github, Globe, ChevronRight, Activity, Monitor
+  Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
+  Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
+  Monitor, ChevronUp, ChevronDown
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -2023,6 +2024,18 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
   const addCategory = () => {
     setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [] }]);
   };
+  // Moves a category up/down by one slot for reordering.
+  const moveCategory = (id, direction) => {
+    setCats((cs) => {
+      const index = cs.findIndex((c) => c.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= cs.length) return cs;
+      const next = [...cs];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved);
+      return next;
+    });
+  };
   const updateCategory = (id, patch) => {
     setCats((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   };
@@ -2144,9 +2157,34 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
           {cats.length === 0 && (
             <p className="settings-desc">No categories yet — break your income down into spending buckets, like Rent or Groceries.</p>
           )}
-          {cats.map((c) => (
-            <div key={c.id} className="plan-cat-block">
+          {cats.map((c, ci) => (
+            <div
+              key={c.id}
+              className="plan-cat-block"
+            >
               <div className="plan-cat-row">
+                <div className="plan-cat-move-btns">
+                  <button
+                    type="button"
+                    className="icon-btn plan-cat-move-btn"
+                    title="Move category up"
+                    aria-label="Move category up"
+                    disabled={ci === 0}
+                    onClick={() => moveCategory(c.id, -1)}
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn plan-cat-move-btn"
+                    title="Move category down"
+                    aria-label="Move category down"
+                    disabled={ci === cats.length - 1}
+                    onClick={() => moveCategory(c.id, 1)}
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                </div>
                 <input className="input" placeholder="Category name (e.g. Streaming services)" value={c.name} onChange={(e) => updateCategory(c.id, { name: e.target.value })} />
                 <div className="seg plan-cat-seg">
                   <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
@@ -3233,6 +3271,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
+.plan-cat-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
+.plan-cat-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
+.plan-cat-move-btn:disabled { opacity:0.3; cursor:default; }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
