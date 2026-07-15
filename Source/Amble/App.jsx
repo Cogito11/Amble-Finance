@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { version as appVersion } from "../package.json";
 import {
   LayoutDashboard, Receipt, Wallet, Target, Plus, X, Pencil, Trash2,
   ArrowUpRight, ArrowDownRight, ArrowRightLeft, Search, PiggyBank,
@@ -387,7 +388,7 @@ function computeBalance(account, transactions) {
 const APP_INFO = {
   name: "Amble",
   tagline: "Personal Finances Made Simple",
-  version: "0.1.0",
+  version: appVersion,
   maintainerName: "Cole Bishop",
   maintainerHandle: "@cogito11",
   githubUrl: "https://github.com/Cogito11/Amble-Finance",
