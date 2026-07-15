@@ -29,7 +29,7 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 const blurOnWheel = (e) => e.target.blur();
 
 // Used to keep global keyboard shortcuts from firing while the user is typing
-// somewhere — e.g. pressing "1" while entering an amount, or "?" while typing
+// somewhere - e.g. pressing "1" while entering an amount, or "?" while typing
 // "what?" into a description field, shouldn't trigger a shortcut.
 const isTypingTarget = (el) => {
   if (!el) return false;
@@ -37,17 +37,29 @@ const isTypingTarget = (el) => {
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!el.isContentEditable;
 };
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+// Builds YYYY-MM-DD from a Date's *local* calendar fields. Deliberately avoids
+// toISOString(), which converts to UTC first - in timezones behind UTC that
+// flips to the next calendar day as soon as it's evening locally (and in
+// timezones ahead of UTC can flip back a day), so any default/current-day
+// logic built on it would be off by one for part of the day.
+const toLocalDateStr = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const todayStr = () => toLocalDateStr(new Date());
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
 // A trailing 30-day window (today and the 29 days before it), used to scope spend
-// for budgets/categories that don't have a fixed time frame — so their gauges track
+// for budgets/categories that don't have a fixed time frame - so their gauges track
 // a consistent rolling month instead of resetting on the 1st of the calendar month.
 function isWithinRolling30Days(dateStr) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 29);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = toLocalDateStr(cutoff);
   return dateStr >= cutoffStr && dateStr <= todayStr();
 }
 
@@ -119,7 +131,7 @@ const formatBytes = (bytes) => {
   return `${val.toFixed(1)} ${units[i]}`;
 };
 
-// The general (unowned by any budget) starter categories — just the income
+// The general (unowned by any budget) starter categories - just the income
 // categories. The rest of the starter expense categories live inside the
 // seeded Default Budget below.
 function seedCategories() {
@@ -139,11 +151,10 @@ function currentMonthRange() {
   const d = new Date();
   const start = new Date(d.getFullYear(), d.getMonth(), 1);
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  const toStr = (x) => x.toISOString().slice(0, 10);
-  return { startDate: toStr(start), endDate: toStr(end) };
+  return { startDate: toLocalDateStr(start), endDate: toLocalDateStr(end) };
 }
 
-// A starter budget so a fresh install isn't empty — scoped to the current month and
+// A starter budget so a fresh install isn't empty - scoped to the current month and
 // set to repeat monthly, so it keeps rolling forward on its own via rolloverDuePlans.
 function seedDefaultBudgetPlan() {
   const { startDate, endDate } = currentMonthRange();
@@ -188,7 +199,7 @@ function isSpendTx(t) {
 }
 
 // Spend for a category: if it belongs to a plan that has a time frame (a start
-// and/or end date set), track every transaction ever assigned to it, all-time —
+// and/or end date set), track every transaction ever assigned to it, all-time -
 // gauges for a dated budget shouldn't reset just because the calendar month rolled
 // over. If it belongs to a plan with no time frame, or isn't tied to a plan at all
 // (a general category), scope it to a rolling 30-day window instead. Also rolls up
@@ -277,7 +288,7 @@ const REPEAT_DUE_PHRASES = { weekly: "a week after", biweekly: "2 weeks after", 
 
 // How long (in days) a plan's own time frame spans. Used both to show a preview
 // in the Edit budget menu and, below, to size every repeated cycle so it always
-// matches the length of the budget it's replacing — regardless of which repeat
+// matches the length of the budget it's replacing - regardless of which repeat
 // frequency was picked.
 function planMatchDurationDays(plan) {
   if (!plan.startDate || !plan.endDate) return null;
@@ -286,37 +297,83 @@ function planMatchDurationDays(plan) {
   return Math.max(1, Math.round((end - start) / 86400000));
 }
 
+// Adds `monthsToAdd` calendar months to `dateStr`, targeting `anchorDay` as the
+// day-of-month (falling back to dateStr's own day if no anchor is given) instead
+// of plain Date#setMonth. setMonth overflows into the following month when the
+// target month is too short (e.g. Jan 31 + 1 month becomes Mar 3, silently
+// skipping February and permanently losing the "31" anchor on every cycle after
+// that). Clamping to the target month's actual last day - while always re-aiming
+// at the original anchor day rather than whatever day the previous, possibly
+// already-clamped cycle landed on - is what keeps a budget that starts on the
+// 29th/30th/31st repeating on that same day every month it exists, and only
+// falling back to the last day of the month on the short months in between.
+function addMonthsClamped(dateStr, monthsToAdd, anchorDay) {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = anchorDay || d.getDate();
+  const targetMonthIndex = d.getMonth() + monthsToAdd;
+  const targetYear = d.getFullYear() + Math.floor(targetMonthIndex / 12);
+  const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+  const result = new Date(targetYear, normalizedMonth, Math.min(day, lastDayOfTargetMonth));
+  return toLocalDateStr(result);
+}
+
 // The date a repeating plan becomes due to generate its next cycle. "Match time
-// frame" waits for the plan's own end date — its length is effectively the
+// frame" waits for the plan's own end date - its length is effectively the
 // repeat interval. The fixed-interval frequencies (weekly/biweekly/monthly)
 // instead count forward from the plan's start date, so a budget set to repeat
 // weekly becomes due a week after it started, 2 weeks becomes due two weeks
-// after it started, and so on — independent of how long the budget itself runs.
+// after it started, and so on - independent of how long the budget itself runs.
 function planDueDate(plan) {
   if (!plan.startDate || !plan.endDate) return null;
   const freq = plan.repeat && plan.repeat.frequency;
   if (freq === "match") return plan.endDate;
-  const due = new Date(plan.startDate + "T00:00:00");
-  if (freq === "weekly") due.setDate(due.getDate() + 7);
-  else if (freq === "biweekly") due.setDate(due.getDate() + 14);
-  else if (freq === "monthly") due.setMonth(due.getMonth() + 1);
-  else return null;
-  return due.toISOString().slice(0, 10);
+  if (freq === "weekly") {
+    const due = new Date(plan.startDate + "T00:00:00");
+    due.setDate(due.getDate() + 7);
+    return toLocalDateStr(due);
+  }
+  if (freq === "biweekly") {
+    const due = new Date(plan.startDate + "T00:00:00");
+    due.setDate(due.getDate() + 14);
+    return toLocalDateStr(due);
+  }
+  if (freq === "monthly") {
+    // Prefer the anchor day stored on the plan the first time repeating was set
+    // up, so it survives every later cycle even if an in-between cycle had to
+    // clamp down to a shorter month. Only falls back to the current startDate's
+    // day for plans saved before anchorDay existed.
+    const anchorDay = (plan.repeat && plan.repeat.anchorDay) || new Date(plan.startDate + "T00:00:00").getDate();
+    return addMonthsClamped(plan.startDate, 1, anchorDay);
+  }
+  return null;
 }
 
-// Computes the next cycle's start/end dates. However a plan's repeat frequency
-// determines *when* it becomes due (see planDueDate), the cycle it produces
-// always keeps the exact same length as the budget being repeated, and always
-// starts the day immediately after the current one ends — no gap, no overlap.
+// Computes the next cycle's start/end dates. The cycle it produces always
+// keeps the exact same length as the budget being repeated, but *when* it
+// starts depends on the repeat frequency (see planDueDate): "Match time
+// frame" chains continuously off the current end date (no gap, no overlap),
+// while the fixed-interval frequencies (weekly/biweekly/monthly) anchor the
+// new cycle's start to the due date itself - a fixed interval after the
+// current cycle's *start* date, not after wherever its end date happens to
+// fall. That's what makes a 2-week budget repeating monthly actually start a
+// month after its start date, rather than the day its old cycle ends.
 function nextPlanDates(plan) {
   const durationDays = planMatchDurationDays(plan);
   if (!durationDays) return null;
-  const start = new Date(plan.endDate + "T00:00:00");
-  start.setDate(start.getDate() + 1);
+  const freq = plan.repeat && plan.repeat.frequency;
+  let start;
+  if (freq === "match") {
+    start = new Date(plan.endDate + "T00:00:00");
+    start.setDate(start.getDate() + 1);
+  } else {
+    const due = planDueDate(plan);
+    if (!due) return null;
+    start = new Date(due + "T00:00:00");
+  }
   const end = new Date(start);
   end.setDate(end.getDate() + durationDays);
-  const toStr = (d) => d.toISOString().slice(0, 10);
-  return { startDate: toStr(start), endDate: toStr(end) };
+  return { startDate: toLocalDateStr(start), endDate: toLocalDateStr(end) };
 }
 
 // Rolls forward any active, repeat-enabled plans that have become due (see planDueDate),
@@ -331,7 +388,10 @@ function rolloverDuePlans(state) {
 
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
-    if (!(p.active && p.repeat && p.repeat.enabled && p.startDate && p.endDate)) continue;
+    // Repeat fires regardless of whether the plan is currently active or inactive -
+    // this lets two alternating budgets (e.g. 1st & 15th paycheck) each repeat on
+    // their own schedule even while sitting inactive waiting their turn.
+    if (!(p.repeat && p.repeat.enabled && p.startDate && p.endDate)) continue;
 
     let cur = p;
     let lastNew = null;
@@ -361,7 +421,10 @@ function rolloverDuePlans(state) {
     }
     if (lastNew) {
       mutated = true;
-      plans[i] = { ...p, active: false };
+      // The old plan goes inactive AND has repeat turned off, so it fires exactly
+      // once per user-configured repeat setup. The new plan (pushed below) is the
+      // one that stays active with repeat still on, ready for its own next cycle.
+      plans[i] = { ...p, active: false, repeat: { ...p.repeat, enabled: false } };
       const synced = syncPlanCategories(lastNew, categories);
       categories = synced.categories;
       plans.push(synced.plan);
@@ -403,7 +466,7 @@ const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
 const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
 
-// Single source of truth for every keyboard shortcut Amble supports — driving both
+// Single source of truth for every keyboard shortcut Amble supports - driving both
 // the held-"?" preview and the reference list in About, so the two can never drift
 // out of sync with each other.
 const SHORTCUTS = [
@@ -454,7 +517,7 @@ const VIEW_TITLES = {
 // Catalog of dashboard widgets the user can toggle on/off. `id` is the key used
 // in the persisted preference object; order here also controls the order the
 // checkboxes appear in the customize modal (not the render order, which stays
-// fixed so the layout — stat row, then gauges, then charts, then table — always
+// fixed so the layout - stat row, then gauges, then charts, then table — always
 // reads top to bottom the same way).
 const DASHBOARD_WIDGETS = [
   { id: "stats", label: "Overview stats", description: "Net worth, total assets, total debt, and this month's net" },
@@ -882,7 +945,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     const d = new Date();
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    const key = d.toISOString().slice(0, 7);
+    const key = toLocalDateStr(d).slice(0, 7);
     const label = d.toLocaleString("default", { month: "short" });
     const tx = transactions.filter((t) => monthKeyOf(t.date) === key);
     trendData.push({
@@ -911,7 +974,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
     d.setHours(0, 0, 0, 0);
     d.setDate(1);
     d.setMonth(d.getMonth() - i);
-    nwMonthStarts.push(d.toISOString().slice(0, 10));
+    nwMonthStarts.push(toLocalDateStr(d));
   }
   const nwWindowStart = nwMonthStarts[0];
   const nwWindowStartTs = dateToTs(nwWindowStart);
@@ -1232,7 +1295,7 @@ function WidgetSettingsModal({ widgets, onToggle, onClose }) {
   return (
     <Modal title="Customize dashboard" onClose={onClose}>
       <div className="modal-body">
-        <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data — nothing is deleted.</p>
+        <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data so nothing is deleted.</p>
         <div className="widget-toggle-list">
           {DASHBOARD_WIDGETS.map((item) => (
             <label key={item.id} className="widget-toggle-row">
@@ -1383,17 +1446,17 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
   // Only top-level categories; itemized sub-expenses roll their spend up into the parent.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
   const withSpend = expenseCats.map((c) => ({ ...c, spent: categorySpend(c, transactions, plans, categories) }));
-  // Gauges: general (non-plan) categories, plus the active plan's categories only — never other plans'.
+  // Gauges: general (non-plan) categories, plus the active plan's categories only - never other plans'.
   const gaugeCats = withSpend.filter((c) => c.limit > 0 && (!c.planId || (activePlan && c.planId === activePlan.id)));
 
   const planCats = activePlan ? withSpend.filter((c) => c.planId === activePlan.id) : [];
-  // "General" means not owned by any plan at all — categories from other (inactive) plans
+  // "General" means not owned by any plan at all - categories from other (inactive) plans
   // stay out of this list entirely, so they can't be edited/deleted from the Status tab.
   const generalExpenseCats = withSpend.filter((c) => !c.planId);
   const incomeCats = categories.filter((c) => c.type === "income");
 
-  // "Uncategorized" isn't tied to any budget, so — like any category with no time
-  // frame — it's scoped to a rolling 30 days rather than the calendar month.
+  // "Uncategorized" isn't tied to any budget, so - like any category with no time
+  // frame - it's scoped to a rolling 30 days rather than the calendar month.
   const rolling30Tx = transactions.filter((t) => t.type === "expense" && isWithinRolling30Days(t.date));
   const uncategorizedSpent = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const totalRollingSpent = rolling30Tx.reduce((s, t) => s + t.amount, 0);
@@ -1490,7 +1553,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
           </table>
         ) : (
           <p className="settings-desc plan-cats-empty">
-            {activePlan ? "This budget doesn't have any categories yet — add some from the Edit budget button above." : "Set a budget active on the Budgets page to see its categories here."}
+            {activePlan ? "This budget doesn't have any categories yet. Add some from the Edit budget button above." : "Set a budget active on the Budgets page to see its categories here."}
           </p>
         )}
       </div>
@@ -1529,7 +1592,7 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
 // Renders one row of the Status page's "Budget categories" table. Behaves like a
 // plain row for bulk categories, but for itemized categories (ones with mirrored
 // sub-expense categories) it becomes a click-to-expand parent row plus one sub-row
-// per item — matching the expand/collapse UX on the Budgets page.
+// per item - matching the expand/collapse UX on the Budgets page.
 function StatusPlanCategoryRow({ category, categories, transactions, plans }) {
   const [expanded, setExpanded] = useState(false);
   const items = categories.filter((cc) => cc.parentCategoryId === category.id);
@@ -1774,7 +1837,7 @@ function TransactionModal({ initial, accounts, categories, plans, onSave, onClos
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
 
   // A category that's mirrored from a budget (planId set) should only be pickable
-  // while that budget is the active one — once a budget is deactivated its
+  // while that budget is the active one - once a budget is deactivated its
   // categories stay in state (so existing transactions still resolve their name),
   // but they shouldn't keep showing up as choices for new/edited transactions.
   const activePlanId = (plans || []).find((p) => p.active)?.id;
@@ -1789,7 +1852,7 @@ function TransactionModal({ initial, accounts, categories, plans, onSave, onClos
   const selectedParentId = selectedCategory ? (selectedCategory.parentCategoryId || selectedCategory.id) : "";
   const subCategories = selectedParentId ? categories.filter((c) => c.parentCategoryId === selectedParentId) : [];
 
-  // "General <parent>" isn't a selectable specific expense — if the chosen category has
+  // "General <parent>" isn't a selectable specific expense - if the chosen category has
   // sub-items, the transaction must point at one of them, so default to the first as soon
   // as the current selection isn't one (e.g. right after picking a parent that has items).
   useEffect(() => {
@@ -2037,16 +2100,28 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
 
   const canRepeat = !!(startDate && endDate);
   const matchDays = planMatchDurationDays({ startDate, endDate });
+  // The day-of-month a monthly repeat should keep aiming for. Preserved from the
+  // plan being edited so an already-repeating budget doesn't lose its original
+  // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date;
+  // only defaults from the current startDate for plans that haven't repeated yet.
+  const repeatAnchorDay = (initial.repeat && initial.repeat.anchorDay) || (startDate ? new Date(startDate + "T00:00:00").getDate() : null);
   // Live preview, in the Edit budget menu, of when this cycle becomes due to
-  // repeat and what dates the next cycle would have — mirrors planDueDate /
+  // repeat and what dates the next cycle would have - mirrors planDueDate /
   // nextPlanDates exactly, using the form's current (possibly unsaved) values.
   const repeatPreview = canRepeat
     ? (() => {
-        const due = planDueDate({ startDate, endDate, repeat: { frequency: repeatFreq } });
-        const next = nextPlanDates({ startDate, endDate });
+        const due = planDueDate({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
+        const next = nextPlanDates({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
         return due && next ? { due, next } : null;
       })()
     : null;
+  // Fixed-interval repeats (weekly/biweekly/monthly) become due at a set point
+  // after the start date, regardless of how long this budget's own time frame
+  // is. If that due date lands before the budget's own end date, the next cycle
+  // will kick off - and roll this one to inactive - before it reaches its end
+  // date. "Match time frame" can't hit this, since its due date is always the
+  // end date itself.
+  const repeatCutoffWarning = canRepeat && repeatOn && repeatFreq !== "match" && repeatPreview && repeatPreview.due < endDate;
 
   const canSave = name.trim().length > 0;
   const totalIncome = incomeItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
@@ -2107,7 +2182,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
       active: initial.active || false,
-      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq },
+      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
       categories: cats.map((c) => ({
         id: c.id,
         categoryId: c.categoryId,
@@ -2183,6 +2258,11 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
               When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new plan.
             </p>
           )}
+          {repeatCutoffWarning && (
+            <p className="settings-desc inline-error">
+              Warning: This budget is set to run for {matchDays} day{matchDays === 1 ? "" : "s"} (Ending on {fmtDate(endDate)}). Repeating {REPEAT_DUE_PHRASES[repeatFreq]} its start date means the next cycle begins on {fmtDate(repeatPreview.due)}. This budget will be cut off and end early.
+            </p>
+          )}
         </div>
 
         <div className="plan-summary-bar">
@@ -2199,7 +2279,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
             <div className="card-title" style={{ marginBottom: 0 }}>Budget categories</div>
           </div>
           {cats.length === 0 && (
-            <p className="settings-desc">No categories yet — break your income down into spending buckets, like Rent or Groceries.</p>
+            <p className="settings-desc">No categories yet - break your income down into spending buckets, like Rent or Groceries.</p>
           )}
           {cats.map((c, ci) => (
             <div
@@ -2241,7 +2321,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                   {(c.items || []).map((it) => (
                     <div key={it.id} className="plan-item-row">
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
-                      <input type="date" className="input mono plan-item-date" title="Renewal date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
+                      <input type="date" className="input mono plan-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
                       <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                       <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
                     </div>
@@ -2258,7 +2338,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                     <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} onWheel={blurOnWheel} />
                   </div>
                   <div className="form-group plan-cat-bulk">
-                    <label>Renewal date (optional)</label>
+                    <label>Date (optional)</label>
                     <input type="date" className="input mono" value={c.date || ""} onChange={(e) => updateCategory(c.id, { date: e.target.value })} />
                   </div>
                 </div>
@@ -2370,7 +2450,7 @@ export default function App() {
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Lets the global shortcut handler focus the transactions search box even
-  // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) — the
+  // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) - the
   // handler flips this flag and switches views, and the effect below focuses
   // the input once the Transactions view (and its input) actually exists.
   const searchInputRef = useRef(null);
@@ -2453,7 +2533,7 @@ export default function App() {
     })();
   }, [state, loaded]);
 
-  // True whenever some overlay already has the user's attention — shortcuts other
+  // True whenever some overlay already has the user's attention - shortcuts other
   // than Escape stay quiet in that case so they can't stack a second dialog on
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
@@ -2462,8 +2542,8 @@ export default function App() {
 
   // This must run unconditionally on every render (it's a hook), so it's declared
   // above the loading-state early return below. It bails out immediately while
-  // data is still loading — before it touches anything that's only defined further
-  // down in this component (like exportTransactionsCSV) — so it stays safe even
+  // data is still loading - before it touches anything that's only defined further
+  // down in this component (like exportTransactionsCSV) - so it stays safe even
   // on that first, pre-`state` render.
   useEffect(() => {
     if (!loaded || !state) return;
@@ -2520,7 +2600,7 @@ export default function App() {
       }
     };
 
-    // Releasing "?" ends the preview — this is what makes it a "hold to see"
+    // Releasing "?" ends the preview - this is what makes it a "hold to see"
     // panel rather than a toggle. A window blur (e.g. alt-tabbing away while
     // still holding the key) also closes it, since no keyup will otherwise fire.
     const handleKeyUp = (e) => {
@@ -2681,7 +2761,7 @@ export default function App() {
     setState((s) => {
       const target = s.plans.find((p) => p.id === id);
       if (!target || target.active) {
-        // toggling off, or plan not found — just clear active flags
+        // toggling off, or plan not found - just clear active flags
         return { ...s, plans: s.plans.map((p) => ({ ...p, active: p.id === id ? false : p.active })) };
       }
       const synced = syncPlanCategories(target, s.categories);
