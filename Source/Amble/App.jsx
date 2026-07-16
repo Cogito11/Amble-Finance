@@ -6,7 +6,7 @@ import {
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
   Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
-  Monitor, ChevronUp, ChevronDown
+  Monitor, ChevronUp, ChevronDown, GripVertical
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -1090,7 +1090,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("accounts")}>View all <ChevronRight size={14} /></button>
               </div>
               <div className="dash-acc-list">
-                {accounts.map((a) => {
+                {sortedAccountsList(accounts).slice(0, 3).map((a) => {
                   const Icon = ACCOUNT_ICONS[a.type];
                   const bal = balances[a.id];
                   const isDebt = a.type === "credit";
@@ -1414,22 +1414,68 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
 
 /* ---------------------------------- accounts view ---------------------------------- */
 
-function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, error }) {
+// One-time upgrade path for accounts saved before the `order` field existed.
+// Accounts have no dateCreated to fall back on, so legacy ones just keep their
+// existing array position as their order. Once every account has an explicit
+// order this is a no-op.
+function migrateAccountOrder(accounts) {
+  if (accounts.every((a) => typeof a.order === "number")) return accounts;
+  return accounts.map((a, i) => (typeof a.order === "number" ? a : { ...a, order: i }));
+}
+
+// Same single-order-field approach as sortedPlansList: lower `order` = higher
+// up the list, and that's the only thing that decides position.
+function sortedAccountsList(accounts) {
+  return [...accounts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+// An order value guaranteed to sort above every account currently in the list -
+// used whenever a new account is created so it lands at the top.
+function nextTopAccountOrder(accounts) {
+  if (!accounts.length) return 0;
+  return Math.min(...accounts.map((a) => (typeof a.order === "number" ? a.order : 0))) - 1;
+}
+
+function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, error }) {
+  // Tracks the id of the account currently being dragged, so the card under the
+  // cursor can be highlighted as a drop target.
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
   if (accounts.length === 0) {
     return <EmptyState icon={Wallet} title="No accounts yet" message="Add a checking, savings, or credit card account to begin tracking balances." actionLabel="Add account" onAction={onAdd} />;
   }
+
+  const sorted = sortedAccountsList(accounts);
+
   return (
     <div className="acc-view">
       {error && <div className="inline-error"><AlertCircle size={14} /> {error}</div>}
       <div className="acc-grid">
-        {accounts.map((a) => {
+        {sorted.map((a) => {
           const Icon = ACCOUNT_ICONS[a.type];
           const bal = balances[a.id];
           const isDebt = a.type === "credit";
           return (
-            <div key={a.id} className="acc-card">
+            <div
+              key={a.id}
+              className={`acc-card ${dragId === a.id ? "acc-card-dragging" : ""} ${overId === a.id && dragId && dragId !== a.id ? "acc-card-drop-target" : ""}`}
+              draggable
+              onDragStart={() => setDragId(a.id)}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              onDragOver={(e) => { e.preventDefault(); if (a.id !== overId) setOverId(a.id); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragId && dragId !== a.id) onReorder(dragId, a.id);
+                setDragId(null);
+                setOverId(null);
+              }}
+            >
               <div className="acc-top">
-                <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
+                <div className="acc-top-left">
+                  <div className="acc-drag-handle" title="Drag to reorder" aria-hidden="true"><GripVertical size={14} /></div>
+                  <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
+                </div>
                 <div className="row-actions">
                   <button className="icon-btn" onClick={() => onEdit(a)}><Pencil size={14} /></button>
                   <button className="icon-btn" onClick={() => onDelete(a.id)}><Trash2 size={14} /></button>
@@ -2052,6 +2098,7 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
       institution: institution.trim(),
       type,
       startingBalance: isCredit ? -Math.abs(val) : val,
+      order: typeof initial.order === "number" ? initial.order : undefined,
     });
   };
 
@@ -2555,7 +2602,12 @@ export default function App() {
       try {
         const res = await window.storage.get(STORAGE_KEY, false);
         const raw = res && res.value ? JSON.parse(res.value) : null;
-        setState(raw ? { ...defaultState(), ...raw, plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []) } : defaultState());
+        setState(raw ? {
+          ...defaultState(),
+          ...raw,
+          plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []),
+          accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+        } : defaultState());
       } catch (e) {
         setState(defaultState());
       }
@@ -2726,9 +2778,26 @@ export default function App() {
   const saveAccount = (a) => {
     setState((s) => {
       const exists = s.accounts.some((x) => x.id === a.id);
-      return { ...s, accounts: exists ? s.accounts.map((x) => x.id === a.id ? a : x) : [...s.accounts, a] };
+      const accountToSave = typeof a.order === "number" ? a : { ...a, order: nextTopAccountOrder(s.accounts) };
+      return { ...s, accounts: exists ? s.accounts.map((x) => x.id === accountToSave.id ? accountToSave : x) : [...s.accounts, accountToSave] };
     });
     setAccModal(null);
+  };
+  // Drag-and-drop reorder: moves the dragged account to the dropped-on account's
+  // slot, then renumbers everyone sequentially - same pattern as reorderPlan.
+  const reorderAccount = (draggedId, targetId) => {
+    setState((s) => {
+      const displayList = sortedAccountsList(s.accounts);
+      const fromIndex = displayList.findIndex((a) => a.id === draggedId);
+      const toIndex = displayList.findIndex((a) => a.id === targetId);
+      if (fromIndex < 0 || toIndex < 0) return s;
+      const reordered = [...displayList];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      const orderById = new Map(reordered.map((a, i) => [a.id, i]));
+      const accounts = s.accounts.map((a) => ({ ...a, order: orderById.get(a.id) }));
+      return { ...s, accounts };
+    });
   };
   const deleteAccount = (id) => {
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }));
@@ -2909,10 +2978,10 @@ export default function App() {
           onConfirm: () => {
             setState({
               ...defaultState(),
-              accounts: data.accounts,
+              accounts: migrateAccountOrder(data.accounts),
               categories: data.categories,
               transactions: data.transactions,
-              plans: Array.isArray(data.plans) ? data.plans : [],
+              plans: migratePlanOrder(Array.isArray(data.plans) ? data.plans : []),
               ...(data.currency ? { currency: data.currency } : {}),
               ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
             });
@@ -3120,7 +3189,7 @@ export default function App() {
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {view === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} error={accError} />
             )}
             {view === "budgets" && (
               <BudgetsView
@@ -3410,8 +3479,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
 .acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
-.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; }
+.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; transition: opacity .15s, border-color .15s, transform .1s; }
+.acc-card[draggable="true"] { cursor:grab; }
+.acc-card-dragging { opacity:0.4; }
+.acc-card-drop-target { border-color: var(--brass); border-style: dashed; }
 .acc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.acc-top-left { display:flex; align-items:center; gap:8px; }
+.acc-drag-handle { display:flex; align-items:center; color:var(--text-faint); cursor:grab; }
 .acc-icon { background: var(--surface-2); border-radius:8px; width:34px; height:34px; display:flex; align-items:center; justify-content:center; }
 .acc-name { font-weight:600; font-size:14.5px; }
 .acc-type { font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
