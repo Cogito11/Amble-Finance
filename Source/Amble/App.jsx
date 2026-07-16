@@ -4353,7 +4353,8 @@ export default function App() {
   };
 
   const exportJSON = () => {
-    const payload = { app: "amble-finance", version: 1, exportedAt: new Date().toISOString(), data: state };
+    const backedUpAt = new Date().toISOString();
+    const payload = { app: "amble-finance", version: 1, exportedAt: backedUpAt, data: { ...state, lastBackupAt: backedUpAt } };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -4361,7 +4362,7 @@ export default function App() {
     a.download = `amble-backup-${todayStr()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setState((s) => ({ ...s, lastBackupAt: new Date().toISOString() }));
+    setState((s) => ({ ...s, lastBackupAt: backedUpAt }));
   };
 
   const requestImportJSON = (file) => {
