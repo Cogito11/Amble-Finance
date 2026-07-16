@@ -165,6 +165,7 @@ function seedDefaultBudgetPlan() {
     endDate,
     income: DEFAULT_BUDGET_CATEGORIES.reduce((s, [, limit]) => s + limit, 0),
     dateCreated: todayStr(),
+    order: 0,
     active: true,
     repeat: { enabled: true, frequency: "monthly" },
     categories: DEFAULT_BUDGET_CATEGORIES.map(([name, limit]) => ({
@@ -385,6 +386,7 @@ function rolloverDuePlans(state) {
   let plans = state.plans.slice();
   let transactions = state.transactions.slice();
   let mutated = false;
+  let lastActivatedId = null;
 
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
@@ -403,12 +405,17 @@ function rolloverDuePlans(state) {
       iterations++;
       lastNew = {
         id: uid(),
-        name: p.name,
+        // Strip any trailing " Repeated" from the source name first so cycles
+        // that repeat many times over don't stack into "X Repeated Repeated Repeated".
+        name: `${p.name.replace(/ Repeated$/i, "")} Repeated`,
         startDate: dates.startDate,
         endDate: dates.endDate,
         income: p.income,
         incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
         dateCreated: today,
+        // Guarantees the repeated budget lands at the top of the Plans list,
+        // same as any other newly created plan (see nextTopPlanOrder).
+        order: nextTopPlanOrder(plans),
         active: true,
         repeat: { ...p.repeat },
         categories: (p.categories || []).map((c) => ({
@@ -428,8 +435,16 @@ function rolloverDuePlans(state) {
       const synced = syncPlanCategories(lastNew, categories);
       categories = synced.categories;
       plans.push(synced.plan);
+      lastActivatedId = synced.plan.id;
       transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
     }
+  }
+
+  // Only one budget can be active at a time - same rule setActivePlan/savePlan
+  // enforce everywhere else. Without this, a repeat firing while some unrelated
+  // budget was already active would leave both marked active.
+  if (lastActivatedId) {
+    plans = plans.map((p) => (p.id === lastActivatedId ? p : { ...p, active: false }));
   }
 
   return mutated ? { ...state, plans, categories, transactions } : state;
@@ -1075,7 +1090,7 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("accounts")}>View all <ChevronRight size={14} /></button>
               </div>
               <div className="dash-acc-list">
-                {accounts.map((a) => {
+                {sortedAccountsList(accounts).slice(0, 3).map((a) => {
                   const Icon = ACCOUNT_ICONS[a.type];
                   const bal = balances[a.id];
                   const isDebt = a.type === "credit";
@@ -1107,6 +1122,18 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                   <div className="dash-budget-name">{activePlan.name}</div>
                   <div className="dash-budget-bar-track">
                     <div className="dash-budget-bar-fill" style={{ width: `${Math.min(planPct, 1) * 100}%`, background: planBarColor }} />
+                    <div className="dash-budget-bar-ticks">
+                      <span className="dash-budget-bar-tick" style={{ left: "25%" }} />
+                      <span className="dash-budget-bar-tick" style={{ left: "50%" }} />
+                      <span className="dash-budget-bar-tick" style={{ left: "75%" }} />
+                    </div>
+                  </div>
+                  <div className="dash-budget-bar-scale">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
                   </div>
                   <div className="plan-summary-bar">
                     <div>
@@ -1120,6 +1147,10 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                     <div>
                       <span className="muted">Remaining</span>
                       <strong className={planRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(planRemaining)}</strong>
+                    </div>
+                    <div className="plan-summary-pct">
+                      <span className="muted">% Spent</span>
+                      <strong className={planPct > 1 ? "tone-rust" : planPct > 0.85 ? "tone-amber" : "tone-teal"}>{Math.round(planPct * 100)}%</strong>
                     </div>
                   </div>
                 </div>
@@ -1399,20 +1430,63 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
 
 /* ---------------------------------- accounts view ---------------------------------- */
 
-function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, error }) {
+// One-time upgrade path for accounts saved before the `order` field existed.
+// Accounts have no dateCreated to fall back on, so legacy ones just keep their
+// existing array position as their order. Once every account has an explicit
+// order this is a no-op.
+function migrateAccountOrder(accounts) {
+  if (accounts.every((a) => typeof a.order === "number")) return accounts;
+  return accounts.map((a, i) => (typeof a.order === "number" ? a : { ...a, order: i }));
+}
+
+// Same single-order-field approach as sortedPlansList: lower `order` = higher
+// up the list, and that's the only thing that decides position.
+function sortedAccountsList(accounts) {
+  return [...accounts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+// An order value guaranteed to sort above every account currently in the list -
+// used whenever a new account is created so it lands at the top.
+function nextTopAccountOrder(accounts) {
+  if (!accounts.length) return 0;
+  return Math.min(...accounts.map((a) => (typeof a.order === "number" ? a.order : 0))) - 1;
+}
+
+function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, error }) {
+  // Tracks the id of the account currently being dragged, so the card under the
+  // cursor can be highlighted as a drop target.
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+
   if (accounts.length === 0) {
     return <EmptyState icon={Wallet} title="No accounts yet" message="Add a checking, savings, or credit card account to begin tracking balances." actionLabel="Add account" onAction={onAdd} />;
   }
+
+  const sorted = sortedAccountsList(accounts);
+
   return (
     <div className="acc-view">
       {error && <div className="inline-error"><AlertCircle size={14} /> {error}</div>}
       <div className="acc-grid">
-        {accounts.map((a) => {
+        {sorted.map((a) => {
           const Icon = ACCOUNT_ICONS[a.type];
           const bal = balances[a.id];
           const isDebt = a.type === "credit";
           return (
-            <div key={a.id} className="acc-card">
+            <div
+              key={a.id}
+              className={`acc-card ${dragId === a.id ? "acc-card-dragging" : ""} ${overId === a.id && dragId && dragId !== a.id ? "acc-card-drop-target" : ""}`}
+              draggable
+              onDragStart={() => setDragId(a.id)}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              onDragOver={(e) => { e.preventDefault(); if (a.id !== overId) setOverId(a.id); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragId && dragId !== a.id) onReorder(dragId, a.id);
+                setDragId(null);
+                setOverId(null);
+              }}
+            >
               <div className="acc-top">
                 <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
                 <div className="row-actions">
@@ -1746,7 +1820,37 @@ function PlanCategoryRows({ category, transactions }) {
 }
 
 
-function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate }) {
+// One-time upgrade path for plans saved before the `order` field existed.
+// Assigns order values based on their old implicit ordering (by dateCreated,
+// newest first) so upgrading doesn't visibly reshuffle anyone's list. Once
+// every plan has an explicit order this is a no-op - it's a migration step,
+// not a second ranking system running alongside `order`.
+function migratePlanOrder(plans) {
+  if (plans.every((p) => typeof p.order === "number")) return plans;
+  const legacyOrder = [...plans].sort((a, b) => (b.dateCreated || "").localeCompare(a.dateCreated || ""));
+  const orderById = new Map(legacyOrder.map((p, i) => [p.id, i]));
+  return plans.map((p) => (typeof p.order === "number" ? p : { ...p, order: orderById.get(p.id) }));
+}
+
+// Determines the order budgets appear in on the Plans list. Every plan carries
+// an explicit numeric `order` (lower = higher up the list). This is the single
+// source of truth for list position - nothing else influences it. New plans
+// are assigned an order below the current minimum (see nextTopPlanOrder) so
+// they land at the top, and reorderPlan renumbers everyone sequentially
+// whenever the user moves one manually.
+function sortedPlansList(plans) {
+  return [...plans].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+// An order value guaranteed to sort above every plan currently in the list -
+// used whenever a plan is created (new, duplicated, or repeated) so it always
+// lands at the top, without needing any other tiebreak logic.
+function nextTopPlanOrder(plans) {
+  if (!plans.length) return 0;
+  return Math.min(...plans.map((p) => (typeof p.order === "number" ? p.order : 0))) - 1;
+}
+
+function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate, onReorder }) {
   if (plans.length === 0) {
     return (
       <EmptyState
@@ -1759,7 +1863,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
     );
   }
 
-  const sorted = [...plans].sort((a, b) => b.dateCreated.localeCompare(a.dateCreated));
+  const sorted = sortedPlansList(plans);
 
   return (
     <div className="plans-view">
@@ -1767,7 +1871,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
         <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> New budget</button>
       </div>
       <div className="plans-list">
-        {sorted.map((p) => {
+        {sorted.map((p, pi) => {
           const allocated = planAllocated(p);
           const remaining = (Number(p.income) || 0) - allocated;
           return (
@@ -1781,6 +1885,28 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
                   )}
                 </div>
                 <div className="row-actions">
+                  <div className="plan-move-btns">
+                    <button
+                      type="button"
+                      className="icon-btn plan-move-btn"
+                      title="Move budget up"
+                      aria-label="Move budget up"
+                      disabled={pi === 0}
+                      onClick={() => onReorder(p.id, -1)}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn plan-move-btn"
+                      title="Move budget down"
+                      aria-label="Move budget down"
+                      disabled={pi === sorted.length - 1}
+                      onClick={() => onReorder(p.id, 1)}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
                   <button className="icon-btn" title="Duplicate budget" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
                   <button className="icon-btn" title="Edit budget" onClick={() => onEdit(p)}><Pencil size={14} /></button>
                   <button className="icon-btn" title="Delete budget" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
@@ -1985,6 +2111,7 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
       institution: institution.trim(),
       type,
       startingBalance: isCredit ? -Math.abs(val) : val,
+      order: typeof initial.order === "number" ? initial.order : undefined,
     });
   };
 
@@ -2181,6 +2308,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
       income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
+      order: typeof initial.order === "number" ? initial.order : undefined,
       active: initial.active || false,
       repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
       categories: cats.map((c) => ({
@@ -2487,7 +2615,12 @@ export default function App() {
       try {
         const res = await window.storage.get(STORAGE_KEY, false);
         const raw = res && res.value ? JSON.parse(res.value) : null;
-        setState(raw ? { ...defaultState(), ...raw, plans: Array.isArray(raw.plans) ? raw.plans : [] } : defaultState());
+        setState(raw ? {
+          ...defaultState(),
+          ...raw,
+          plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []),
+          accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+        } : defaultState());
       } catch (e) {
         setState(defaultState());
       }
@@ -2658,9 +2791,26 @@ export default function App() {
   const saveAccount = (a) => {
     setState((s) => {
       const exists = s.accounts.some((x) => x.id === a.id);
-      return { ...s, accounts: exists ? s.accounts.map((x) => x.id === a.id ? a : x) : [...s.accounts, a] };
+      const accountToSave = typeof a.order === "number" ? a : { ...a, order: nextTopAccountOrder(s.accounts) };
+      return { ...s, accounts: exists ? s.accounts.map((x) => x.id === accountToSave.id ? accountToSave : x) : [...s.accounts, accountToSave] };
     });
     setAccModal(null);
+  };
+  // Drag-and-drop reorder: moves the dragged account to the dropped-on account's
+  // slot, then renumbers everyone sequentially - same pattern as reorderPlan.
+  const reorderAccount = (draggedId, targetId) => {
+    setState((s) => {
+      const displayList = sortedAccountsList(s.accounts);
+      const fromIndex = displayList.findIndex((a) => a.id === draggedId);
+      const toIndex = displayList.findIndex((a) => a.id === targetId);
+      if (fromIndex < 0 || toIndex < 0) return s;
+      const reordered = [...displayList];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      const orderById = new Map(reordered.map((a, i) => [a.id, i]));
+      const accounts = s.accounts.map((a) => ({ ...a, order: orderById.get(a.id) }));
+      return { ...s, accounts };
+    });
   };
   const deleteAccount = (id) => {
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }));
@@ -2713,9 +2863,10 @@ export default function App() {
       // transaction still linked to it) stale until the budget is reactivated.
       const synced = syncPlanCategories(p, s.categories);
       const categories = synced.categories;
-      const planToSave = synced.plan;
+      const exists = s.plans.some((x) => x.id === synced.plan.id);
+      // New plans always land at the top; edits keep whatever order they already had.
+      const planToSave = typeof synced.plan.order === "number" ? synced.plan : { ...synced.plan, order: nextTopPlanOrder(s.plans) };
       const transactions = clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds);
-      const exists = s.plans.some((x) => x.id === planToSave.id);
       let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [planToSave, ...s.plans];
       if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
       return { ...s, plans, categories, transactions };
@@ -2767,6 +2918,24 @@ export default function App() {
       const synced = syncPlanCategories(target, s.categories);
       const plans = s.plans.map((p) => (p.id === id ? { ...synced.plan, active: true } : { ...p, active: false }));
       return { ...s, plans, categories: synced.categories, transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds) };
+    });
+  };
+  // Moves a budget up/down one slot in the Plans list. Recomputes sequential
+  // order values for every plan based on the *current* display order (from
+  // sortedPlansList) so this also normalizes any plans that never had an
+  // explicit order yet - safe to call regardless of prior manual reordering.
+  const reorderPlan = (id, direction) => {
+    setState((s) => {
+      const displayList = sortedPlansList(s.plans);
+      const index = displayList.findIndex((p) => p.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= displayList.length) return s;
+      const reordered = [...displayList];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(target, 0, moved);
+      const orderById = new Map(reordered.map((p, i) => [p.id, i]));
+      const plans = s.plans.map((p) => ({ ...p, order: orderById.get(p.id) }));
+      return { ...s, plans };
     });
   };
   const duplicatePlan = (id) => {
@@ -2822,10 +2991,10 @@ export default function App() {
           onConfirm: () => {
             setState({
               ...defaultState(),
-              accounts: data.accounts,
+              accounts: migrateAccountOrder(data.accounts),
               categories: data.categories,
               transactions: data.transactions,
-              plans: Array.isArray(data.plans) ? data.plans : [],
+              plans: migratePlanOrder(Array.isArray(data.plans) ? data.plans : []),
               ...(data.currency ? { currency: data.currency } : {}),
               ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
             });
@@ -3033,7 +3202,7 @@ export default function App() {
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {view === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} error={accError} />
             )}
             {view === "budgets" && (
               <BudgetsView
@@ -3056,6 +3225,7 @@ export default function App() {
                 onDelete={requestDeletePlan}
                 onSetActive={setActivePlan}
                 onDuplicate={duplicatePlan}
+                onReorder={reorderPlan}
               />
             )}
             {view === "more" && (
@@ -3271,8 +3441,13 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .dash-budget { display:flex; flex-direction:column; gap:12px; }
 .dash-budget-name { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; }
-.dash-budget-bar-track { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; height:10px; overflow:hidden; }
-.dash-budget-bar-fill { height:100%; border-radius:8px; transition: width .3s ease; }
+.dash-budget-bar-track { position:relative; background: var(--surface-2); border:1px solid var(--border); border-radius:8px; height:10px; overflow:hidden; }
+.dash-budget-bar-fill { height:100%; border-radius:8px; transition: width .3s ease; min-width: 2px; }
+.dash-budget-bar-ticks { position:absolute; inset:0; pointer-events:none; }
+.dash-budget-bar-tick { position:absolute; top:0; bottom:0; width:1px; background: rgba(0,0,0,0.12); transform: translateX(-0.5px); }
+.dash-budget-bar-scale { display:flex; justify-content:space-between; margin-top:5px; font-size:11px; color: var(--text-faint); font-family:'JetBrains Mono',monospace; }
+.dash-budget-bar-scale span:first-child { text-align:left; }
+.dash-budget-bar-scale span:last-child { text-align:right; }
 .gauge { display:flex; flex-direction:column; align-items:center; width:150px; }
 .gauge-amount { font-family:'JetBrains Mono',monospace; fill: var(--text); font-size:16px; font-weight:600; }
 .gauge-sub { font-family:'JetBrains Mono',monospace; fill: var(--text-faint); font-size:10.5px; }
@@ -3322,7 +3497,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
 .acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
-.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; }
+.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; transition: opacity .15s, border-color .15s, transform .1s; }
+.acc-card[draggable="true"] { cursor:grab; }
+.acc-card[draggable="true"]:active { cursor:grabbing; }
+.acc-card-dragging { opacity:0.4; }
+.acc-card-drop-target { border-color: var(--brass); border-style: dashed; }
 .acc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .acc-icon { background: var(--surface-2); border-radius:8px; width:34px; height:34px; display:flex; align-items:center; justify-content:center; }
 .acc-name { font-weight:600; font-size:14.5px; }
@@ -3379,6 +3558,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-summary-bar { display:flex; gap:24px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
 .plan-summary-bar > div { display:flex; flex-direction:column; gap:2px; font-size:12px; }
 .plan-summary-bar strong { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; }
+.plan-summary-pct { margin-left:auto; align-items:flex-end; text-align:right; }
 .plan-repeat-block { display:flex; flex-direction:column; gap:8px; border:1px solid var(--border); border-radius:10px; padding:12px 14px; background: var(--surface-2); }
 .checkbox-row { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; cursor:pointer; }
 .checkbox-row input[type="checkbox"] { width:15px; height:15px; accent-color: var(--brass); cursor:pointer; }
@@ -3396,9 +3576,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
-.plan-cat-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
-.plan-cat-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
-.plan-cat-move-btn:disabled { opacity:0.3; cursor:default; }
+.plan-cat-move-btns, .plan-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
+.plan-cat-move-btn, .plan-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
+.plan-cat-move-btn:disabled, .plan-move-btn:disabled { opacity:0.3; cursor:default; }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
