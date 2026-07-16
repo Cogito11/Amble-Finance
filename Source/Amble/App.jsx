@@ -1122,6 +1122,18 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                   <div className="dash-budget-name">{activePlan.name}</div>
                   <div className="dash-budget-bar-track">
                     <div className="dash-budget-bar-fill" style={{ width: `${Math.min(planPct, 1) * 100}%`, background: planBarColor }} />
+                    <div className="dash-budget-bar-ticks">
+                      <span className="dash-budget-bar-tick" style={{ left: "25%" }} />
+                      <span className="dash-budget-bar-tick" style={{ left: "50%" }} />
+                      <span className="dash-budget-bar-tick" style={{ left: "75%" }} />
+                    </div>
+                  </div>
+                  <div className="dash-budget-bar-scale">
+                    <span>0%</span>
+                    <span>25%</span>
+                    <span>50%</span>
+                    <span>75%</span>
+                    <span>100%</span>
                   </div>
                   <div className="plan-summary-bar">
                     <div>
@@ -3425,8 +3437,13 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .dash-budget { display:flex; flex-direction:column; gap:12px; }
 .dash-budget-name { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; }
-.dash-budget-bar-track { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; height:10px; overflow:hidden; }
-.dash-budget-bar-fill { height:100%; border-radius:8px; transition: width .3s ease; }
+.dash-budget-bar-track { position:relative; background: var(--surface-2); border:1px solid var(--border); border-radius:8px; height:10px; overflow:hidden; }
+.dash-budget-bar-fill { height:100%; border-radius:8px; transition: width .3s ease; min-width: 2px; }
+.dash-budget-bar-ticks { position:absolute; inset:0; pointer-events:none; }
+.dash-budget-bar-tick { position:absolute; top:0; bottom:0; width:1px; background: rgba(0,0,0,0.12); transform: translateX(-0.5px); }
+.dash-budget-bar-scale { display:flex; justify-content:space-between; margin-top:5px; font-size:11px; color: var(--text-faint); font-family:'JetBrains Mono',monospace; }
+.dash-budget-bar-scale span:first-child { text-align:left; }
+.dash-budget-bar-scale span:last-child { text-align:right; }
 .gauge { display:flex; flex-direction:column; align-items:center; width:150px; }
 .gauge-amount { font-family:'JetBrains Mono',monospace; fill: var(--text); font-size:16px; font-weight:600; }
 .gauge-sub { font-family:'JetBrains Mono',monospace; fill: var(--text-faint); font-size:10.5px; }
