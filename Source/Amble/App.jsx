@@ -53,6 +53,14 @@ const todayStr = () => toLocalDateStr(new Date());
 const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
 const currentMonthKey = () => monthKeyOf(todayStr());
 
+// Shifts a "YYYY-MM" key by `delta` months (negative moves backward). Used to
+// walk to "last month", "6 months ago", etc. without pulling in a date library.
+function shiftMonthKey(monthKey, delta) {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // A trailing 30-day window (today and the 29 days before it), used to scope spend
 // for budgets/categories that don't have a fixed time frame - so their gauges track
 // a consistent rolling month instead of resetting on the 1st of the calendar month.
@@ -1183,10 +1191,40 @@ function BudgetRuleCalculator({ onBack, transactions }) {
   );
 }
 
-function EmergencyFundCalculator({ onBack, accounts, balances }) {
+function EmergencyFundCalculator({ onBack, accounts, balances, transactions }) {
   const [expenses, setExpenses] = useState(2500);
   const [current, setCurrent] = useState(4000);
   const [targetMonths, setTargetMonths] = useState(6);
+  const [expenseMode, setExpenseMode] = useState("manual");
+
+  // Completed-month expense totals, most recent first, excluding the current
+  // (still in-progress) month so "previous months" means fully-elapsed ones.
+  const expenseHistory = useMemo(() => {
+    const byMonth = {};
+    (transactions || []).filter((t) => t.type === "expense").forEach((t) => {
+      const mk = monthKeyOf(t.date);
+      byMonth[mk] = (byMonth[mk] || 0) + t.amount;
+    });
+    const thisMonth = currentMonthKey();
+    const lastMonthKey = shiftMonthKey(thisMonth, -1);
+    const priorMonthKeys = Object.keys(byMonth).filter((mk) => mk !== thisMonth).sort().reverse().slice(0, 6);
+    const avgTotal = priorMonthKeys.reduce((s, mk) => s + byMonth[mk], 0);
+    return {
+      lastMonthAmount: byMonth[lastMonthKey] || 0,
+      hasLastMonth: byMonth[lastMonthKey] !== undefined,
+      averageAmount: priorMonthKeys.length ? avgTotal / priorMonthKeys.length : 0,
+      monthsUsed: priorMonthKeys.length,
+    };
+  }, [transactions]);
+
+  useEffect(() => {
+    if (expenseMode === "last-month" && expenseHistory.hasLastMonth) {
+      setExpenses(Math.round(expenseHistory.lastMonthAmount * 100) / 100);
+    } else if (expenseMode === "average" && expenseHistory.monthsUsed > 0) {
+      setExpenses(Math.round(expenseHistory.averageAmount * 100) / 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseMode, expenseHistory.lastMonthAmount, expenseHistory.averageAmount, expenseHistory.hasLastMonth, expenseHistory.monthsUsed]);
 
   const result = useMemo(() => {
     const exp = Math.max(0, Number(expenses) || 0);
@@ -1205,26 +1243,51 @@ function EmergencyFundCalculator({ onBack, accounts, balances }) {
     value: current, onChange: setCurrent, accounts, balances,
   });
 
+  const hasExpenseHistory = expenseHistory.hasLastMonth || expenseHistory.monthsUsed > 0;
+
   return (
     <div className="tool-detail">
       <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
         <ArrowLeft size={14} /> All tools
       </button>
 
+      <div className="tool-page-title"><ShieldCheck size={18} /> Emergency Fund Calculator</div>
+
       <div className="card">
         <div className="card-title">
-          <span><ShieldCheck size={16} style={{ marginRight: 8, verticalAlign: "-3px" }} />Emergency Fund Calculator</span>
-          {currentSavingsToggle}
+          <span>Essential monthly expenses</span>
+          {hasExpenseHistory && (
+            <div className="seg card-corner-seg" role="group" aria-label="Expense source">
+              <button type="button" className={`seg-btn ${expenseMode === "manual" ? "active" : ""}`} onClick={() => setExpenseMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${expenseMode === "last-month" ? "active" : ""}`} disabled={!expenseHistory.hasLastMonth} onClick={() => setExpenseMode("last-month")}>Last month</button>
+              <button type="button" className={`seg-btn ${expenseMode === "average" ? "active" : ""}`} disabled={!expenseHistory.monthsUsed} onClick={() => setExpenseMode("average")}>Average</button>
+            </div>
+          )}
         </div>
-        <div className="form-row">
+        {expenseMode === "manual" || !hasExpenseHistory ? (
           <div className="form-group">
-            <label>Essential monthly expenses</label>
             <input className="input" type="number" min="0" step="50" value={expenses} onWheel={blurOnWheel} onChange={(e) => setExpenses(e.target.value)} />
           </div>
+        ) : (
           <div className="form-group">
-            <label>Current emergency savings</label>
-            {currentSavingsField}
+            <input className="input" type="number" value={expenses} readOnly />
+            <div className="tool-note">
+              {expenseMode === "last-month"
+                ? `Based on ${fmt(expenseHistory.lastMonthAmount)} spent last month.`
+                : `Average of ${fmt(expenseHistory.averageAmount)}/mo across the last ${expenseHistory.monthsUsed} completed ${expenseHistory.monthsUsed === 1 ? "month" : "months"}.`}
+            </div>
           </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <span>Emergency savings</span>
+          {currentSavingsToggle}
+        </div>
+        <div className="form-group">
+          <label>Current emergency savings</label>
+          {currentSavingsField}
         </div>
         <div className="form-group">
           <label>Target coverage</label>
@@ -1267,7 +1330,7 @@ function ToolsView({ accounts, balances, transactions }) {
   if (activeToolId === "compound-interest") return <CompoundInterestCalculator onBack={back} accounts={accounts} balances={balances} />;
   if (activeToolId === "savings-goal") return <SavingsGoalCalculator onBack={back} accounts={accounts} balances={balances} />;
   if (activeToolId === "50-30-20") return <BudgetRuleCalculator onBack={back} transactions={transactions} />;
-  if (activeToolId === "emergency-fund") return <EmergencyFundCalculator onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "emergency-fund") return <EmergencyFundCalculator onBack={back} accounts={accounts} balances={balances} transactions={transactions} />;
 
   return (
     <div className="tools-view">
@@ -4175,6 +4238,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tool-card-chevron { flex-shrink:0; color: var(--text-faint); }
 .tool-detail { display:flex; flex-direction:column; gap:16px; }
 .tool-back-btn { align-self:flex-start; }
+.tool-page-title { display:flex; align-items:center; gap:9px; font-family:'Fraunces',serif; font-weight:600; font-size:17px; color: var(--text); }
 .tool-result-row { grid-template-columns: repeat(3, 1fr); margin-bottom:0; }
 .card-corner-seg { padding:2px; flex-shrink:0; }
 .card-corner-seg .seg-btn { padding:3px 9px; font-size:11px; white-space:nowrap; }
@@ -4232,6 +4296,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .seg { display:flex; background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:3px; }
 .seg-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:none; color:var(--text-muted); padding:7px; font-size:13px; font-weight:500; text-transform:capitalize; cursor:pointer; border-radius:6px; }
 .seg-btn.active { background: var(--brass); color: var(--on-brass); }
+.seg-btn:disabled { opacity:0.4; cursor:not-allowed; }
 
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; grid-template-rows:auto 1fr; }
