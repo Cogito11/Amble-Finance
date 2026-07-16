@@ -6,11 +6,12 @@ import {
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
   Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
-  Monitor, ChevronUp, ChevronDown, Calculator, ArrowLeft, TrendingUp, ShieldCheck
+  Monitor, ChevronUp, ChevronDown, Calculator, ArrowLeft, TrendingUp, ShieldCheck,
+  TrendingDown, Percent, BarChart3
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, AreaChart, Area
+  XAxis, YAxis, CartesianGrid, AreaChart, Area, LineChart, Line, Legend
 } from "recharts";
 
 /* ---------------------------------- helpers ---------------------------------- */
@@ -115,6 +116,16 @@ const fmt = (n) => {
   }
 };
 
+
+// Formats a whole number of months as "Xy Ym" / "X months" for payoff timelines.
+const fmtMonths = (months) => {
+  const m = Math.max(0, Math.round(Number(months) || 0));
+  const years = Math.floor(m / 12);
+  const rem = m % 12;
+  if (years === 0) return `${rem} ${rem === 1 ? "month" : "months"}`;
+  if (rem === 0) return `${years} ${years === 1 ? "year" : "years"}`;
+  return `${years}${years === 1 ? "yr" : "yrs"} ${rem}mo`;
+};
 
 const fmtDate = (d) => {
   const dt = new Date(d + "T00:00:00");
@@ -766,6 +777,13 @@ const TOOLS_CATALOG = [
         icon: Target,
         available: true,
       },
+      {
+        id: "net-worth-projection",
+        label: "Net Worth Projection",
+        desc: "Project your net worth forward, and see what saving a bit more each month would do.",
+        icon: BarChart3,
+        available: true,
+      },
     ],
   },
   {
@@ -785,6 +803,55 @@ const TOOLS_CATALOG = [
         label: "Emergency Fund Calculator",
         desc: "Check how many months of expenses your current savings would cover.",
         icon: ShieldCheck,
+        available: true,
+      },
+      {
+        id: "recurring-spend",
+        label: "Recurring Spend Audit",
+        desc: "Find recurring charges hiding in your transactions and see what they add up to.",
+        icon: Repeat,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: "debt",
+    label: "Debt",
+    icon: TrendingDown,
+    tools: [
+      {
+        id: "debt-payoff",
+        label: "Debt Payoff Planner",
+        desc: "Compare snowball vs. avalanche strategies to see which gets you debt-free faster and cheaper.",
+        icon: CreditCard,
+        available: true,
+      },
+      {
+        id: "credit-card-interest",
+        label: "Credit Card Interest Calculator",
+        desc: "See what a balance is really costing you in interest, and how long it'll take to pay off.",
+        icon: Percent,
+        available: true,
+      },
+      {
+        id: "loan-payoff",
+        label: "Loan / Mortgage Payoff Calculator",
+        desc: "Get your monthly payment, full amortization schedule, and the payoff impact of extra payments.",
+        icon: Landmark,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: "income-tax",
+    label: "Income & Tax",
+    icon: Wallet,
+    tools: [
+      {
+        id: "tax-estimator",
+        label: "Tax Bracket & Take-Home Pay Estimator",
+        desc: "Estimate your federal tax bracket, effective rate, and take-home pay.",
+        icon: Wallet,
         available: true,
       },
     ],
@@ -1323,6 +1390,840 @@ function EmergencyFundCalculator({ onBack, accounts, balances, transactions }) {
   );
 }
 
+// Simulates paying off a set of debts under a given strategy ("avalanche" pays
+// the highest-APR debt first, "snowball" pays the smallest balance first).
+// The user's total monthly outlay (sum of all minimums + any extra) stays
+// constant every month, so once a debt is cleared its freed-up minimum
+// payment automatically rolls into whichever debt is next in priority order.
+function simulateDebtPayoff(debts, extra, strategy) {
+  const working = debts.map((d) => ({
+    id: d.id,
+    name: d.name || "Debt",
+    apr: Math.max(0, Number(d.apr) || 0),
+    minPayment: Math.max(0, Number(d.minPayment) || 0),
+  }));
+  const balMap = {};
+  debts.forEach((d) => { balMap[d.id] = Math.max(0, Number(d.balance) || 0); });
+
+  const totalMonthlyPayment = working.reduce((s, d) => s + d.minPayment, 0) + Math.max(0, Number(extra) || 0);
+  const orderIds = [...working]
+    .sort((a, b) => (strategy === "avalanche" ? b.apr - a.apr : balMap[a.id] - balMap[b.id]))
+    .map((d) => d.id);
+
+  let totalInterest = 0;
+  let months = 0;
+  const startingTotal = working.reduce((s, d) => s + balMap[d.id], 0);
+  const points = [{ month: 0, balance: startingTotal }];
+  const payoffOrder = [];
+  const MAX_MONTHS = 600; // 50-year safety cap in case payments can't cover interest
+
+  while (working.some((d) => balMap[d.id] > 0.01) && months < MAX_MONTHS) {
+    months++;
+    working.forEach((d) => {
+      if (balMap[d.id] > 0) {
+        const interest = balMap[d.id] * (d.apr / 100 / 12);
+        balMap[d.id] += interest;
+        totalInterest += interest;
+      }
+    });
+    let budget = totalMonthlyPayment;
+    working.forEach((d) => {
+      if (balMap[d.id] > 0 && budget > 0) {
+        const pay = Math.min(d.minPayment, balMap[d.id], budget);
+        balMap[d.id] -= pay;
+        budget -= pay;
+      }
+    });
+    for (const id of orderIds) {
+      if (budget <= 0) break;
+      if (balMap[id] > 0) {
+        const pay = Math.min(balMap[id], budget);
+        balMap[id] -= pay;
+        budget -= pay;
+      }
+    }
+    orderIds.forEach((id) => {
+      if (balMap[id] <= 0.01 && !payoffOrder.find((p) => p.id === id)) {
+        payoffOrder.push({ id, name: working.find((w) => w.id === id).name, month: months });
+      }
+    });
+    points.push({ month: months, balance: Math.max(0, working.reduce((s, d) => s + balMap[d.id], 0)) });
+  }
+
+  return { months, totalInterest, points, payoffOrder, totalMonthlyPayment, maxedOut: months >= MAX_MONTHS };
+}
+
+function DebtPayoffPlanner({ onBack, accounts, balances }) {
+  const [debts, setDebts] = useState([
+    { id: uid(), name: "", balance: "", apr: "", minPayment: "" },
+  ]);
+  const [extra, setExtra] = useState(100);
+
+  const creditAccounts = useMemo(
+    () => (accounts || []).filter((a) => a.type === "credit" && Number(balances?.[a.id]) < 0),
+    [accounts, balances]
+  );
+  const loadedAccountIds = useMemo(() => new Set(debts.map((d) => d.accountId).filter(Boolean)), [debts]);
+  const hasUnloadedAccounts = creditAccounts.some((a) => !loadedAccountIds.has(a.id));
+
+  const loadFromAccounts = () => {
+    const newRows = creditAccounts
+      .filter((a) => !loadedAccountIds.has(a.id))
+      .map((a) => {
+        const bal = Math.round(Math.abs(balances[a.id]) * 100) / 100;
+        return { id: uid(), accountId: a.id, name: a.name, balance: bal, apr: 20, minPayment: Math.max(25, Math.round(bal * 0.02)) };
+      });
+    setDebts((prev) => {
+      const isBlankPlaceholder = prev.length === 1 && !prev[0].name && !prev[0].accountId && !Number(prev[0].balance);
+      return [...(isBlankPlaceholder ? [] : prev), ...newRows];
+    });
+  };
+
+  const updateDebt = (id, patch) => setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+  const removeDebt = (id) => setDebts((prev) => prev.filter((d) => d.id !== id));
+  const addDebt = () => setDebts((prev) => [...prev, { id: uid(), name: "", balance: "", apr: "", minPayment: "" }]);
+
+  const validDebts = useMemo(() => debts.filter((d) => Number(d.balance) > 0), [debts]);
+
+  const snowball = useMemo(() => (validDebts.length ? simulateDebtPayoff(validDebts, extra, "snowball") : null), [validDebts, extra]);
+  const avalanche = useMemo(() => (validDebts.length ? simulateDebtPayoff(validDebts, extra, "avalanche") : null), [validDebts, extra]);
+
+  const combinedPoints = useMemo(() => {
+    if (!snowball || !avalanche) return [];
+    const len = Math.max(snowball.points.length, avalanche.points.length);
+    const step = len > 121 ? Math.ceil(len / 121) : 1; // downsample long payoffs so the chart stays readable
+    const arr = [];
+    for (let m = 0; m < len; m += step) {
+      arr.push({
+        month: m,
+        snowball: snowball.points[m] ? snowball.points[m].balance : 0,
+        avalanche: avalanche.points[m] ? avalanche.points[m].balance : 0,
+      });
+    }
+    return arr;
+  }, [snowball, avalanche]);
+
+  const interestSaved = snowball && avalanche ? snowball.totalInterest - avalanche.totalInterest : 0;
+  const monthsSaved = snowball && avalanche ? snowball.months - avalanche.months : 0;
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><CreditCard size={18} /> Debt Payoff Planner</div>
+
+      <div className="card">
+        <div className="card-title">How these strategies work</div>
+        <div className="tool-strategy-explainer">
+          <div>
+            <div className="tool-strategy-name"><TrendingDown size={14} /> Snowball</div>
+            <p>Pay minimums on everything, then throw every extra dollar at your <strong>smallest balance</strong> first. Once it's gone, roll that payment into the next-smallest. It ignores interest rates in favor of quick wins, so debts disappear fast and often keeps you motivated to stick with the plan.</p>
+          </div>
+          <div>
+            <div className="tool-strategy-name"><Percent size={14} /> Avalanche</div>
+            <p>Pay minimums on everything, then throw every extra dollar at your <strong>highest-interest-rate</strong> debt first. Once it's gone, move to the next-highest rate. This is the mathematically optimal order - it minimizes the total interest you pay over time.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <span>Your debts</span>
+          {hasUnloadedAccounts && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={loadFromAccounts}>
+              <Download size={13} /> Load credit card balances
+            </button>
+          )}
+        </div>
+        <div className="debt-row-header">
+          <span>Name</span>
+          <span>Balance</span>
+          <span>APR %</span>
+          <span>Min payment</span>
+          <span />
+        </div>
+        {debts.map((d) => (
+          <div key={d.id} className="debt-row">
+            <input className="input" placeholder="e.g. Visa card" value={d.name} onChange={(e) => updateDebt(d.id, { name: e.target.value })} />
+            <input className="input mono" type="number" min="0" step="10" placeholder="0.00" value={d.balance} onWheel={blurOnWheel} onChange={(e) => updateDebt(d.id, { balance: e.target.value })} />
+            <input className="input mono" type="number" min="0" step="0.1" placeholder="0" value={d.apr} onWheel={blurOnWheel} onChange={(e) => updateDebt(d.id, { apr: e.target.value })} />
+            <input className="input mono" type="number" min="0" step="5" placeholder="0" value={d.minPayment} onWheel={blurOnWheel} onChange={(e) => updateDebt(d.id, { minPayment: e.target.value })} />
+            <button type="button" className="icon-btn" title="Remove debt" onClick={() => removeDebt(d.id)}><Trash2 size={14} /></button>
+          </div>
+        ))}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={addDebt}><Plus size={13} /> Add debt</button>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Extra monthly payment</div>
+        <div className="form-group">
+          <input className="input" type="number" min="0" step="10" value={extra} onWheel={blurOnWheel} onChange={(e) => setExtra(e.target.value)} />
+          <div className="tool-note">Amount you can put toward debt beyond the minimum payments above, split between strategies below.</div>
+        </div>
+      </div>
+
+      {!validDebts.length ? (
+        <EmptyState icon={CreditCard} title="Add a debt to get started" message="Enter at least one debt with a balance above to compare payoff strategies." />
+      ) : (
+        <>
+          <div className="card">
+            <div className="card-title">Snowball vs. avalanche</div>
+            <div className="stat-row tool-result-row">
+              <StatCard label="Snowball: debt-free in" value={fmtMonths(snowball.months)} tone="brass" icon={TrendingDown} />
+              <StatCard label="Snowball: total interest" value={fmt(snowball.totalInterest)} tone="rust" icon={ArrowUpRight} />
+            </div>
+            <div className="stat-row tool-result-row">
+              <StatCard label="Avalanche: debt-free in" value={fmtMonths(avalanche.months)} tone="teal" icon={TrendingDown} />
+              <StatCard label="Avalanche: total interest" value={fmt(avalanche.totalInterest)} tone="teal" icon={ArrowUpRight} />
+            </div>
+            <div className="tool-note" style={{ marginTop: 10 }}>
+              {interestSaved > 1
+                ? `Avalanche saves you ${fmt(interestSaved)} in interest compared to snowball`
+                : interestSaved < -1
+                ? `Snowball costs ${fmt(-interestSaved)} more in interest than avalanche`
+                : "Both strategies cost about the same in interest for these debts"}
+              {monthsSaved !== 0 && `, and finishes ${monthsSaved > 0 ? "" : "the same time or "}${monthsSaved > 0 ? `${Math.abs(monthsSaved)} ${Math.abs(monthsSaved) === 1 ? "month" : "months"} sooner` : ""}`}
+              .
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">Remaining balance over time</div>
+            <div style={{ width: "100%", height: 260 }}>
+              <ResponsiveContainer>
+                <LineChart data={combinedPoints} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="month" tickFormatter={(m) => `Mo ${m}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+                  <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
+                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="snowball" name="Snowball" stroke="var(--brass)" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="avalanche" name="Avalanche" stroke="var(--teal)" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="card">
+              <div className="card-title">Snowball payoff order</div>
+              {snowball.payoffOrder.map((p, i) => (
+                <div key={p.id} className="debt-payoff-order-row">
+                  <span>{i + 1}. {p.name}</span>
+                  <span className="muted">{fmtMonths(p.month)}</span>
+                </div>
+              ))}
+              {snowball.maxedOut && <div className="tool-note">Payments don't fully cover interest on some debts - increase the extra payment or minimums.</div>}
+            </div>
+            <div className="card">
+              <div className="card-title">Avalanche payoff order</div>
+              {avalanche.payoffOrder.map((p, i) => (
+                <div key={p.id} className="debt-payoff-order-row">
+                  <span>{i + 1}. {p.name}</span>
+                  <span className="muted">{fmtMonths(p.month)}</span>
+                </div>
+              ))}
+              {avalanche.maxedOut && <div className="tool-note">Payments don't fully cover interest on some debts - increase the extra payment or minimums.</div>}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CreditCardInterestCalculator({ onBack, accounts, balances }) {
+  const [balance, setBalance] = useState(2000);
+  const [apr, setApr] = useState(24.99);
+  const [payMode, setPayMode] = useState("fixed");
+  const [fixedPayment, setFixedPayment] = useState(150);
+  const [minPercent, setMinPercent] = useState(2);
+  const [accountId, setAccountId] = useState("");
+
+  const creditAccounts = useMemo(
+    () => (accounts || []).filter((a) => a.type === "credit" && Number(balances?.[a.id]) < 0),
+    [accounts, balances]
+  );
+
+  useEffect(() => {
+    if (accountId && balances?.[accountId] !== undefined) {
+      setBalance(Math.round(Math.abs(balances[accountId]) * 100) / 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, balances]);
+
+  const result = useMemo(() => {
+    const startBalance = Math.max(0, Number(balance) || 0);
+    const rate = Math.max(0, Number(apr) || 0);
+    const monthlyInterestOnStart = startBalance * (rate / 100 / 12);
+    if (payMode === "fixed" && startBalance > 0 && (Number(fixedPayment) || 0) <= monthlyInterestOnStart) {
+      return { stuck: true, months: 0, totalInterest: 0, points: [{ month: 0, balance: startBalance }], totalPaid: startBalance };
+    }
+    let bal = startBalance;
+    let months = 0;
+    let totalInterest = 0;
+    const points = [{ month: 0, balance: bal }];
+    while (bal > 0.01 && months < 600) {
+      months++;
+      const interest = bal * (rate / 100 / 12);
+      bal += interest;
+      totalInterest += interest;
+      const payment = payMode === "fixed"
+        ? Math.min(Number(fixedPayment) || 0, bal)
+        : Math.min(bal, Math.max(bal * ((Number(minPercent) || 0) / 100), Math.min(25, bal)));
+      bal -= payment;
+      points.push({ month: months, balance: Math.max(0, bal) });
+    }
+    return { months, totalInterest, points, maxedOut: months >= 600, totalPaid: startBalance + totalInterest, stuck: false };
+  }, [balance, apr, payMode, fixedPayment, minPercent]);
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><Percent size={18} /> Credit Card Interest Calculator</div>
+
+      <div className="card">
+        <div className="card-title">
+          <span>Balance</span>
+          {creditAccounts.length > 0 && (
+            <select className="select" style={{ width: 220 }} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              <option value="">Enter manually</option>
+              {creditAccounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name} · {fmt(Math.abs(balances[a.id]))}</option>
+              ))}
+            </select>
+          )}
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Balance / purchase amount</label>
+            <input className="input" type="number" min="0" step="10" value={balance} onWheel={blurOnWheel} onChange={(e) => { setAccountId(""); setBalance(e.target.value); }} />
+          </div>
+          <div className="form-group">
+            <label>APR (%)</label>
+            <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">How you'll pay it off</div>
+        <div className="seg" role="group" aria-label="Payment mode" style={{ marginBottom: 12 }}>
+          <button type="button" className={`seg-btn ${payMode === "fixed" ? "active" : ""}`} onClick={() => setPayMode("fixed")}>Fixed monthly payment</button>
+          <button type="button" className={`seg-btn ${payMode === "minimum" ? "active" : ""}`} onClick={() => setPayMode("minimum")}>Minimum payments only</button>
+        </div>
+        {payMode === "fixed" ? (
+          <div className="form-group">
+            <label>Monthly payment</label>
+            <input className="input" type="number" min="0" step="10" value={fixedPayment} onWheel={blurOnWheel} onChange={(e) => setFixedPayment(e.target.value)} />
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>Minimum payment</label>
+            <input className="input" type="number" min="0" step="0.5" value={minPercent} onWheel={blurOnWheel} onChange={(e) => setMinPercent(e.target.value)} />
+            <div className="tool-note">Uses whichever is greater: {minPercent || 0}% of the balance, or $25.</div>
+          </div>
+        )}
+      </div>
+
+      {result.stuck ? (
+        <div className="card">
+          <div className="tool-note" style={{ color: "var(--rust)" }}>
+            This payment doesn't even cover the monthly interest ({fmt(Number(balance) * (Number(apr) / 100 / 12))}/mo) - the balance will grow forever at this rate. Increase the payment to see a payoff timeline.
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="stat-row tool-result-row">
+            <StatCard label="Time to pay off" value={fmtMonths(result.months)} tone="brass" icon={Percent} />
+            <StatCard label="Total interest paid" value={fmt(result.totalInterest)} tone="rust" icon={ArrowUpRight} />
+            <StatCard label="True total cost" value={fmt(result.totalPaid)} tone="teal" icon={CreditCard} />
+          </div>
+
+          <div className="card">
+            <div className="card-title">Balance over time</div>
+            <div style={{ width: "100%", height: 260 }}>
+              <ResponsiveContainer>
+                <AreaChart data={result.points} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="ccBalanceFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--rust)" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="var(--rust)" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="month" tickFormatter={(m) => `Mo ${m}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+                  <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
+                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} />
+                  <Area type="monotone" dataKey="balance" stroke="var(--rust)" fill="url(#ccBalanceFill)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Standard amortization simulation. Returns the base (no-extra) required monthly
+// payment plus a month-by-month payoff run using whatever extra payment is passed
+// in, aggregated into per-year rows for the schedule table and chart.
+function computeAmortization(principal, aprPct, termYears, extra) {
+  const monthlyRate = Math.max(0, Number(aprPct) || 0) / 100 / 12;
+  const n = Math.max(1, Math.round((Number(termYears) || 0) * 12));
+  const p = Math.max(0, Number(principal) || 0);
+  const basePayment = monthlyRate > 0 ? (p * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -n)) : p / n;
+  const extraAmt = Math.max(0, Number(extra) || 0);
+
+  let balance = p;
+  let month = 0;
+  let totalInterest = 0;
+  const yearly = [];
+  let yearPrincipal = 0, yearInterest = 0;
+  while (balance > 0.01 && month < n) {
+    month++;
+    const interest = balance * monthlyRate;
+    const payment = basePayment + extraAmt;
+    let principalPortion = payment - interest;
+    if (principalPortion > balance) principalPortion = balance;
+    balance -= principalPortion;
+    totalInterest += interest;
+    yearPrincipal += principalPortion;
+    yearInterest += interest;
+    if (month % 12 === 0 || balance <= 0.01) {
+      yearly.push({ year: Math.ceil(month / 12), principalPaid: Math.round(yearPrincipal), interestPaid: Math.round(yearInterest), endBalance: Math.max(0, Math.round(balance)) });
+      yearPrincipal = 0; yearInterest = 0;
+    }
+  }
+  return { basePayment, totalInterest, months: month, yearly };
+}
+
+function LoanPayoffCalculator({ onBack }) {
+  const [principal, setPrincipal] = useState(300000);
+  const [apr, setApr] = useState(6.5);
+  const [termYears, setTermYears] = useState(30);
+  const [extra, setExtra] = useState(0);
+
+  const withExtra = useMemo(() => computeAmortization(principal, apr, termYears, extra), [principal, apr, termYears, extra]);
+  const noExtra = useMemo(() => computeAmortization(principal, apr, termYears, 0), [principal, apr, termYears]);
+  const interestSaved = noExtra.totalInterest - withExtra.totalInterest;
+  const monthsSaved = noExtra.months - withExtra.months;
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><Landmark size={18} /> Loan / Mortgage Payoff Calculator</div>
+
+      <div className="card">
+        <div className="card-title">Loan details</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Loan amount</label>
+            <input className="input" type="number" min="0" step="1000" value={principal} onWheel={blurOnWheel} onChange={(e) => setPrincipal(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Interest rate (APR %)</label>
+            <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Loan term (years)</label>
+            <input className="input" type="number" min="1" step="1" value={termYears} onWheel={blurOnWheel} onChange={(e) => setTermYears(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Extra monthly payment</label>
+            <input className="input" type="number" min="0" step="25" value={extra} onWheel={blurOnWheel} onChange={(e) => setExtra(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label="Monthly payment" value={fmt(withExtra.basePayment)} tone="brass" icon={Landmark} />
+        <StatCard label="Payoff time" value={fmtMonths(withExtra.months)} tone="teal" icon={TrendingDown} />
+        <StatCard label="Total interest paid" value={fmt(withExtra.totalInterest)} tone="rust" icon={ArrowUpRight} />
+      </div>
+
+      {Number(extra) > 0 && (
+        <div className="card">
+          <div className="tool-note">
+            Paying {fmt(extra)} extra each month saves you {fmt(interestSaved)} in interest and pays the loan off {monthsSaved} {monthsSaved === 1 ? "month" : "months"} sooner than the base {fmtMonths(noExtra.months)} term.
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title">Principal vs. interest by year</div>
+        <div style={{ width: "100%", height: 260 }}>
+          <ResponsiveContainer>
+            <BarChart data={withExtra.yearly} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+              <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="principalPaid" name="Principal" stackId="a" fill="var(--teal)" />
+              <Bar dataKey="interestPaid" name="Interest" stackId="a" fill="var(--rust)" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Yearly amortization summary</div>
+        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+          <table className="table">
+            <thead>
+              <tr><th>Year</th><th className="col-right">Principal paid</th><th className="col-right">Interest paid</th><th className="col-right">Ending balance</th></tr>
+            </thead>
+            <tbody>
+              {withExtra.yearly.map((y) => (
+                <tr key={y.year}>
+                  <td>{y.year}</td>
+                  <td className="amount">{fmt(y.principalPaid)}</td>
+                  <td className="amount">{fmt(y.interestPaid)}</td>
+                  <td className="amount">{fmt(y.endBalance)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NetWorthProjection({ onBack, accounts, balances }) {
+  const computedNetWorth = useMemo(() => {
+    const assets = (accounts || []).filter((a) => a.type !== "credit").reduce((s, a) => s + (balances?.[a.id] || 0), 0);
+    const debt = (accounts || []).filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -(balances?.[a.id] || 0)), 0);
+    return assets - debt;
+  }, [accounts, balances]);
+  const hasAccounts = (accounts || []).length > 0;
+
+  const [startingNetWorth, setStartingNetWorth] = useState(hasAccounts ? Math.round(computedNetWorth * 100) / 100 : 10000);
+  const [monthlySavings, setMonthlySavings] = useState(500);
+  const [extra, setExtra] = useState(200);
+  const [returnRate, setReturnRate] = useState(7);
+  const [years, setYears] = useState(20);
+
+  const project = (monthlyAmount) => {
+    const annualRate = (Number(returnRate) || 0) / 100;
+    const monthlyRate = annualRate / 12;
+    const n = Math.max(1, Math.round((Number(years) || 0) * 12));
+    let bal = Number(startingNetWorth) || 0;
+    const points = [{ year: 0, balance: Math.round(bal) }];
+    for (let m = 1; m <= n; m++) {
+      bal += Number(monthlyAmount) || 0;
+      bal *= 1 + monthlyRate;
+      if (m % 12 === 0) points.push({ year: m / 12, balance: Math.round(bal) });
+    }
+    return { finalBalance: bal, points };
+  };
+
+  const current = useMemo(() => project(monthlySavings), [startingNetWorth, monthlySavings, returnRate, years]);
+  const boosted = useMemo(() => project((Number(monthlySavings) || 0) + (Number(extra) || 0)), [startingNetWorth, monthlySavings, extra, returnRate, years]);
+
+  const combined = useMemo(() => {
+    const len = Math.max(current.points.length, boosted.points.length);
+    const arr = [];
+    for (let i = 0; i < len; i++) {
+      arr.push({ year: current.points[i]?.year ?? boosted.points[i]?.year, current: current.points[i]?.balance ?? null, boosted: boosted.points[i]?.balance ?? null });
+    }
+    return arr;
+  }, [current, boosted]);
+
+  const extraGain = boosted.finalBalance - current.finalBalance;
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><BarChart3 size={18} /> Net Worth Projection</div>
+
+      <div className="card">
+        <div className="card-title">
+          <span>Starting net worth</span>
+          {hasAccounts && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStartingNetWorth(Math.round(computedNetWorth * 100) / 100)}>
+              <Download size={13} /> Use my current net worth
+            </button>
+          )}
+        </div>
+        <div className="form-group">
+          <input className="input" type="number" step="100" value={startingNetWorth} onWheel={blurOnWheel} onChange={(e) => setStartingNetWorth(e.target.value)} />
+          {hasAccounts && <div className="tool-note">Your accounts currently total {fmt(computedNetWorth)} in net worth.</div>}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Savings &amp; growth assumptions</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Current monthly savings</label>
+            <input className="input" type="number" min="0" step="25" value={monthlySavings} onWheel={blurOnWheel} onChange={(e) => setMonthlySavings(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>What if I saved this much more/mo</label>
+            <input className="input" type="number" min="0" step="25" value={extra} onWheel={blurOnWheel} onChange={(e) => setExtra(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Expected annual return (%)</label>
+            <input className="input" type="number" min="0" step="0.5" value={returnRate} onWheel={blurOnWheel} onChange={(e) => setReturnRate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Years to project</label>
+            <input className="input" type="number" min="1" step="1" value={years} onWheel={blurOnWheel} onChange={(e) => setYears(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label={`In ${years} yrs, current pace`} value={fmt(current.finalBalance)} tone="brass" icon={TrendingUp} />
+        <StatCard label={`In ${years} yrs, boosted pace`} value={fmt(boosted.finalBalance)} tone="teal" icon={BarChart3} />
+        <StatCard label="Extra from saving more" value={fmt(extraGain)} tone="teal" icon={ArrowUpRight} />
+      </div>
+
+      <div className="card">
+        <div className="card-title">Projected net worth over time</div>
+        <div style={{ width: "100%", height: 260 }}>
+          <ResponsiveContainer>
+            <LineChart data={combined} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+              <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line type="monotone" dataKey="current" name="Current pace" stroke="var(--brass)" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="boosted" name="Boosted pace" stroke="var(--teal)" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- Federal income tax data (tax year 2026), sourced from IRS Revenue Procedure
+// 2025-32. Federal ordinary-income brackets and standard deductions only - no
+// state/local tax, credits, or itemized deductions are modeled.
+const FEDERAL_TAX_BRACKETS_2026 = {
+  single: [
+    { rate: 0.10, upTo: 12400 }, { rate: 0.12, upTo: 50400 }, { rate: 0.22, upTo: 105700 },
+    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256225 }, { rate: 0.35, upTo: 640600 }, { rate: 0.37, upTo: Infinity },
+  ],
+  mfj: [
+    { rate: 0.10, upTo: 24800 }, { rate: 0.12, upTo: 100800 }, { rate: 0.22, upTo: 211400 },
+    { rate: 0.24, upTo: 403550 }, { rate: 0.32, upTo: 512450 }, { rate: 0.35, upTo: 768700 }, { rate: 0.37, upTo: Infinity },
+  ],
+  hoh: [
+    { rate: 0.10, upTo: 17700 }, { rate: 0.12, upTo: 67450 }, { rate: 0.22, upTo: 105700 },
+    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256200 }, { rate: 0.35, upTo: 640600 }, { rate: 0.37, upTo: Infinity },
+  ],
+  mfs: [
+    { rate: 0.10, upTo: 12400 }, { rate: 0.12, upTo: 50400 }, { rate: 0.22, upTo: 105700 },
+    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256225 }, { rate: 0.35, upTo: 384350 }, { rate: 0.37, upTo: Infinity },
+  ],
+};
+const STANDARD_DEDUCTION_2026 = { single: 16100, mfj: 32200, hoh: 24150, mfs: 16100 };
+const SOCIAL_SECURITY_WAGE_BASE_2026 = 184500;
+
+function calcFederalTax(taxableIncome, brackets) {
+  let tax = 0, lower = 0, marginalRate = brackets[0].rate;
+  for (const b of brackets) {
+    if (taxableIncome > lower) {
+      const inBracket = Math.min(taxableIncome, b.upTo) - lower;
+      if (inBracket > 0) { tax += inBracket * b.rate; marginalRate = b.rate; }
+    }
+    lower = b.upTo;
+    if (taxableIncome <= b.upTo) break;
+  }
+  return { tax, marginalRate };
+}
+
+function bracketBreakdown(taxableIncome, brackets) {
+  let lower = 0;
+  const rows = [];
+  for (const b of brackets) {
+    const amt = Math.max(0, Math.min(taxableIncome, b.upTo) - lower);
+    if (amt > 0) rows.push({ rate: `${Math.round(b.rate * 100)}%`, amount: Math.round(amt) });
+    lower = b.upTo;
+    if (taxableIncome <= b.upTo) break;
+  }
+  return rows;
+}
+
+function TaxTakeHomeEstimator({ onBack }) {
+  const [grossIncome, setGrossIncome] = useState(75000);
+  const [filingStatus, setFilingStatus] = useState("single");
+  const [preTax, setPreTax] = useState(0);
+
+  const result = useMemo(() => {
+    const gross = Math.max(0, Number(grossIncome) || 0);
+    const pretaxDeductions = Math.max(0, Number(preTax) || 0);
+    const stdDeduction = STANDARD_DEDUCTION_2026[filingStatus];
+    const taxableIncome = Math.max(0, gross - pretaxDeductions - stdDeduction);
+    const brackets = FEDERAL_TAX_BRACKETS_2026[filingStatus];
+    const { tax: federalTax, marginalRate } = calcFederalTax(taxableIncome, brackets);
+    const breakdown = bracketBreakdown(taxableIncome, brackets);
+
+    const ss = Math.min(gross, SOCIAL_SECURITY_WAGE_BASE_2026) * 0.062;
+    const medicare = gross * 0.0145;
+    const addlThreshold = filingStatus === "mfj" ? 250000 : filingStatus === "mfs" ? 125000 : 200000;
+    const addlMedicare = gross > addlThreshold ? (gross - addlThreshold) * 0.009 : 0;
+    const fica = ss + medicare + addlMedicare;
+
+    const takeHome = gross - pretaxDeductions - federalTax - fica;
+    const effectiveRate = gross > 0 ? federalTax / gross : 0;
+    return { taxableIncome, federalTax, fica, takeHome, effectiveRate, marginalRate, breakdown, stdDeduction };
+  }, [grossIncome, filingStatus, preTax]);
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><Wallet size={18} /> Tax Bracket &amp; Take-Home Pay Estimator</div>
+
+      <div className="card">
+        <div className="card-title">Income</div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Gross annual income</label>
+            <input className="input" type="number" min="0" step="1000" value={grossIncome} onWheel={blurOnWheel} onChange={(e) => setGrossIncome(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Filing status</label>
+            <select className="select" value={filingStatus} onChange={(e) => setFilingStatus(e.target.value)}>
+              <option value="single">Single</option>
+              <option value="mfj">Married filing jointly</option>
+              <option value="hoh">Head of household</option>
+              <option value="mfs">Married filing separately</option>
+            </select>
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Pre-tax deductions (401k, HSA, etc.)</label>
+          <input className="input" type="number" min="0" step="100" value={preTax} onWheel={blurOnWheel} onChange={(e) => setPreTax(e.target.value)} />
+          <div className="tool-note">Reduces taxable income. A {fmt(result.stdDeduction)} standard deduction is applied automatically for this filing status.</div>
+        </div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label="Take-home pay/yr" value={fmt(result.takeHome)} tone="teal" icon={Wallet} />
+        <StatCard label="Take-home pay/mo" value={fmt(result.takeHome / 12)} tone="brass" icon={Wallet} />
+        <StatCard label="Marginal tax bracket" value={`${Math.round(result.marginalRate * 100)}%`} tone="rust" icon={Percent} />
+      </div>
+      <div className="stat-row tool-result-row">
+        <StatCard label="Federal income tax" value={fmt(result.federalTax)} tone="rust" icon={ArrowUpRight} />
+        <StatCard label="FICA (SS + Medicare)" value={fmt(result.fica)} tone="rust" icon={ArrowUpRight} />
+        <StatCard label="Effective federal rate" value={`${(result.effectiveRate * 100).toFixed(1)}%`} tone="brass" icon={Percent} />
+      </div>
+
+      <div className="card">
+        <div className="card-title">Income taxed at each bracket</div>
+        <div style={{ width: "100%", height: 240 }}>
+          <ResponsiveContainer>
+            <BarChart data={result.breakdown} layout="vertical" margin={{ top: 8, right: 20, left: 10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+              <XAxis type="number" tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+              <YAxis type="category" dataKey="rate" tick={{ fontSize: 12 }} stroke="var(--text-faint)" width={40} />
+              <Tooltip formatter={(v) => fmt(v)} />
+              <Bar dataKey="amount" fill="var(--brass)" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="tool-note" style={{ marginTop: 10 }}>
+          Federal income tax only, estimated for tax year 2026 using IRS brackets and the standard deduction. Doesn't include state/local tax, credits, or itemized deductions - this is an estimate, not tax advice.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecurringSpendAudit({ onBack, transactions }) {
+  const recurring = useMemo(() => {
+    const expenseTx = (transactions || []).filter((t) => t.type === "expense" && (t.description || "").trim());
+    const groups = {};
+    expenseTx.forEach((t) => {
+      const key = t.description.trim().toLowerCase();
+      (groups[key] = groups[key] || []).push(t);
+    });
+    const results = [];
+    Object.values(groups).forEach((txs) => {
+      const monthsSeen = new Set(txs.map((t) => monthKeyOf(t.date)));
+      if (monthsSeen.size < 2) return; // needs to show up in at least 2 different months
+      const amounts = txs.map((t) => t.amount);
+      const avg = amounts.reduce((s, a) => s + a, 0) / amounts.length;
+      const maxDev = Math.max(...amounts.map((a) => Math.abs(a - avg)));
+      if (avg > 0 && maxDev / avg > 0.35) return; // amounts too inconsistent to call recurring
+      results.push({ key: txs[0].description.trim().toLowerCase(), name: txs[0].description, monthlyAvg: avg, monthsSeen: monthsSeen.size });
+    });
+    return results.sort((a, b) => b.monthlyAvg - a.monthlyAvg);
+  }, [transactions]);
+
+  const totalMonthly = recurring.reduce((s, r) => s + r.monthlyAvg, 0);
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="tool-page-title"><Repeat size={18} /> Recurring Spend Audit</div>
+
+      <div className="card">
+        <div className="tool-note">Scans your transactions for expenses with a matching description that show up in at least two different months at a fairly consistent amount, and totals them up as likely recurring charges.</div>
+      </div>
+
+      {!recurring.length ? (
+        <EmptyState icon={Repeat} title="No recurring spend detected yet" message="Once you have expenses with matching descriptions across two or more months, they'll show up here." />
+      ) : (
+        <>
+          <div className="stat-row tool-result-row">
+            <StatCard label="Recurring items found" value={recurring.length} tone="brass" icon={Repeat} />
+            <StatCard label="Total per month" value={fmt(totalMonthly)} tone="rust" icon={ArrowUpRight} />
+            <StatCard label="Total per year" value={fmt(totalMonthly * 12)} tone="rust" icon={ArrowUpRight} />
+          </div>
+
+          <div className="card">
+            <div className="card-title">Recurring charges</div>
+            <table className="table">
+              <thead>
+                <tr><th>Description</th><th className="col-right">Monthly</th><th className="col-right">Annual</th><th className="col-right">Months seen</th></tr>
+              </thead>
+              <tbody>
+                {recurring.map((r) => (
+                  <tr key={r.key}>
+                    <td>{r.name}</td>
+                    <td className="amount">{fmt(r.monthlyAvg)}</td>
+                    <td className="amount">{fmt(r.monthlyAvg * 12)}</td>
+                    <td className="col-right">{r.monthsSeen}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ToolsView({ accounts, balances, transactions }) {
   const [activeToolId, setActiveToolId] = useState(null);
 
@@ -1331,6 +2232,12 @@ function ToolsView({ accounts, balances, transactions }) {
   if (activeToolId === "savings-goal") return <SavingsGoalCalculator onBack={back} accounts={accounts} balances={balances} />;
   if (activeToolId === "50-30-20") return <BudgetRuleCalculator onBack={back} transactions={transactions} />;
   if (activeToolId === "emergency-fund") return <EmergencyFundCalculator onBack={back} accounts={accounts} balances={balances} transactions={transactions} />;
+  if (activeToolId === "debt-payoff") return <DebtPayoffPlanner onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "net-worth-projection") return <NetWorthProjection onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "recurring-spend") return <RecurringSpendAudit onBack={back} transactions={transactions} />;
+  if (activeToolId === "credit-card-interest") return <CreditCardInterestCalculator onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "loan-payoff") return <LoanPayoffCalculator onBack={back} />;
+  if (activeToolId === "tax-estimator") return <TaxTakeHomeEstimator onBack={back} />;
 
   return (
     <div className="tools-view">
@@ -4222,6 +5129,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-item-date { width:150px; flex-shrink:0; }
 .plan-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .plan-cat-subtotal { font-size:12px; }
+
+.debt-row-header, .debt-row { display:grid; grid-template-columns: 1.6fr 1fr 0.7fr 1fr 28px; gap:8px; align-items:center; }
+.debt-row-header { font-size:11px; color: var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding:0 2px 4px; }
+.debt-row { margin-bottom:8px; }
+.debt-payoff-order-row { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px; padding:6px 0; border-bottom:1px solid var(--border); }
+.debt-payoff-order-row:last-of-type { border-bottom:none; }
+.tool-strategy-explainer { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.tool-strategy-name { display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; margin-bottom:4px; color: var(--text); }
+.tool-strategy-explainer p { font-size:12.5px; color: var(--text-muted); line-height:1.5; margin:0; }
 
 .tools-view { display:flex; flex-direction:column; gap:26px; }
 .tools-category { display:flex; flex-direction:column; gap:12px; }
