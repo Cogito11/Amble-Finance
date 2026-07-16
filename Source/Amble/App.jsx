@@ -6,7 +6,7 @@ import {
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
   Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
-  Monitor, ChevronUp, ChevronDown, GripVertical
+  Monitor, ChevronUp, ChevronDown
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -1472,10 +1472,7 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, 
               }}
             >
               <div className="acc-top">
-                <div className="acc-top-left">
-                  <div className="acc-drag-handle" title="Drag to reorder" aria-hidden="true"><GripVertical size={14} /></div>
-                  <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
-                </div>
+                <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
                 <div className="row-actions">
                   <button className="icon-btn" onClick={() => onEdit(a)}><Pencil size={14} /></button>
                   <button className="icon-btn" onClick={() => onDelete(a.id)}><Trash2 size={14} /></button>
@@ -3481,11 +3478,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
 .acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; transition: opacity .15s, border-color .15s, transform .1s; }
 .acc-card[draggable="true"] { cursor:grab; }
+.acc-card[draggable="true"]:active { cursor:grabbing; }
 .acc-card-dragging { opacity:0.4; }
 .acc-card-drop-target { border-color: var(--brass); border-style: dashed; }
 .acc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
-.acc-top-left { display:flex; align-items:center; gap:8px; }
-.acc-drag-handle { display:flex; align-items:center; color:var(--text-faint); cursor:grab; }
 .acc-icon { background: var(--surface-2); border-radius:8px; width:34px; height:34px; display:flex; align-items:center; justify-content:center; }
 .acc-name { font-weight:600; font-size:14.5px; }
 .acc-type { font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:8px; }
