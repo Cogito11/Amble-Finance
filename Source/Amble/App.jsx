@@ -4237,6 +4237,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tool-card-desc { font-size:12px; color: var(--text-muted); margin-top:3px; line-height:1.45; }
 .tool-card-chevron { flex-shrink:0; color: var(--text-faint); }
 .tool-detail { display:flex; flex-direction:column; gap:16px; }
+.tool-detail .card > .form-group + .form-group,
+.tool-detail .card > .form-row + .form-group,
+.tool-detail .card > .form-group + .form-row,
+.tool-detail .card > .form-row + .form-row { margin-top:14px; }
 .tool-back-btn { align-self:flex-start; }
 .tool-page-title { display:flex; align-items:center; gap:9px; font-family:'Fraunces',serif; font-weight:600; font-size:17px; color: var(--text); }
 .tool-result-row { grid-template-columns: repeat(3, 1fr); margin-bottom:0; }
