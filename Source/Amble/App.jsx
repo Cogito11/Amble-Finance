@@ -386,6 +386,7 @@ function rolloverDuePlans(state) {
   let plans = state.plans.slice();
   let transactions = state.transactions.slice();
   let mutated = false;
+  let lastActivatedId = null;
 
   for (let i = 0; i < plans.length; i++) {
     const p = plans[i];
@@ -434,8 +435,16 @@ function rolloverDuePlans(state) {
       const synced = syncPlanCategories(lastNew, categories);
       categories = synced.categories;
       plans.push(synced.plan);
+      lastActivatedId = synced.plan.id;
       transactions = clearRemovedCategoryRefs(transactions, synced.removedCategoryIds);
     }
+  }
+
+  // Only one budget can be active at a time - same rule setActivePlan/savePlan
+  // enforce everywhere else. Without this, a repeat firing while some unrelated
+  // budget was already active would leave both marked active.
+  if (lastActivatedId) {
+    plans = plans.map((p) => (p.id === lastActivatedId ? p : { ...p, active: false }));
   }
 
   return mutated ? { ...state, plans, categories, transactions } : state;
