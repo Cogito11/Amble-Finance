@@ -165,6 +165,7 @@ function seedDefaultBudgetPlan() {
     endDate,
     income: DEFAULT_BUDGET_CATEGORIES.reduce((s, [, limit]) => s + limit, 0),
     dateCreated: todayStr(),
+    createdAt: Date.now(),
     active: true,
     repeat: { enabled: true, frequency: "monthly" },
     categories: DEFAULT_BUDGET_CATEGORIES.map(([name, limit]) => ({
@@ -403,12 +404,17 @@ function rolloverDuePlans(state) {
       iterations++;
       lastNew = {
         id: uid(),
-        name: p.name,
+        // Strip any trailing " Repeated" from the source name first so cycles
+        // that repeat many times over don't stack into "X Repeated Repeated Repeated".
+        name: `${p.name.replace(/ Repeated$/i, "")} Repeated`,
         startDate: dates.startDate,
         endDate: dates.endDate,
         income: p.income,
         incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
         dateCreated: today,
+        // Precise creation instant, used only to break ties in the plans list sort
+        // (dateCreated is day-only, so same-day plans need this to sort correctly).
+        createdAt: Date.now(),
         active: true,
         repeat: { ...p.repeat },
         categories: (p.categories || []).map((c) => ({
@@ -1759,7 +1765,14 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
     );
   }
 
-  const sorted = [...plans].sort((a, b) => b.dateCreated.localeCompare(a.dateCreated));
+  // Primary sort by day; same-day ties (e.g. a plan and the repeat it just spawned)
+  // break on createdAt so the newest one surfaces first. Plans saved before
+  // createdAt existed fall back to 0 and simply keep their prior relative order.
+  const sorted = [...plans].sort((a, b) => {
+    const byDay = b.dateCreated.localeCompare(a.dateCreated);
+    if (byDay !== 0) return byDay;
+    return (b.createdAt || 0) - (a.createdAt || 0);
+  });
 
   return (
     <div className="plans-view">
@@ -2181,6 +2194,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
       income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
+      createdAt: initial.createdAt || Date.now(),
       active: initial.active || false,
       repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
       categories: cats.map((c) => ({
