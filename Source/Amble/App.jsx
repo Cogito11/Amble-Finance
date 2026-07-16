@@ -6,7 +6,7 @@ import {
   CreditCard, Landmark, Loader2, AlertCircle, Moon, Sun, MoreHorizontal,
   Download, Upload, FileSpreadsheet, ClipboardList, CheckCircle2,
   Copy, Repeat, Sliders, Database, Info, Github, Globe, ChevronRight, Activity,
-  Monitor, ChevronUp, ChevronDown
+  Monitor, ChevronUp, ChevronDown, Calculator, ArrowLeft, TrendingUp, ShieldCheck
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar,
@@ -106,6 +106,7 @@ const fmt = (n) => {
     return v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
   }
 };
+
 
 const fmtDate = (d) => {
   const dt = new Date(d + "T00:00:00");
@@ -504,7 +505,8 @@ const SHORTCUTS = [
       { keys: ["3"], label: "Accounts" },
       { keys: ["4"], label: "Status" },
       { keys: ["5"], label: "Budgets" },
-      { keys: ["6"], label: "More" },
+      { keys: ["6"], label: "Tools" },
+      { keys: ["7"], label: "More" },
     ],
   },
 ];
@@ -518,6 +520,7 @@ const NAV_ITEMS = [
   { id: "accounts", label: "Accounts", icon: Wallet },
   { id: "budgets", label: "Status", icon: Activity },
   { id: "plans", label: "Budgets", icon: ClipboardList },
+  { id: "tools", label: "Tools", icon: Calculator },
 ];
 
 const VIEW_TITLES = {
@@ -526,6 +529,7 @@ const VIEW_TITLES = {
   accounts: "Accounts",
   budgets: "Status",
   plans: "Budgets",
+  tools: "Tools",
   more: "More",
 };
 
@@ -720,6 +724,569 @@ const THEME_MODE_OPTIONS = [
   { id: "light", label: "Light", icon: Sun },
   { id: "dark", label: "Dark", icon: Moon },
 ];
+
+// Catalog of financial tools shown on the Tools tab, grouped into categories.
+// `available: false` tools render as "Coming soon" cards so the tab can grow
+// over time without every entry needing a working implementation yet.
+// Compounding frequency options for the compound interest calculator.
+// `monthsPerPeriod` is how often (in months) interest is actually applied to
+// the balance - contributions still land every month regardless of this.
+const COMPOUND_FREQUENCIES = [
+  { id: "annually", label: "Annually", monthsPerPeriod: 12 },
+  { id: "semiannually", label: "Semi-annually", monthsPerPeriod: 6 },
+  { id: "quarterly", label: "Quarterly", monthsPerPeriod: 3 },
+  { id: "monthly", label: "Monthly", monthsPerPeriod: 1 },
+];
+
+const TOOLS_CATALOG = [
+  {
+    id: "growth",
+    label: "Growth & Savings",
+    icon: TrendingUp,
+    tools: [
+      {
+        id: "compound-interest",
+        label: "Compound Interest Calculator",
+        desc: "See how a starting balance and monthly contributions grow over time.",
+        icon: TrendingUp,
+        available: true,
+      },
+      {
+        id: "savings-goal",
+        label: "Savings Goal Calculator",
+        desc: "Work out the monthly contribution needed to hit a target amount by a date.",
+        icon: Target,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: "budgeting",
+    label: "Budgeting",
+    icon: PiggyBank,
+    tools: [
+      {
+        id: "50-30-20",
+        label: "50/30/20 Budget Rule",
+        desc: "Split your income into needs, wants, and savings using the classic rule of thumb.",
+        icon: PiggyBank,
+        available: true,
+      },
+      {
+        id: "emergency-fund",
+        label: "Emergency Fund Calculator",
+        desc: "Check how many months of expenses your current savings would cover.",
+        icon: ShieldCheck,
+        available: true,
+      },
+    ],
+  },
+];
+
+function ToolCard({ tool, onOpen }) {
+  const Icon = tool.icon;
+  return (
+    <button
+      type="button"
+      className={`tool-card${tool.available ? "" : " tool-card-disabled"}`}
+      onClick={() => tool.available && onOpen(tool.id)}
+      disabled={!tool.available}
+    >
+      <div className="tool-card-icon"><Icon size={18} /></div>
+      <div className="tool-card-text">
+        <div className="tool-card-title">
+          {tool.label}
+          {!tool.available && <span className="tool-card-badge">Coming soon</span>}
+        </div>
+        <div className="tool-card-desc">{tool.desc}</div>
+      </div>
+      {tool.available && <ChevronRight size={16} className="tool-card-chevron" />}
+    </button>
+  );
+}
+
+// Backs a number field that can optionally pull its value from one of the
+// user's real accounts instead of being typed in manually. Returns a small
+// toggle (meant for a card's top-right corner) plus the field body, so the
+// toggle isn't forced to live next to the label where it crowds the layout.
+// Credit cards are excluded since their balance represents debt, not savings.
+function useAccountAmountField({ value, onChange, accounts, balances }) {
+  const [mode, setMode] = useState("manual");
+  const [accountId, setAccountId] = useState("");
+  const savingsAccounts = useMemo(() => (accounts || []).filter((a) => a.type !== "credit"), [accounts]);
+  const selectedBalance = accountId ? balances?.[accountId] : undefined;
+
+  useEffect(() => {
+    if (mode === "account" && accountId && selectedBalance !== undefined) {
+      onChange(Math.max(0, Math.round(selectedBalance * 100) / 100));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, accountId, selectedBalance]);
+
+  const toggle = savingsAccounts.length > 0 && (
+    <div className="seg card-corner-seg" role="group" aria-label="Value source">
+      <button type="button" className={`seg-btn ${mode === "manual" ? "active" : ""}`} onClick={() => setMode("manual")}>Manual</button>
+      <button type="button" className={`seg-btn ${mode === "account" ? "active" : ""}`} onClick={() => setMode("account")}>From account</button>
+    </div>
+  );
+
+  const field = mode === "account" && savingsAccounts.length > 0 ? (
+    <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+      <option value="">Select an account…</option>
+      {savingsAccounts.map((a) => (
+        <option key={a.id} value={a.id}>{a.name} · {fmt(balances?.[a.id])}</option>
+      ))}
+    </select>
+  ) : (
+    <input className="input" type="number" min="0" step="10" value={value} onWheel={blurOnWheel} onChange={(e) => onChange(e.target.value)} />
+  );
+
+  return { toggle, field };
+}
+
+
+
+function CompoundInterestCalculator({ onBack, accounts, balances }) {
+  const [principal, setPrincipal] = useState(5000);
+  const [monthly, setMonthly] = useState(200);
+  const [rate, setRate] = useState(6);
+  const [years, setYears] = useState(15);
+  const [frequency, setFrequency] = useState("annually");
+
+  const result = useMemo(() => {
+    const p = Math.max(0, Number(principal) || 0);
+    const c = Math.max(0, Number(monthly) || 0);
+    const annualRate = (Number(rate) || 0) / 100;
+    const n = Math.max(1, Math.round((Number(years) || 0) * 12));
+    const freq = COMPOUND_FREQUENCIES.find((f) => f.id === frequency) || COMPOUND_FREQUENCIES[0];
+    const monthsPerPeriod = freq.monthsPerPeriod;
+    // Rate applied each time interest compounds, scaled to that period's length.
+    const periodRate = annualRate * (monthsPerPeriod / 12);
+
+    let balance = p;
+    let contributions = p;
+    let monthsSincePeriodStart = 0;
+    const points = [{ year: 0, balance: p, contributions: p }];
+    for (let m = 1; m <= n; m++) {
+      balance += c;
+      contributions += c;
+      monthsSincePeriodStart++;
+      if (monthsSincePeriodStart === monthsPerPeriod) {
+        balance *= 1 + periodRate;
+        monthsSincePeriodStart = 0;
+      }
+      if (m % 12 === 0) {
+        points.push({ year: m / 12, balance: Math.round(balance), contributions: Math.round(contributions) });
+      }
+    }
+    const totalInterest = balance - contributions;
+    return { balance, contributions, totalInterest, points };
+  }, [principal, monthly, rate, years, frequency]);
+
+  const { toggle: startingAmountToggle, field: startingAmountField } = useAccountAmountField({
+    value: principal, onChange: setPrincipal, accounts, balances,
+  });
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="card">
+        <div className="card-title">
+          <span><TrendingUp size={16} style={{ marginRight: 8, verticalAlign: "-3px" }} />Compound Interest Calculator</span>
+          {startingAmountToggle}
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Starting amount</label>
+            {startingAmountField}
+          </div>
+          <div className="form-group">
+            <label>Monthly contribution</label>
+            <input className="input" type="number" min="0" step="10" value={monthly} onWheel={blurOnWheel} onChange={(e) => setMonthly(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Annual interest rate (%)</label>
+            <input className="input" type="number" min="0" step="0.1" value={rate} onWheel={blurOnWheel} onChange={(e) => setRate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Years</label>
+            <input className="input" type="number" min="1" step="1" value={years} onWheel={blurOnWheel} onChange={(e) => setYears(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Compounding frequency</label>
+          <select className="select" value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+            {COMPOUND_FREQUENCIES.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label="Future value" value={fmt(result.balance)} tone="brass" icon={TrendingUp} />
+        <StatCard label="Total contributions" value={fmt(result.contributions)} tone="teal" icon={PiggyBank} />
+        <StatCard label="Total interest earned" value={fmt(result.totalInterest)} tone="teal" icon={ArrowUpRight} />
+      </div>
+
+      <div className="card">
+        <div className="card-title">Growth over time</div>
+        <div style={{ width: "100%", height: 260 }}>
+          <ResponsiveContainer>
+            <AreaChart data={result.points} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="toolBalanceFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--brass)" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="var(--brass)" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
+              <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Area type="monotone" dataKey="balance" stroke="var(--brass)" fill="url(#toolBalanceFill)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SavingsGoalCalculator({ onBack, accounts, balances }) {
+  const [goal, setGoal] = useState(20000);
+  const [current, setCurrent] = useState(2000);
+  const [rate, setRate] = useState(6);
+  const [years, setYears] = useState(5);
+  const [frequency, setFrequency] = useState("annually");
+
+  const result = useMemo(() => {
+    const g = Math.max(0, Number(goal) || 0);
+    const cur = Math.max(0, Number(current) || 0);
+    const annualRate = (Number(rate) || 0) / 100;
+    const n = Math.max(1, Math.round((Number(years) || 0) * 12));
+    const freq = COMPOUND_FREQUENCIES.find((f) => f.id === frequency) || COMPOUND_FREQUENCIES[0];
+    const monthsPerPeriod = freq.monthsPerPeriod;
+    const periodRate = annualRate * (monthsPerPeriod / 12);
+    const numPeriods = n / monthsPerPeriod;
+
+    // Binary-search the monthly contribution that lands the balance on the
+    // goal by the target date, using the same simulation as the growth
+    // calculator above (keeps both tools consistent with each other).
+    const simulate = (monthlyContribution) => {
+      let balance = cur;
+      let monthsSincePeriodStart = 0;
+      for (let m = 1; m <= n; m++) {
+        balance += monthlyContribution;
+        monthsSincePeriodStart++;
+        if (monthsSincePeriodStart === monthsPerPeriod) {
+          balance *= 1 + periodRate;
+          monthsSincePeriodStart = 0;
+        }
+      }
+      return balance;
+    };
+
+    let lo = 0;
+    let hi = Math.max(g, 1000);
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (simulate(mid) < g) lo = mid; else hi = mid;
+    }
+    const requiredMonthly = simulate(0) >= g ? 0 : hi;
+    const finalBalance = simulate(requiredMonthly);
+    const totalContributions = cur + requiredMonthly * n;
+    const totalInterest = finalBalance - totalContributions;
+
+    return { requiredMonthly, finalBalance, totalContributions, totalInterest, numPeriods };
+  }, [goal, current, rate, years, frequency]);
+
+  const { toggle: currentSavingsToggle, field: currentSavingsField } = useAccountAmountField({
+    value: current, onChange: setCurrent, accounts, balances,
+  });
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="card">
+        <div className="card-title">
+          <span><Target size={16} style={{ marginRight: 8, verticalAlign: "-3px" }} />Savings Goal Calculator</span>
+          {currentSavingsToggle}
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Goal amount</label>
+            <input className="input" type="number" min="0" step="100" value={goal} onWheel={blurOnWheel} onChange={(e) => setGoal(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Current savings</label>
+            {currentSavingsField}
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Annual interest rate (%)</label>
+            <input className="input" type="number" min="0" step="0.1" value={rate} onWheel={blurOnWheel} onChange={(e) => setRate(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Years to reach goal</label>
+            <input className="input" type="number" min="1" step="1" value={years} onWheel={blurOnWheel} onChange={(e) => setYears(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Compounding frequency</label>
+          <select className="select" value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+            {COMPOUND_FREQUENCIES.map((f) => (
+              <option key={f.id} value={f.id}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="card tool-highlight-card">
+        <div className="tool-highlight-label">Required monthly contribution</div>
+        <div className="tool-highlight-value">{fmt(result.requiredMonthly)}</div>
+        <div className="tool-note">to reach {fmt(goal)} in {years} {Number(years) === 1 ? "year" : "years"}</div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label="Projected balance" value={fmt(result.finalBalance)} tone="brass" icon={Target} />
+        <StatCard label="Total contributions" value={fmt(result.totalContributions)} tone="teal" icon={PiggyBank} />
+        <StatCard label="Total interest earned" value={fmt(result.totalInterest)} tone="teal" icon={ArrowUpRight} />
+      </div>
+    </div>
+  );
+}
+
+function BudgetRuleCalculator({ onBack, transactions }) {
+  const [income, setIncome] = useState(4500);
+  const [mode, setMode] = useState("manual");
+  const [txId, setTxId] = useState("");
+
+  const incomeTransactions = useMemo(
+    () => sortTransactionsNewestFirst((transactions || []).filter((t) => t.type === "income")).slice(0, 30),
+    [transactions]
+  );
+
+  // Average monthly income over the most recent months that actually have
+  // income transactions in them (up to 6), so a quiet month doesn't drag
+  // a long-running average down and a brand-new budget still gets a number.
+  const monthlyAverage = useMemo(() => {
+    const byMonth = {};
+    (transactions || []).filter((t) => t.type === "income").forEach((t) => {
+      const mk = monthKeyOf(t.date);
+      byMonth[mk] = (byMonth[mk] || 0) + t.amount;
+    });
+    const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
+    const total = months.reduce((s, mk) => s + byMonth[mk], 0);
+    return { value: months.length ? total / months.length : 0, monthsUsed: months.length };
+  }, [transactions]);
+
+  useEffect(() => {
+    if (mode === "transaction" && txId) {
+      const tx = incomeTransactions.find((t) => t.id === txId);
+      if (tx) setIncome(tx.amount);
+    } else if (mode === "average" && monthlyAverage.monthsUsed > 0) {
+      setIncome(Math.round(monthlyAverage.value * 100) / 100);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, txId, monthlyAverage.value, monthlyAverage.monthsUsed]);
+
+  const result = useMemo(() => {
+    const inc = Math.max(0, Number(income) || 0);
+    return {
+      needs: inc * 0.5,
+      wants: inc * 0.3,
+      savings: inc * 0.2,
+    };
+  }, [income]);
+
+  const rows = [
+    { key: "needs", label: "Needs", pct: "50%", desc: "Rent, groceries, utilities, minimum debt payments", tone: "brass", value: result.needs },
+    { key: "wants", label: "Wants", pct: "30%", desc: "Dining out, entertainment, subscriptions, hobbies", tone: "teal", value: result.wants },
+    { key: "savings", label: "Savings & debt payoff", pct: "20%", desc: "Emergency fund, investing, extra debt payments", tone: "rust", value: result.savings },
+  ];
+
+  const hasIncomeHistory = incomeTransactions.length > 0;
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="card">
+        <div className="card-title">
+          <span><PiggyBank size={16} style={{ marginRight: 8, verticalAlign: "-3px" }} />50/30/20 Budget Rule</span>
+          {hasIncomeHistory && (
+            <div className="seg card-corner-seg" role="group" aria-label="Income source">
+              <button type="button" className={`seg-btn ${mode === "manual" ? "active" : ""}`} onClick={() => setMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${mode === "transaction" ? "active" : ""}`} onClick={() => setMode("transaction")}>From transaction</button>
+              <button type="button" className={`seg-btn ${mode === "average" ? "active" : ""}`} onClick={() => setMode("average")}>Monthly average</button>
+            </div>
+          )}
+        </div>
+
+        {mode === "transaction" && hasIncomeHistory ? (
+          <div className="form-group">
+            <label>Income transaction</label>
+            <select className="select" value={txId} onChange={(e) => setTxId(e.target.value)}>
+              <option value="">Select a transaction…</option>
+              {incomeTransactions.map((t) => (
+                <option key={t.id} value={t.id}>{fmtDate(t.date)} · {t.description || "Income"} · {fmt(t.amount)}</option>
+              ))}
+            </select>
+          </div>
+        ) : mode === "average" && hasIncomeHistory ? (
+          <div className="form-group">
+            <label>Monthly income (after tax)</label>
+            <input className="input" type="number" value={income} readOnly />
+            <div className="tool-note">
+              Average of {fmt(monthlyAverage.value)}/mo across the last {monthlyAverage.monthsUsed} {monthlyAverage.monthsUsed === 1 ? "month" : "months"} with income transactions.
+            </div>
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>Monthly income (after tax)</label>
+            <input className="input" type="number" min="0" step="50" value={income} onWheel={blurOnWheel} onChange={(e) => setIncome(e.target.value)} />
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Suggested split</div>
+        <div className="budget-rule-rows">
+          {rows.map((r) => (
+            <div key={r.key} className="budget-rule-row">
+              <div className="budget-rule-row-top">
+                <div className="budget-rule-row-label">{r.label} <span className="muted">· {r.pct}</span></div>
+                <strong className={`tone-${r.tone}`}>{fmt(r.value)}</strong>
+              </div>
+              <div className="dash-budget-bar-track">
+
+                <div className="dash-budget-bar-fill" style={{ width: r.pct, background: `var(--${r.tone})` }} />
+              </div>
+              <div className="tool-note">{r.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmergencyFundCalculator({ onBack, accounts, balances }) {
+  const [expenses, setExpenses] = useState(2500);
+  const [current, setCurrent] = useState(4000);
+  const [targetMonths, setTargetMonths] = useState(6);
+
+  const result = useMemo(() => {
+    const exp = Math.max(0, Number(expenses) || 0);
+    const cur = Math.max(0, Number(current) || 0);
+    const target = Math.max(1, Number(targetMonths) || 6);
+    const targetAmount = exp * target;
+    const monthsCovered = exp > 0 ? cur / exp : 0;
+    const pctToTarget = targetAmount > 0 ? cur / targetAmount : 0;
+    const shortfall = Math.max(0, targetAmount - cur);
+    return { targetAmount, monthsCovered, pctToTarget, shortfall };
+  }, [expenses, current, targetMonths]);
+
+  const barColor = result.pctToTarget >= 1 ? "var(--teal)" : result.pctToTarget > 0.5 ? "var(--amber)" : "var(--rust)";
+
+  const { toggle: currentSavingsToggle, field: currentSavingsField } = useAccountAmountField({
+    value: current, onChange: setCurrent, accounts, balances,
+  });
+
+  return (
+    <div className="tool-detail">
+      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
+        <ArrowLeft size={14} /> All tools
+      </button>
+
+      <div className="card">
+        <div className="card-title">
+          <span><ShieldCheck size={16} style={{ marginRight: 8, verticalAlign: "-3px" }} />Emergency Fund Calculator</span>
+          {currentSavingsToggle}
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Essential monthly expenses</label>
+            <input className="input" type="number" min="0" step="50" value={expenses} onWheel={blurOnWheel} onChange={(e) => setExpenses(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Current emergency savings</label>
+            {currentSavingsField}
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Target coverage</label>
+          <select className="select" value={targetMonths} onChange={(e) => setTargetMonths(Number(e.target.value))}>
+            <option value={3}>3 months</option>
+            <option value={6}>6 months</option>
+            <option value={9}>9 months</option>
+            <option value={12}>12 months</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Progress toward target</div>
+        <div className="dash-budget-bar-track" style={{ height: 14 }}>
+          <div className="dash-budget-bar-fill" style={{ width: `${Math.min(result.pctToTarget, 1) * 100}%`, background: barColor }} />
+        </div>
+        <div className="dash-budget-bar-scale">
+          <span>0%</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100%</span>
+        </div>
+      </div>
+
+      <div className="stat-row tool-result-row">
+        <StatCard label="Months currently covered" value={result.monthsCovered.toFixed(1)} tone="brass" icon={ShieldCheck} />
+        <StatCard label="Target fund size" value={fmt(result.targetAmount)} tone="teal" icon={Target} />
+        <StatCard label="Remaining to save" value={fmt(result.shortfall)} tone={result.shortfall > 0 ? "rust" : "teal"} icon={PiggyBank} />
+      </div>
+    </div>
+  );
+}
+
+function ToolsView({ accounts, balances, transactions }) {
+  const [activeToolId, setActiveToolId] = useState(null);
+
+  const back = () => setActiveToolId(null);
+  if (activeToolId === "compound-interest") return <CompoundInterestCalculator onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "savings-goal") return <SavingsGoalCalculator onBack={back} accounts={accounts} balances={balances} />;
+  if (activeToolId === "50-30-20") return <BudgetRuleCalculator onBack={back} transactions={transactions} />;
+  if (activeToolId === "emergency-fund") return <EmergencyFundCalculator onBack={back} accounts={accounts} balances={balances} />;
+
+  return (
+    <div className="tools-view">
+      {TOOLS_CATALOG.map((cat) => (
+        <div key={cat.id} className="tools-category">
+          <div className="tools-category-title">
+            <cat.icon size={15} /> {cat.label}
+          </div>
+          <div className="tools-grid">
+            {cat.tools.map((tool) => (
+              <ToolCard key={tool.id} tool={tool} onOpen={setActiveToolId} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function MoreView({
   onExportJSON, onImportJSON, onExportCSV, transactionCount, themeMode, onChangeThemeMode,
@@ -2725,7 +3292,7 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "budgets", "5": "plans", "6": "more" };
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "budgets", "5": "plans", "6": "tools", "7": "more" };
         if (navByKey[key]) {
           setView(navByKey[key]);
           return;
@@ -3179,7 +3746,7 @@ export default function App() {
               {view === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {view !== "more" && view !== "plans" && (
+              {view !== "more" && view !== "plans" && view !== "tools" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
             </div>
@@ -3228,6 +3795,7 @@ export default function App() {
                 onReorder={reorderPlan}
               />
             )}
+            {view === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
             {view === "more" && (
               <MoreView
                 onExportJSON={exportJSON}
@@ -3422,7 +3990,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 
 .card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:18px; }
 .card.no-pad { padding:0; overflow:hidden; }
-.card-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; }
+.card-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .card-title.padded { padding: 18px 20px 0; }
 
 .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
@@ -3487,6 +4055,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .search-input input { background:transparent; border:none; color:var(--text); font-size:13.5px; width:100%; outline:none; }
 .search-input input:focus, .search-input input:focus-visible { outline:none; }
 .select, .input { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; }
+.input[readonly] { color: var(--text-muted); cursor:default; }
 .input.mono, .select.mono { font-family:'JetBrains Mono',monospace; }
 /* Hide the native up/down stepper on number inputs, and stop mouse-wheel scroll
    from silently changing their value (see onWheel={blurOnWheel} on each input). */
@@ -3591,6 +4160,33 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .plan-cat-subtotal { font-size:12px; }
 
+.tools-view { display:flex; flex-direction:column; gap:26px; }
+.tools-category { display:flex; flex-direction:column; gap:12px; }
+.tools-category-title { display:flex; align-items:center; gap:8px; font-family:'Fraunces',serif; font-weight:600; font-size:15px; color: var(--text); }
+.tools-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:14px; }
+.tool-card { display:flex; align-items:center; gap:14px; text-align:left; background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; cursor:pointer; transition: border-color .15s, background .15s; }
+.tool-card:hover:not(.tool-card-disabled) { border-color: var(--brass); background: var(--brass-soft); }
+.tool-card-disabled { cursor:default; opacity:0.6; }
+.tool-card-icon { flex-shrink:0; width:38px; height:38px; border-radius:9px; display:flex; align-items:center; justify-content:center; background: var(--brass-soft); color: var(--brass); }
+.tool-card-text { flex:1; min-width:0; }
+.tool-card-title { font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.tool-card-badge { font-size:10px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color: var(--text-faint); background: var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:2px 6px; }
+.tool-card-desc { font-size:12px; color: var(--text-muted); margin-top:3px; line-height:1.45; }
+.tool-card-chevron { flex-shrink:0; color: var(--text-faint); }
+.tool-detail { display:flex; flex-direction:column; gap:16px; }
+.tool-back-btn { align-self:flex-start; }
+.tool-result-row { grid-template-columns: repeat(3, 1fr); margin-bottom:0; }
+.card-corner-seg { padding:2px; flex-shrink:0; }
+.card-corner-seg .seg-btn { padding:3px 9px; font-size:11px; white-space:nowrap; }
+.tool-note { font-size:12px; color: var(--text-muted); line-height:1.5; }
+.tool-highlight-card { display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
+.tool-highlight-label { font-size:12px; color: var(--text-muted); text-transform:uppercase; letter-spacing:.03em; }
+.tool-highlight-value { font-family:'JetBrains Mono',monospace; font-weight:600; font-size:30px; color: var(--brass); }
+.budget-rule-rows { display:flex; flex-direction:column; gap:16px; }
+.budget-rule-row { display:flex; flex-direction:column; gap:6px; }
+.budget-rule-row-top { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13.5px; font-weight:500; }
+.budget-rule-row-top strong { font-family:'JetBrains Mono',monospace; font-size:15px; }
+
 .more-view { display:flex; flex-direction:column; gap:16px; }
 .more-tabs { max-width:360px; margin-bottom:2px; }
 .settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }
@@ -3644,7 +4240,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   .sidebar-footer { display:none; }
   .nav { flex-direction:row; }
   .nav-item span { display:none; }
-  .stat-row, .grid-2 { grid-template-columns: 1fr 1fr; }
+  .stat-row, .grid-2, .tools-grid, .tool-result-row { grid-template-columns: 1fr 1fr; }
   .content { padding:18px; }
   .topbar { padding:16px 18px; }
 }
