@@ -1148,6 +1148,10 @@ function Dashboard({ accounts, categories, transactions, balances, plans, onAdd,
                       <span className="muted">Remaining</span>
                       <strong className={planRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(planRemaining)}</strong>
                     </div>
+                    <div className="plan-summary-pct">
+                      <span className="muted">% Spent</span>
+                      <strong className={planPct > 1 ? "tone-rust" : planPct > 0.85 ? "tone-amber" : "tone-teal"}>{Math.round(planPct * 100)}%</strong>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -3554,6 +3558,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-summary-bar { display:flex; gap:24px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
 .plan-summary-bar > div { display:flex; flex-direction:column; gap:2px; font-size:12px; }
 .plan-summary-bar strong { font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; }
+.plan-summary-pct { margin-left:auto; align-items:flex-end; text-align:right; }
 .plan-repeat-block { display:flex; flex-direction:column; gap:8px; border:1px solid var(--border); border-radius:10px; padding:12px 14px; background: var(--surface-2); }
 .checkbox-row { display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; cursor:pointer; }
 .checkbox-row input[type="checkbox"] { width:15px; height:15px; accent-color: var(--brass); cursor:pointer; }
