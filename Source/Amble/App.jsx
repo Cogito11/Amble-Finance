@@ -744,9 +744,6 @@ const THEME_MODE_OPTIONS = [
   { id: "dark", label: "Dark", icon: Moon },
 ];
 
-// Catalog of financial tools shown on the Tools tab, grouped into categories.
-// `available: false` tools render as "Coming soon" cards so the tab can grow
-// over time without every entry needing a working implementation yet.
 // Compounding frequency options for the compound interest calculator.
 // `monthsPerPeriod` is how often (in months) interest is actually applied to
 // the balance - contributions still land every month regardless of this.
@@ -757,6 +754,9 @@ const COMPOUND_FREQUENCIES = [
   { id: "monthly", label: "Monthly", monthsPerPeriod: 1 },
 ];
 
+// Catalog of financial tools shown on the Tools tab, grouped into categories.
+// `available: false` tools render as "Coming soon" cards so the tab can grow
+// over time without every entry needing a working implementation yet.
 const TOOLS_CATALOG = [
   {
     id: "growth",
@@ -838,20 +838,6 @@ const TOOLS_CATALOG = [
         label: "Loan / Mortgage Payoff Calculator",
         desc: "Get your monthly payment, full amortization schedule, and the payoff impact of extra payments.",
         icon: Landmark,
-        available: true,
-      },
-    ],
-  },
-  {
-    id: "income-tax",
-    label: "Income & Tax",
-    icon: Wallet,
-    tools: [
-      {
-        id: "tax-estimator",
-        label: "Tax Bracket & Take-Home Pay Estimator",
-        desc: "Estimate your federal tax bracket, effective rate, and take-home pay.",
-        icon: Wallet,
         available: true,
       },
     ],
@@ -1048,7 +1034,6 @@ function SavingsGoalCalculator({ onBack, accounts, balances }) {
     const freq = COMPOUND_FREQUENCIES.find((f) => f.id === frequency) || COMPOUND_FREQUENCIES[0];
     const monthsPerPeriod = freq.monthsPerPeriod;
     const periodRate = annualRate * (monthsPerPeriod / 12);
-    const numPeriods = n / monthsPerPeriod;
 
     // Binary-search the monthly contribution that lands the balance on the
     // goal by the target date, using the same simulation as the growth
@@ -1078,7 +1063,7 @@ function SavingsGoalCalculator({ onBack, accounts, balances }) {
     const totalContributions = cur + requiredMonthly * n;
     const totalInterest = finalBalance - totalContributions;
 
-    return { requiredMonthly, finalBalance, totalContributions, totalInterest, numPeriods };
+    return { requiredMonthly, finalBalance, totalContributions, totalInterest };
   }, [goal, current, rate, years, frequency]);
 
   const { toggle: currentSavingsToggle, field: currentSavingsField } = useAccountAmountField({
@@ -1584,7 +1569,11 @@ function DebtPayoffPlanner({ onBack, accounts, balances }) {
                 : interestSaved < -1
                 ? `Snowball costs ${fmt(-interestSaved)} more in interest than avalanche`
                 : "Both strategies cost about the same in interest for these debts"}
-              {monthsSaved !== 0 && `, and finishes ${monthsSaved > 0 ? "" : "the same time or "}${monthsSaved > 0 ? `${Math.abs(monthsSaved)} ${Math.abs(monthsSaved) === 1 ? "month" : "months"} sooner` : ""}`}
+              {monthsSaved > 0
+                ? `, and finishes ${monthsSaved} ${monthsSaved === 1 ? "month" : "months"} sooner`
+                : monthsSaved < 0
+                ? `, though it takes ${Math.abs(monthsSaved)} ${Math.abs(monthsSaved) === 1 ? "month" : "months"} longer`
+                : ", and both finish in the same amount of time"}
               .
             </div>
           </div>
@@ -1731,10 +1720,12 @@ function CreditCardInterestCalculator({ onBack, accounts, balances }) {
         )}
       </div>
 
-      {result.stuck ? (
+      {result.stuck || result.maxedOut ? (
         <div className="card">
           <div className="tool-note" style={{ color: "var(--rust)" }}>
-            This payment doesn't even cover the monthly interest ({fmt(Number(balance) * (Number(apr) / 100 / 12))}/mo) - the balance will grow forever at this rate. Increase the payment to see a payoff timeline.
+            {result.stuck
+              ? `This payment doesn't even cover the monthly interest (${fmt(Number(balance) * (Number(apr) / 100 / 12))}/mo) - the balance will grow forever at this rate. Increase the payment to see a payoff timeline.`
+              : "At this payment rate, it would take more than 50 years to pay off - increase the payment to see a realistic payoff timeline."}
           </div>
         </div>
       ) : (
@@ -1903,11 +1894,10 @@ function LoanPayoffCalculator({ onBack }) {
 }
 
 function NetWorthProjection({ onBack, accounts, balances }) {
-  const computedNetWorth = useMemo(() => {
-    const assets = (accounts || []).filter((a) => a.type !== "credit").reduce((s, a) => s + (balances?.[a.id] || 0), 0);
-    const debt = (accounts || []).filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -(balances?.[a.id] || 0)), 0);
-    return assets - debt;
-  }, [accounts, balances]);
+  const computedNetWorth = useMemo(
+    () => (accounts || []).reduce((s, a) => s + (balances?.[a.id] || 0), 0),
+    [accounts, balances]
+  );
   const hasAccounts = (accounts || []).length > 0;
 
   const [startingNetWorth, setStartingNetWorth] = useState(hasAccounts ? Math.round(computedNetWorth * 100) / 100 : 10000);
@@ -2017,144 +2007,6 @@ function NetWorthProjection({ onBack, accounts, balances }) {
   );
 }
 
-// --- Federal income tax data (tax year 2026), sourced from IRS Revenue Procedure
-// 2025-32. Federal ordinary-income brackets and standard deductions only - no
-// state/local tax, credits, or itemized deductions are modeled.
-const FEDERAL_TAX_BRACKETS_2026 = {
-  single: [
-    { rate: 0.10, upTo: 12400 }, { rate: 0.12, upTo: 50400 }, { rate: 0.22, upTo: 105700 },
-    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256225 }, { rate: 0.35, upTo: 640600 }, { rate: 0.37, upTo: Infinity },
-  ],
-  mfj: [
-    { rate: 0.10, upTo: 24800 }, { rate: 0.12, upTo: 100800 }, { rate: 0.22, upTo: 211400 },
-    { rate: 0.24, upTo: 403550 }, { rate: 0.32, upTo: 512450 }, { rate: 0.35, upTo: 768700 }, { rate: 0.37, upTo: Infinity },
-  ],
-  hoh: [
-    { rate: 0.10, upTo: 17700 }, { rate: 0.12, upTo: 67450 }, { rate: 0.22, upTo: 105700 },
-    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256200 }, { rate: 0.35, upTo: 640600 }, { rate: 0.37, upTo: Infinity },
-  ],
-  mfs: [
-    { rate: 0.10, upTo: 12400 }, { rate: 0.12, upTo: 50400 }, { rate: 0.22, upTo: 105700 },
-    { rate: 0.24, upTo: 201775 }, { rate: 0.32, upTo: 256225 }, { rate: 0.35, upTo: 384350 }, { rate: 0.37, upTo: Infinity },
-  ],
-};
-const STANDARD_DEDUCTION_2026 = { single: 16100, mfj: 32200, hoh: 24150, mfs: 16100 };
-const SOCIAL_SECURITY_WAGE_BASE_2026 = 184500;
-
-function calcFederalTax(taxableIncome, brackets) {
-  let tax = 0, lower = 0, marginalRate = brackets[0].rate;
-  for (const b of brackets) {
-    if (taxableIncome > lower) {
-      const inBracket = Math.min(taxableIncome, b.upTo) - lower;
-      if (inBracket > 0) { tax += inBracket * b.rate; marginalRate = b.rate; }
-    }
-    lower = b.upTo;
-    if (taxableIncome <= b.upTo) break;
-  }
-  return { tax, marginalRate };
-}
-
-function bracketBreakdown(taxableIncome, brackets) {
-  let lower = 0;
-  const rows = [];
-  for (const b of brackets) {
-    const amt = Math.max(0, Math.min(taxableIncome, b.upTo) - lower);
-    if (amt > 0) rows.push({ rate: `${Math.round(b.rate * 100)}%`, amount: Math.round(amt) });
-    lower = b.upTo;
-    if (taxableIncome <= b.upTo) break;
-  }
-  return rows;
-}
-
-function TaxTakeHomeEstimator({ onBack }) {
-  const [grossIncome, setGrossIncome] = useState(75000);
-  const [filingStatus, setFilingStatus] = useState("single");
-  const [preTax, setPreTax] = useState(0);
-
-  const result = useMemo(() => {
-    const gross = Math.max(0, Number(grossIncome) || 0);
-    const pretaxDeductions = Math.max(0, Number(preTax) || 0);
-    const stdDeduction = STANDARD_DEDUCTION_2026[filingStatus];
-    const taxableIncome = Math.max(0, gross - pretaxDeductions - stdDeduction);
-    const brackets = FEDERAL_TAX_BRACKETS_2026[filingStatus];
-    const { tax: federalTax, marginalRate } = calcFederalTax(taxableIncome, brackets);
-    const breakdown = bracketBreakdown(taxableIncome, brackets);
-
-    const ss = Math.min(gross, SOCIAL_SECURITY_WAGE_BASE_2026) * 0.062;
-    const medicare = gross * 0.0145;
-    const addlThreshold = filingStatus === "mfj" ? 250000 : filingStatus === "mfs" ? 125000 : 200000;
-    const addlMedicare = gross > addlThreshold ? (gross - addlThreshold) * 0.009 : 0;
-    const fica = ss + medicare + addlMedicare;
-
-    const takeHome = gross - pretaxDeductions - federalTax - fica;
-    const effectiveRate = gross > 0 ? federalTax / gross : 0;
-    return { taxableIncome, federalTax, fica, takeHome, effectiveRate, marginalRate, breakdown, stdDeduction };
-  }, [grossIncome, filingStatus, preTax]);
-
-  return (
-    <div className="tool-detail">
-      <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
-        <ArrowLeft size={14} /> All tools
-      </button>
-
-      <div className="tool-page-title"><Wallet size={18} /> Tax Bracket &amp; Take-Home Pay Estimator</div>
-
-      <div className="card">
-        <div className="card-title">Income</div>
-        <div className="form-row">
-          <div className="form-group">
-            <label>Gross annual income</label>
-            <input className="input" type="number" min="0" step="1000" value={grossIncome} onWheel={blurOnWheel} onChange={(e) => setGrossIncome(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Filing status</label>
-            <select className="select" value={filingStatus} onChange={(e) => setFilingStatus(e.target.value)}>
-              <option value="single">Single</option>
-              <option value="mfj">Married filing jointly</option>
-              <option value="hoh">Head of household</option>
-              <option value="mfs">Married filing separately</option>
-            </select>
-          </div>
-        </div>
-        <div className="form-group">
-          <label>Pre-tax deductions (401k, HSA, etc.)</label>
-          <input className="input" type="number" min="0" step="100" value={preTax} onWheel={blurOnWheel} onChange={(e) => setPreTax(e.target.value)} />
-          <div className="tool-note">Reduces taxable income. A {fmt(result.stdDeduction)} standard deduction is applied automatically for this filing status.</div>
-        </div>
-      </div>
-
-      <div className="stat-row tool-result-row">
-        <StatCard label="Take-home pay/yr" value={fmt(result.takeHome)} tone="teal" icon={Wallet} />
-        <StatCard label="Take-home pay/mo" value={fmt(result.takeHome / 12)} tone="brass" icon={Wallet} />
-        <StatCard label="Marginal tax bracket" value={`${Math.round(result.marginalRate * 100)}%`} tone="rust" icon={Percent} />
-      </div>
-      <div className="stat-row tool-result-row">
-        <StatCard label="Federal income tax" value={fmt(result.federalTax)} tone="rust" icon={ArrowUpRight} />
-        <StatCard label="FICA (SS + Medicare)" value={fmt(result.fica)} tone="rust" icon={ArrowUpRight} />
-        <StatCard label="Effective federal rate" value={`${(result.effectiveRate * 100).toFixed(1)}%`} tone="brass" icon={Percent} />
-      </div>
-
-      <div className="card">
-        <div className="card-title">Income taxed at each bracket</div>
-        <div style={{ width: "100%", height: 240 }}>
-          <ResponsiveContainer>
-            <BarChart data={result.breakdown} layout="vertical" margin={{ top: 8, right: 20, left: 10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
-              <YAxis type="category" dataKey="rate" tick={{ fontSize: 12 }} stroke="var(--text-faint)" width={40} />
-              <Tooltip formatter={(v) => fmt(v)} />
-              <Bar dataKey="amount" fill="var(--brass)" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="tool-note" style={{ marginTop: 10 }}>
-          Federal income tax only, estimated for tax year 2026 using IRS brackets and the standard deduction. Doesn't include state/local tax, credits, or itemized deductions - this is an estimate, not tax advice.
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RecurringSpendAudit({ onBack, transactions }) {
   const recurring = useMemo(() => {
     const expenseTx = (transactions || []).filter((t) => t.type === "expense" && (t.description || "").trim());
@@ -2237,7 +2089,6 @@ function ToolsView({ accounts, balances, transactions }) {
   if (activeToolId === "recurring-spend") return <RecurringSpendAudit onBack={back} transactions={transactions} />;
   if (activeToolId === "credit-card-interest") return <CreditCardInterestCalculator onBack={back} accounts={accounts} balances={balances} />;
   if (activeToolId === "loan-payoff") return <LoanPayoffCalculator onBack={back} />;
-  if (activeToolId === "tax-estimator") return <TaxTakeHomeEstimator onBack={back} />;
 
   return (
     <div className="tools-view">
