@@ -875,6 +875,7 @@ function useAccountAmountField({ value, onChange, accounts, balances }) {
   const [mode, setMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
   const savingsAccounts = useMemo(() => (accounts || []).filter((a) => a.type !== "credit"), [accounts]);
+  const selectedAccount = savingsAccounts.find((a) => a.id === accountId) || null;
   const selectedBalance = accountId ? balances?.[accountId] : undefined;
 
   useEffect(() => {
@@ -902,7 +903,7 @@ function useAccountAmountField({ value, onChange, accounts, balances }) {
     <input className="input" type="number" min="0" step="10" value={value} onWheel={blurOnWheel} onChange={(e) => onChange(e.target.value)} />
   );
 
-  return { toggle, field };
+  return { toggle, field, mode, accountId, selectedAccount };
 }
 
 
@@ -944,9 +945,16 @@ function CompoundInterestCalculator({ onBack, accounts, balances }) {
     return { balance, contributions, totalInterest, points };
   }, [principal, monthly, rate, years, frequency]);
 
-  const { toggle: startingAmountToggle, field: startingAmountField } = useAccountAmountField({
+  const { toggle: startingAmountToggle, field: startingAmountField, mode: startingAmountMode, selectedAccount: startingAmountAccount } = useAccountAmountField({
     value: principal, onChange: setPrincipal, accounts, balances,
   });
+
+  useEffect(() => {
+    if (startingAmountMode === "account" && startingAmountAccount && startingAmountAccount.interestRate != null) {
+      setRate(startingAmountAccount.interestRate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startingAmountMode, startingAmountAccount?.id, startingAmountAccount?.interestRate]);
 
   return (
     <div className="tool-detail">
@@ -973,6 +981,9 @@ function CompoundInterestCalculator({ onBack, accounts, balances }) {
           <div className="form-group">
             <label>Annual interest rate (%)</label>
             <input className="input" type="number" min="0" step="0.1" value={rate} onWheel={blurOnWheel} onChange={(e) => setRate(e.target.value)} />
+            {startingAmountMode === "account" && startingAmountAccount?.interestRate != null && (
+              <div className="tool-note">Pulled from {startingAmountAccount.name}'s saved rate - edit freely.</div>
+            )}
           </div>
           <div className="form-group">
             <label>Years</label>
@@ -1066,9 +1077,16 @@ function SavingsGoalCalculator({ onBack, accounts, balances }) {
     return { requiredMonthly, finalBalance, totalContributions, totalInterest };
   }, [goal, current, rate, years, frequency]);
 
-  const { toggle: currentSavingsToggle, field: currentSavingsField } = useAccountAmountField({
+  const { toggle: currentSavingsToggle, field: currentSavingsField, mode: currentSavingsMode, selectedAccount: currentSavingsAccount } = useAccountAmountField({
     value: current, onChange: setCurrent, accounts, balances,
   });
+
+  useEffect(() => {
+    if (currentSavingsMode === "account" && currentSavingsAccount && currentSavingsAccount.interestRate != null) {
+      setRate(currentSavingsAccount.interestRate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSavingsMode, currentSavingsAccount?.id, currentSavingsAccount?.interestRate]);
 
   return (
     <div className="tool-detail">
@@ -1095,6 +1113,9 @@ function SavingsGoalCalculator({ onBack, accounts, balances }) {
           <div className="form-group">
             <label>Annual interest rate (%)</label>
             <input className="input" type="number" min="0" step="0.1" value={rate} onWheel={blurOnWheel} onChange={(e) => setRate(e.target.value)} />
+            {currentSavingsMode === "account" && currentSavingsAccount?.interestRate != null && (
+              <div className="tool-note">Pulled from {currentSavingsAccount.name}'s saved rate - edit freely.</div>
+            )}
           </div>
           <div className="form-group">
             <label>Years to reach goal</label>
@@ -1456,7 +1477,7 @@ function DebtPayoffPlanner({ onBack, accounts, balances }) {
       .filter((a) => !loadedAccountIds.has(a.id))
       .map((a) => {
         const bal = Math.round(Math.abs(balances[a.id]) * 100) / 100;
-        return { id: uid(), accountId: a.id, name: a.name, balance: bal, apr: 20, minPayment: Math.max(25, Math.round(bal * 0.02)) };
+        return { id: uid(), accountId: a.id, name: a.name, balance: bal, apr: a.interestRate != null ? a.interestRate : 20, minPayment: Math.max(25, Math.round(bal * 0.02)) };
       });
     setDebts((prev) => {
       const isBlankPlaceholder = prev.length === 1 && !prev[0].name && !prev[0].accountId && !Number(prev[0].balance);
@@ -1639,9 +1660,13 @@ function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   useEffect(() => {
     if (accountId && balances?.[accountId] !== undefined) {
       setBalance(Math.round(Math.abs(balances[accountId]) * 100) / 100);
+      const acct = (accounts || []).find((a) => a.id === accountId);
+      if (acct && acct.interestRate != null) {
+        setApr(acct.interestRate);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, balances]);
+  }, [accountId, balances, accounts]);
 
   const result = useMemo(() => {
     const startBalance = Math.max(0, Number(balance) || 0);
@@ -1696,6 +1721,9 @@ function CreditCardInterestCalculator({ onBack, accounts, balances }) {
           <div className="form-group">
             <label>APR (%)</label>
             <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
+            {accountId && (accounts || []).find((a) => a.id === accountId)?.interestRate != null && (
+              <div className="tool-note">Pulled from the account's saved APR - edit freely.</div>
+            )}
           </div>
         </div>
       </div>
@@ -2887,7 +2915,11 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, 
               <div className={`acc-balance ${isDebt ? "tone-rust" : bal < 0 ? "tone-rust" : "tone-brass"}`}>
                 {isDebt ? fmt(Math.max(0, -bal)) : fmt(bal)}
               </div>
-              {isDebt && <div className="acc-sub muted">amount owed</div>}
+              {(isDebt || a.interestRate != null) && (
+                <div className="acc-sub muted">
+                  {[isDebt ? "amount owed" : null, a.interestRate != null ? `${a.interestRate}% ${isDebt ? "APR" : "APY"}` : null].filter(Boolean).join(" · ")}
+                </div>
+              )}
             </div>
           );
         })}
@@ -3487,18 +3519,21 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
   const isCredit = type === "credit";
   const existingDisplay = initial.id ? (isCredit ? Math.max(0, -(initial.startingBalance || 0)) : (initial.startingBalance || 0)) : "";
   const [balanceInput, setBalanceInput] = useState(existingDisplay);
+  const [interestRateInput, setInterestRateInput] = useState(initial.interestRate ?? "");
 
   const canSave = name.trim().length > 0 && balanceInput !== "";
 
   const submit = () => {
     if (!canSave) return;
     const val = parseFloat(balanceInput) || 0;
+    const rateVal = interestRateInput === "" ? null : Math.max(0, parseFloat(interestRateInput) || 0);
     onSave({
       id: initial.id || uid(),
       name: name.trim(),
       institution: institution.trim(),
       type,
       startingBalance: isCredit ? -Math.abs(val) : val,
+      interestRate: rateVal,
       order: typeof initial.order === "number" ? initial.order : undefined,
     });
   };
@@ -3525,6 +3560,11 @@ function AccountModal({ initial, onSave, onClose, onDelete }) {
         <div className="form-group">
           <label>{isCredit ? (isEdit ? "Starting balance owed" : "Current balance owed") : isEdit ? "Starting balance" : "Current balance"}</label>
           <input type="number" step="0.01" className="input mono" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} onWheel={blurOnWheel} />
+        </div>
+        <div className="form-group">
+          <label>{isCredit ? "APR (%)" : "Interest rate (%)"} <span className="muted">· optional</span></label>
+          <input type="number" step="0.01" min="0" className="input mono" placeholder="e.g. 4.5" value={interestRateInput} onChange={(e) => setInterestRateInput(e.target.value)} onWheel={blurOnWheel} />
+          <div className="tool-note">If set, tools like the compound interest and debt payoff calculators will use this automatically when you select this account.</div>
         </div>
       </div>
       <div className="modal-footer">
