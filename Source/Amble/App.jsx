@@ -1009,7 +1009,7 @@ function CompoundInterestCalculator({ onBack, accounts, balances }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
               <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
-              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
               <Area type="monotone" dataKey="balance" stroke="var(--brass)" fill="url(#toolBalanceFill)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
@@ -1586,7 +1586,7 @@ function DebtPayoffPlanner({ onBack, accounts, balances }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="month" tickFormatter={(m) => `Mo ${m}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
                   <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
-                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} />
+                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Line type="monotone" dataKey="snowball" name="Snowball" stroke="var(--brass)" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="avalanche" name="Avalanche" stroke="var(--teal)" strokeWidth={2} dot={false} />
@@ -1750,7 +1750,7 @@ function CreditCardInterestCalculator({ onBack, accounts, balances }) {
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                   <XAxis dataKey="month" tickFormatter={(m) => `Mo ${m}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
                   <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
-                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} />
+                  <Tooltip formatter={(v) => fmt(v)} labelFormatter={(m) => `Month ${m}`} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
                   <Area type="monotone" dataKey="balance" stroke="var(--rust)" fill="url(#ccBalanceFill)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -1860,7 +1860,7 @@ function LoanPayoffCalculator({ onBack }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
               <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
-              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="principalPaid" name="Principal" stackId="a" fill="var(--teal)" />
               <Bar dataKey="interestPaid" name="Interest" stackId="a" fill="var(--rust)" />
@@ -1995,7 +1995,7 @@ function NetWorthProjection({ onBack, accounts, balances }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="year" tickFormatter={(y) => `Yr ${y}`} tick={{ fontSize: 11 }} stroke="var(--text-faint)" />
               <YAxis tickFormatter={(v) => fmt(v)} tick={{ fontSize: 11 }} stroke="var(--text-faint)" width={70} />
-              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} />
+              <Tooltip formatter={(v) => fmt(v)} labelFormatter={(y) => `Year ${y}`} contentStyle={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)" }} itemStyle={{ color: "var(--text)" }} labelStyle={{ color: "var(--text)" }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="current" name="Current pace" stroke="var(--brass)" strokeWidth={2} dot={false} />
               <Line type="monotone" dataKey="boosted" name="Boosted pace" stroke="var(--teal)" strokeWidth={2} dot={false} />
