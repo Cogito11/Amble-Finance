@@ -165,7 +165,7 @@ function seedDefaultBudgetPlan() {
     endDate,
     income: DEFAULT_BUDGET_CATEGORIES.reduce((s, [, limit]) => s + limit, 0),
     dateCreated: todayStr(),
-    createdAt: Date.now(),
+    order: 0,
     active: true,
     repeat: { enabled: true, frequency: "monthly" },
     categories: DEFAULT_BUDGET_CATEGORIES.map(([name, limit]) => ({
@@ -412,9 +412,9 @@ function rolloverDuePlans(state) {
         income: p.income,
         incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
         dateCreated: today,
-        // Precise creation instant, used only to break ties in the plans list sort
-        // (dateCreated is day-only, so same-day plans need this to sort correctly).
-        createdAt: Date.now(),
+        // Guarantees the repeated budget lands at the top of the Plans list,
+        // same as any other newly created plan (see nextTopPlanOrder).
+        order: nextTopPlanOrder(plans),
         active: true,
         repeat: { ...p.repeat },
         categories: (p.categories || []).map((c) => ({
@@ -1752,7 +1752,37 @@ function PlanCategoryRows({ category, transactions }) {
 }
 
 
-function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate }) {
+// One-time upgrade path for plans saved before the `order` field existed.
+// Assigns order values based on their old implicit ordering (by dateCreated,
+// newest first) so upgrading doesn't visibly reshuffle anyone's list. Once
+// every plan has an explicit order this is a no-op - it's a migration step,
+// not a second ranking system running alongside `order`.
+function migratePlanOrder(plans) {
+  if (plans.every((p) => typeof p.order === "number")) return plans;
+  const legacyOrder = [...plans].sort((a, b) => (b.dateCreated || "").localeCompare(a.dateCreated || ""));
+  const orderById = new Map(legacyOrder.map((p, i) => [p.id, i]));
+  return plans.map((p) => (typeof p.order === "number" ? p : { ...p, order: orderById.get(p.id) }));
+}
+
+// Determines the order budgets appear in on the Plans list. Every plan carries
+// an explicit numeric `order` (lower = higher up the list). This is the single
+// source of truth for list position - nothing else influences it. New plans
+// are assigned an order below the current minimum (see nextTopPlanOrder) so
+// they land at the top, and reorderPlan renumbers everyone sequentially
+// whenever the user moves one manually.
+function sortedPlansList(plans) {
+  return [...plans].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+// An order value guaranteed to sort above every plan currently in the list -
+// used whenever a plan is created (new, duplicated, or repeated) so it always
+// lands at the top, without needing any other tiebreak logic.
+function nextTopPlanOrder(plans) {
+  if (!plans.length) return 0;
+  return Math.min(...plans.map((p) => (typeof p.order === "number" ? p.order : 0))) - 1;
+}
+
+function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate, onReorder }) {
   if (plans.length === 0) {
     return (
       <EmptyState
@@ -1765,14 +1795,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
     );
   }
 
-  // Primary sort by day; same-day ties (e.g. a plan and the repeat it just spawned)
-  // break on createdAt so the newest one surfaces first. Plans saved before
-  // createdAt existed fall back to 0 and simply keep their prior relative order.
-  const sorted = [...plans].sort((a, b) => {
-    const byDay = b.dateCreated.localeCompare(a.dateCreated);
-    if (byDay !== 0) return byDay;
-    return (b.createdAt || 0) - (a.createdAt || 0);
-  });
+  const sorted = sortedPlansList(plans);
 
   return (
     <div className="plans-view">
@@ -1780,7 +1803,7 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
         <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> New budget</button>
       </div>
       <div className="plans-list">
-        {sorted.map((p) => {
+        {sorted.map((p, pi) => {
           const allocated = planAllocated(p);
           const remaining = (Number(p.income) || 0) - allocated;
           return (
@@ -1794,6 +1817,28 @@ function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, 
                   )}
                 </div>
                 <div className="row-actions">
+                  <div className="plan-move-btns">
+                    <button
+                      type="button"
+                      className="icon-btn plan-move-btn"
+                      title="Move budget up"
+                      aria-label="Move budget up"
+                      disabled={pi === 0}
+                      onClick={() => onReorder(p.id, -1)}
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn plan-move-btn"
+                      title="Move budget down"
+                      aria-label="Move budget down"
+                      disabled={pi === sorted.length - 1}
+                      onClick={() => onReorder(p.id, 1)}
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                  </div>
                   <button className="icon-btn" title="Duplicate budget" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
                   <button className="icon-btn" title="Edit budget" onClick={() => onEdit(p)}><Pencil size={14} /></button>
                   <button className="icon-btn" title="Delete budget" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
@@ -2194,7 +2239,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
       income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
-      createdAt: initial.createdAt || Date.now(),
+      order: typeof initial.order === "number" ? initial.order : undefined,
       active: initial.active || false,
       repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
       categories: cats.map((c) => ({
@@ -2501,7 +2546,7 @@ export default function App() {
       try {
         const res = await window.storage.get(STORAGE_KEY, false);
         const raw = res && res.value ? JSON.parse(res.value) : null;
-        setState(raw ? { ...defaultState(), ...raw, plans: Array.isArray(raw.plans) ? raw.plans : [] } : defaultState());
+        setState(raw ? { ...defaultState(), ...raw, plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []) } : defaultState());
       } catch (e) {
         setState(defaultState());
       }
@@ -2727,9 +2772,10 @@ export default function App() {
       // transaction still linked to it) stale until the budget is reactivated.
       const synced = syncPlanCategories(p, s.categories);
       const categories = synced.categories;
-      const planToSave = synced.plan;
+      const exists = s.plans.some((x) => x.id === synced.plan.id);
+      // New plans always land at the top; edits keep whatever order they already had.
+      const planToSave = typeof synced.plan.order === "number" ? synced.plan : { ...synced.plan, order: nextTopPlanOrder(s.plans) };
       const transactions = clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds);
-      const exists = s.plans.some((x) => x.id === planToSave.id);
       let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [planToSave, ...s.plans];
       if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
       return { ...s, plans, categories, transactions };
@@ -2781,6 +2827,24 @@ export default function App() {
       const synced = syncPlanCategories(target, s.categories);
       const plans = s.plans.map((p) => (p.id === id ? { ...synced.plan, active: true } : { ...p, active: false }));
       return { ...s, plans, categories: synced.categories, transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds) };
+    });
+  };
+  // Moves a budget up/down one slot in the Plans list. Recomputes sequential
+  // order values for every plan based on the *current* display order (from
+  // sortedPlansList) so this also normalizes any plans that never had an
+  // explicit order yet - safe to call regardless of prior manual reordering.
+  const reorderPlan = (id, direction) => {
+    setState((s) => {
+      const displayList = sortedPlansList(s.plans);
+      const index = displayList.findIndex((p) => p.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= displayList.length) return s;
+      const reordered = [...displayList];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(target, 0, moved);
+      const orderById = new Map(reordered.map((p, i) => [p.id, i]));
+      const plans = s.plans.map((p) => ({ ...p, order: orderById.get(p.id) }));
+      return { ...s, plans };
     });
   };
   const duplicatePlan = (id) => {
@@ -3070,6 +3134,7 @@ export default function App() {
                 onDelete={requestDeletePlan}
                 onSetActive={setActivePlan}
                 onDuplicate={duplicatePlan}
+                onReorder={reorderPlan}
               />
             )}
             {view === "more" && (
@@ -3410,9 +3475,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
 .plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
-.plan-cat-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
-.plan-cat-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
-.plan-cat-move-btn:disabled { opacity:0.3; cursor:default; }
+.plan-cat-move-btns, .plan-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
+.plan-cat-move-btn, .plan-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
+.plan-cat-move-btn:disabled, .plan-move-btn:disabled { opacity:0.3; cursor:default; }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
