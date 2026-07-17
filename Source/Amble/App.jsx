@@ -652,7 +652,7 @@ function Modal({ title, onClose, children, wide }) {
       <div className={`modal${wide ? " modal-lg" : ""}`}>
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose}><X size={18} /></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog"><X size={18} /></button>
         </div>
         {children}
       </div>
@@ -666,7 +666,7 @@ function ConfirmDialog({ title, message, confirmLabel = "Delete", tone = "danger
       <div className="modal modal-sm">
         <div className="modal-header">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onCancel}><X size={18} /></button>
+          <button className="icon-btn" onClick={onCancel} aria-label="Close dialog"><X size={18} /></button>
         </div>
         <div className="modal-body">
           <p className="confirm-message">{message}</p>
@@ -2830,8 +2830,8 @@ function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, o
                   </td>
                   <td className="row-actions-cell">
                     <div className="row-actions">
-                      <button className="icon-btn" onClick={() => onEdit(t)}><Pencil size={14} /></button>
-                      <button className="icon-btn" onClick={() => onDelete(t.id)}><Trash2 size={14} /></button>
+                      <button className="icon-btn" onClick={() => onEdit(t)} aria-label="Edit transaction"><Pencil size={14} /></button>
+                      <button className="icon-btn" onClick={() => onDelete(t.id)} aria-label="Delete transaction"><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -2906,8 +2906,8 @@ function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, 
               <div className="acc-top">
                 <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
                 <div className="row-actions">
-                  <button className="icon-btn" onClick={() => onEdit(a)}><Pencil size={14} /></button>
-                  <button className="icon-btn" onClick={() => onDelete(a.id)}><Trash2 size={14} /></button>
+                  <button className="icon-btn" onClick={() => onEdit(a)} aria-label="Edit account"><Pencil size={14} /></button>
+                  <button className="icon-btn" onClick={() => onDelete(a.id)} aria-label="Delete account"><Trash2 size={14} /></button>
                 </div>
               </div>
               <div className="acc-name">{a.name}</div>
@@ -2966,8 +2966,8 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
       </td>
       <td className="row-actions-cell">
         <div className="row-actions">
-          <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
-          <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+          <button className="icon-btn" onClick={() => onEdit(c)} aria-label="Edit category"><Pencil size={14} /></button>
+          <button className="icon-btn" onClick={() => onDelete(c.id)} aria-label="Delete category"><Trash2 size={14} /></button>
         </div>
       </td>
     </tr>
@@ -3070,8 +3070,8 @@ function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans,
                 <td className="amount col-center">—</td>
                 <td className="row-actions-cell">
                   <div className="row-actions">
-                    <button className="icon-btn" onClick={() => onEdit(c)}><Pencil size={14} /></button>
-                    <button className="icon-btn" onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
+                    <button className="icon-btn" onClick={() => onEdit(c)} aria-label="Edit category"><Pencil size={14} /></button>
+                    <button className="icon-btn" onClick={() => onDelete(c.id)} aria-label="Delete category"><Trash2 size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -3776,7 +3776,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                 <input className="input" placeholder="e.g. Paycheck 1, Rollover from last month" value={it.name} onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })} />
                 <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                 {incomeItems.length > 1 && (
-                  <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)}><X size={14} /></button>
+                  <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><X size={14} /></button>
                 )}
               </div>
             ))}
@@ -3870,7 +3870,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                   <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
                   <button type="button" className={`seg-btn ${c.mode === "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "items" })}>Itemized</button>
                 </div>
-                <button type="button" className="icon-btn" onClick={() => removeCategory(c.id)}><Trash2 size={14} /></button>
+                <button type="button" className="icon-btn" onClick={() => removeCategory(c.id)} aria-label="Remove category"><Trash2 size={14} /></button>
               </div>
               {c.mode === "items" ? (
                 <div className="plan-items">
@@ -3879,7 +3879,7 @@ function PlanModal({ initial, onSave, onClose, onDelete }) {
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
                       <input type="date" className="input mono plan-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
                       <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
-                      <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)}><X size={14} /></button>
+                      <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)} aria-label="Remove expense item"><X size={14} /></button>
                     </div>
                   ))}
                   <div className="plan-items-footer">
