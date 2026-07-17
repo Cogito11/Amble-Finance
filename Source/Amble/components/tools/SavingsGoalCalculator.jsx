@@ -23,20 +23,22 @@ export function SavingsGoalCalculator({ onBack, accounts, balances }) {
     const freq = COMPOUND_FREQUENCIES.find((f) => f.id === frequency) || COMPOUND_FREQUENCIES[0];
     const monthsPerPeriod = freq.monthsPerPeriod;
     const periodRate = annualRate * (monthsPerPeriod / 12);
+    // Converted to a monthly-equivalent rate so every compounding frequency stays
+    // consistent with the others - see the matching comment in
+    // CompoundInterestCalculator.jsx for the full explanation of why this is
+    // necessary (in short: applying a whole period's interest to that same
+    // period's contributions in one lump sum overstates growth, worse for
+    // coarser frequencies, which backwards-ranks annual above monthly).
+    const monthlyRate = Math.pow(1 + periodRate, 1 / monthsPerPeriod) - 1;
 
     // Binary-search the monthly contribution that lands the balance on the
     // goal by the target date, using the same simulation as the growth
     // calculator above (keeps both tools consistent with each other).
     const simulate = (monthlyContribution) => {
       let balance = cur;
-      let monthsSincePeriodStart = 0;
       for (let m = 1; m <= n; m++) {
+        balance *= 1 + monthlyRate;
         balance += monthlyContribution;
-        monthsSincePeriodStart++;
-        if (monthsSincePeriodStart === monthsPerPeriod) {
-          balance *= 1 + periodRate;
-          monthsSincePeriodStart = 0;
-        }
       }
       return balance;
     };

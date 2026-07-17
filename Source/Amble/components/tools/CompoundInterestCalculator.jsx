@@ -25,21 +25,39 @@ export function CompoundInterestCalculator({ onBack, accounts, balances }) {
     const n = Math.max(1, Math.round((Number(years) || 0) * 12));
     const freq = COMPOUND_FREQUENCIES.find((f) => f.id === frequency) || COMPOUND_FREQUENCIES[0];
     const monthsPerPeriod = freq.monthsPerPeriod;
-    // Rate applied each time interest compounds, scaled to that period's length.
+    // The nominal rate for one full compounding period (e.g. the whole annual rate
+    // for "annually", a quarter of it for "quarterly").
     const periodRate = annualRate * (monthsPerPeriod / 12);
+    // Converts that period rate into its equivalent monthly rate, so it can be
+    // applied every month regardless of which compounding frequency is selected.
+    //
+    // This matters because contributions happen every month no matter what. If
+    // interest were only applied once per period (e.g. once a year for "annually"),
+    // that single application would credit a full period's interest to money that,
+    // for most of that period, hadn't been in the account yet - a contribution made
+    // in month 2 would get the same full annual rate as the principal that had been
+    // sitting there since month 1. That systematically overstates growth, and does
+    // so more the coarser the frequency is - which is exactly backwards: with the
+    // same nominal rate, more frequent compounding should always produce equal or
+    // *more* growth than less frequent compounding, never less. Converting to a
+    // monthly-equivalent rate (the same math as the standard (1+r/n)^n formula)
+    // keeps every frequency mathematically consistent with the others, so annual
+    // compounding correctly comes out lowest and monthly correctly comes out highest
+    // for the same quoted rate.
+    const monthlyRate = Math.pow(1 + periodRate, 1 / monthsPerPeriod) - 1;
 
     let balance = p;
     let contributions = p;
-    let monthsSincePeriodStart = 0;
     const points = [{ year: 0, balance: p, contributions: p }];
     for (let m = 1; m <= n; m++) {
+      // Grow the balance first, then add this month's contribution - so a
+      // contribution starts earning interest the month after it's made, not
+      // instantly on the day it's deposited. This is the standard convention
+      // (an "ordinary annuity") and, combined with monthlyRate above, is what
+      // keeps every compounding frequency comparable to the others.
+      balance *= 1 + monthlyRate;
       balance += c;
       contributions += c;
-      monthsSincePeriodStart++;
-      if (monthsSincePeriodStart === monthsPerPeriod) {
-        balance *= 1 + periodRate;
-        monthsSincePeriodStart = 0;
-      }
       if (m % 12 === 0) {
         points.push({ year: m / 12, balance: Math.round(balance), contributions: Math.round(contributions) });
       }
