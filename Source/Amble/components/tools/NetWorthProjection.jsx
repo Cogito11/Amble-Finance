@@ -29,8 +29,13 @@ export function NetWorthProjection({ onBack, accounts, balances }) {
     let bal = Number(startingNetWorth) || 0;
     const points = [{ year: 0, balance: Math.round(bal) }];
     for (let m = 1; m <= n; m++) {
-      bal += Number(monthlyAmount) || 0;
+      // Grow the existing balance first, then add this month's contribution -
+      // so a contribution starts earning interest the following month, not
+      // instantly on the day it's added. Matches the convention used (and
+      // verified against Investor.gov's own compound interest calculator) in
+      // CompoundInterestCalculator.jsx and SavingsGoalCalculator.jsx.
       bal *= 1 + monthlyRate;
+      bal += Number(monthlyAmount) || 0;
       if (m % 12 === 0) points.push({ year: m / 12, balance: Math.round(bal) });
     }
     return { finalBalance: bal, points };
