@@ -1576,7 +1576,7 @@ function DebtPayoffPlanner({ onBack, accounts, balances }) {
         <>
           <div className="card">
             <div className="card-title">Snowball vs. avalanche</div>
-            <div className="stat-row tool-result-row">
+            <div className="stat-row tool-result-row" style={{ marginBottom: 12 }}>
               <StatCard label="Snowball: debt-free in" value={fmtMonths(snowball.months)} tone="brass" icon={TrendingDown} />
               <StatCard label="Snowball: total interest" value={fmt(snowball.totalInterest)} tone="rust" icon={ArrowUpRight} />
             </div>
