@@ -807,7 +807,7 @@ const TOOLS_CATALOG = [
       },
       {
         id: "recurring-spend",
-        label: "Recurring Spend Audit",
+        label: "Recurring Spending Audit",
         desc: "Find recurring charges hiding in your transactions and see what they add up to.",
         icon: Repeat,
         available: true,
