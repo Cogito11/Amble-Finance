@@ -229,3 +229,5 @@ export const STORAGE_KEY = "vault-finance-data-v1";
 export const THEME_KEY = "amble-theme-pref-v1";
 
 export const WIDGETS_KEY = "amble-dashboard-widgets-v1";
+
+export const SIDEBAR_KEY = "amble-sidebar-prefs-v1";

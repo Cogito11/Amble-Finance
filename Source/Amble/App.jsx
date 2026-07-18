@@ -9,6 +9,7 @@ import { CategoryModal } from "./components/modals/CategoryModal";
 import { PlanModal } from "./components/modals/PlanModal";
 import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
+import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
 import { BudgetsView } from "./components/views/BudgetsView";
@@ -16,16 +17,17 @@ import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
 import { PlansView } from "./components/views/PlansView";
 import { TransactionsView } from "./components/views/TransactionsView";
-import { NAV_ITEMS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultWidgetPrefs } from "./constants";
-import { computeBalance, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
+import { NAV_ITEMS, SIDEBAR_KEY, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultWidgetPrefs } from "./constants";
+import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, syncPlanCategories } from "./state/categories";
 import { defaultState, migratePlanOrder, nextTopPlanOrder, rolloverDuePlans, sortedPlansList } from "./state/plans";
 import { CSS } from "./styles/theme";
-import { todayStr } from "./utils/dates";
+import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
 import { isTypingTarget, uid } from "./utils/misc";
 
 export default function App() {
+  const sidebarSections = [...NAV_ITEMS, { id: "more", label: "More", icon: MoreHorizontal }];
   const [state, setState] = useState(null);
   const [loaded, setLoaded] = useState(false);
   // Read the saved theme preference synchronously (rather than via an async
@@ -108,6 +110,19 @@ export default function App() {
     }
   });
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
+  const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
+  const [sidebarPrefs, setSidebarPrefs] = useState(() => {
+    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth" };
+    try {
+      const raw = localStorage.getItem(SIDEBAR_KEY);
+      if (!raw) return defaultPrefs;
+      const saved = JSON.parse(raw);
+      const order = [...(saved.order || []).filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !(saved.order || []).includes(id))];
+      return { order, visible: { ...defaultPrefs.visible, ...(saved.visible || {}) }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
+    } catch (e) {
+      return defaultPrefs;
+    }
+  });
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   // Lets the global shortcut handler focus the transactions search box even
   // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) - the
@@ -138,9 +153,26 @@ export default function App() {
     })();
   }, [dashboardWidgets]);
 
+  useEffect(() => {
+    (async () => {
+      try { await window.storage.set(SIDEBAR_KEY, JSON.stringify(sidebarPrefs), false); }
+      catch (e) { /* silent */ }
+    })();
+  }, [sidebarPrefs]);
+
   const toggleWidget = (id) => {
     setDashboardWidgets((w) => ({ ...w, [id]: !w[id] }));
   };
+
+  const toggleSidebarSection = (id) => setSidebarPrefs((prefs) => ({ ...prefs, visible: { ...prefs.visible, [id]: !prefs.visible[id] } }));
+  const reorderSidebarSection = (draggedId, targetId) => setSidebarPrefs((prefs) => {
+    const order = [...prefs.order];
+    const from = order.indexOf(draggedId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return prefs;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    return { ...prefs, order };
+  });
 
   useEffect(() => {
     (async () => {
@@ -203,7 +235,7 @@ export default function App() {
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
     txModal !== null || accModal !== null || catModal !== null || planModal !== null ||
-    widgetModalOpen || !!confirmDialog || shortcutsOpen;
+    widgetModalOpen || sidebarModalOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
   // above the loading-state early return below. It bails out immediately while
@@ -221,6 +253,7 @@ export default function App() {
         if (shortcutsOpen) { setShortcutsOpen(false); return; }
         if (confirmDialog) { setConfirmDialog(null); return; }
         if (widgetModalOpen) { setWidgetModalOpen(false); return; }
+        if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
         if (txModal !== null) { setTxModal(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
@@ -281,7 +314,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -669,6 +702,19 @@ export default function App() {
   };
 
   const netWorth = state.accounts.reduce((s, a) => s + balances[a.id], 0);
+  const totalDebt = state.accounts.filter(isDebtAccount).reduce((sum, account) => sum + Math.max(0, -balances[account.id]), 0);
+  const totalAssets = state.accounts.filter(isAssetAccount).reduce((sum, account) => sum + balances[account.id], 0);
+  const cash = state.accounts.filter((account) => account.type === "cash").reduce((sum, account) => sum + balances[account.id], 0);
+  const netThisMonth = state.transactions.filter((transaction) => monthKeyOf(transaction.date) === currentMonthKey()).reduce((sum, transaction) => sum + (transaction.type === "income" ? transaction.amount : transaction.type === "expense" ? -transaction.amount : 0), 0);
+  const footerMetrics = {
+    netWorth: { label: "Net worth", value: netWorth },
+    debt: { label: "Debt", value: totalDebt },
+    cash: { label: "Cash", value: cash },
+    totalAssets: { label: "Total assets", value: totalAssets },
+    netThisMonth: { label: "Net this month", value: netThisMonth },
+  };
+  const footerMetric = footerMetrics[sidebarPrefs.footerMetric] || footerMetrics.netWorth;
+  const orderedSidebarSections = sidebarPrefs.order.map((id) => sidebarSections.find((section) => section.id === id)).filter(Boolean);
 
   return (
     <div className={`app-root${darkMode ? " dark" : ""}`}>
@@ -683,18 +729,18 @@ export default function App() {
             </div>
           </div>
           <nav className="nav">
-            {NAV_ITEMS.map((item) => (
+            {orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]).map((item) => (
               <button key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
                 <item.icon size={18} /> <span>{item.label}</span>
               </button>
             ))}
-            <button className={`nav-item ${view === "more" ? "active" : ""}`} onClick={() => setView("more")}>
-              <MoreHorizontal size={18} /> <span>More</span>
-            </button>
           </nav>
           <div className="sidebar-footer">
-            <div className="nw-label">Net worth</div>
-            <div className="nw-value">{fmt(netWorth)}</div>
+            <div>
+              <div className="nw-label">{footerMetric.label}</div>
+              <div className="nw-value">{fmt(footerMetric.value)}</div>
+            </div>
+            <button className="icon-btn" onClick={() => setSidebarModalOpen(true)} title="Customize sidebar" aria-label="Customize sidebar"><Sliders size={16} /></button>
           </div>
         </aside>
 
@@ -812,6 +858,17 @@ export default function App() {
       )}
       {widgetModalOpen && (
         <WidgetSettingsModal widgets={dashboardWidgets} onToggle={toggleWidget} onClose={() => setWidgetModalOpen(false)} />
+      )}
+      {sidebarModalOpen && (
+        <SidebarSettingsModal
+          sections={orderedSidebarSections}
+          visible={sidebarPrefs.visible}
+          footerMetric={sidebarPrefs.footerMetric}
+          onToggle={toggleSidebarSection}
+          onReorder={reorderSidebarSection}
+          onChangeMetric={(footerMetric) => setSidebarPrefs((prefs) => ({ ...prefs, footerMetric }))}
+          onClose={() => setSidebarModalOpen(false)}
+        />
       )}
       {shortcutsOpen && (
         <ShortcutsModal onClose={() => setShortcutsOpen(false)} />
