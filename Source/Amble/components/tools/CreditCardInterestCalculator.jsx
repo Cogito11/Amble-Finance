@@ -59,6 +59,13 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
     return { months, totalInterest, points, maxedOut: months >= 600, totalPaid: startBalance + totalInterest, stuck: false };
   }, [balance, apr, payMode, fixedPayment, minPercent]);
 
+  // Minimum payments change as the balance falls. Show the first payment so the
+  // user can immediately see the amount the calculation starts with.
+  const initialMinimumPayment = Math.min(
+    Math.max(0, Number(balance) || 0),
+    Math.max((Math.max(0, Number(balance) || 0) * (Math.max(0, Number(minPercent) || 0)) / 100), Math.min(25, Math.max(0, Number(balance) || 0)))
+  );
+
   return (
     <div className="tool-detail">
       <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
@@ -117,6 +124,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
             <label>Minimum payment</label>
             <input className="input" type="number" min="0" step="0.5" value={minPercent} onWheel={blurOnWheel} onChange={(e) => setMinPercent(e.target.value)} />
             <div className="tool-note">Uses whichever is greater: {minPercent || 0}% of the balance, or $25.</div>
+            <div className="tool-note">Initial monthly payment: {fmt(initialMinimumPayment)}</div>
           </div>
         )}
       </div>
