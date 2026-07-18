@@ -4,14 +4,15 @@ import {
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { blurOnWheel, uid } from "../../utils/misc";
+import { isDebtAccount } from "../../state/accounts";
 
 export function AccountModal({ initial, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [institution, setInstitution] = useState(initial.institution || "");
   const [type, setType] = useState(initial.type || "checking");
-  const isCredit = type === "credit";
-  const existingDisplay = initial.id ? (isCredit ? Math.max(0, -(initial.startingBalance || 0)) : (initial.startingBalance || 0)) : "";
+  const isDebt = isDebtAccount({ type });
+  const existingDisplay = initial.id ? (isDebt ? Math.max(0, -(initial.startingBalance || 0)) : (initial.startingBalance || 0)) : "";
   const [balanceInput, setBalanceInput] = useState(existingDisplay);
   const [interestRateInput, setInterestRateInput] = useState(initial.interestRate ?? "");
 
@@ -26,7 +27,7 @@ export function AccountModal({ initial, onSave, onClose, onDelete }) {
       name: name.trim(),
       institution: institution.trim(),
       type,
-      startingBalance: isCredit ? -Math.abs(val) : val,
+      startingBalance: isDebt ? -Math.abs(val) : val,
       interestRate: rateVal,
       order: typeof initial.order === "number" ? initial.order : undefined,
     });
@@ -48,17 +49,20 @@ export function AccountModal({ initial, onSave, onClose, onDelete }) {
           <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="checking">Checking</option>
             <option value="savings">Savings</option>
+            <option value="cash">Cash</option>
+            <option value="asset">Asset</option>
             <option value="credit">Credit Card</option>
+            <option value="loan">Loan</option>
           </select>
         </div>
         <div className="form-group">
-          <label>{isCredit ? (isEdit ? "Starting balance owed" : "Current balance owed") : isEdit ? "Starting balance" : "Current balance"}</label>
+          <label>{isDebt ? (isEdit ? "Starting balance owed" : "Current balance owed") : isEdit ? "Starting balance" : "Current balance"}</label>
           <input type="number" step="0.01" className="input mono" placeholder="0.00" value={balanceInput} onChange={(e) => setBalanceInput(e.target.value)} onWheel={blurOnWheel} />
         </div>
         <div className="form-group">
-          <label>{isCredit ? "APR (%)" : "Interest rate (%)"} <span className="muted">· optional</span></label>
+          <label>{isDebt ? "APR (%)" : "Interest rate (%)"} <span className="muted">· optional</span></label>
           <input type="number" step="0.01" min="0" className="input mono" placeholder="e.g. 4.5" value={interestRateInput} onChange={(e) => setInterestRateInput(e.target.value)} onWheel={blurOnWheel} />
-          <div className="tool-note">If set, tools like the compound interest and debt payoff calculators will use this automatically when you select this account.</div>
+          <div className="tool-note">If set, compatible growth and payoff tools will use this automatically when you select this account.</div>
         </div>
       </div>
       <div className="modal-footer">

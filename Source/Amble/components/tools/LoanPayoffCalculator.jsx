@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   ArrowUpRight, Landmark, Calculator, ArrowLeft, TrendingDown
 } from "lucide-react";
@@ -42,11 +42,23 @@ export function computeAmortization(principal, aprPct, termYears, extra) {
   return { basePayment, totalInterest, months: month, yearly };
 }
 
-export function LoanPayoffCalculator({ onBack }) {
+export function LoanPayoffCalculator({ onBack, accounts, balances }) {
   const [principal, setPrincipal] = useState(300000);
   const [apr, setApr] = useState(6.5);
   const [termYears, setTermYears] = useState(30);
   const [extra, setExtra] = useState(0);
+  const [accountId, setAccountId] = useState("");
+  const loanAccounts = useMemo(
+    () => (accounts || []).filter((a) => a.type === "loan" && Number(balances?.[a.id]) < 0),
+    [accounts, balances]
+  );
+
+  useEffect(() => {
+    if (!accountId || balances?.[accountId] === undefined) return;
+    const account = (accounts || []).find((a) => a.id === accountId);
+    setPrincipal(Math.round(Math.abs(balances[accountId]) * 100) / 100);
+    if (account?.interestRate != null) setApr(account.interestRate);
+  }, [accountId, accounts, balances]);
 
   const withExtra = useMemo(() => computeAmortization(principal, apr, termYears, extra), [principal, apr, termYears, extra]);
   const noExtra = useMemo(() => computeAmortization(principal, apr, termYears, 0), [principal, apr, termYears]);
@@ -63,6 +75,18 @@ export function LoanPayoffCalculator({ onBack }) {
 
       <div className="card">
         <div className="card-title">Loan details</div>
+        {loanAccounts.length > 0 && (
+          <div className="form-group">
+            <label>Load a saved loan <span className="muted">· optional</span></label>
+            <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              <option value="">Enter manually</option>
+              {loanAccounts.map((account) => (
+                <option key={account.id} value={account.id}>{account.name} · {fmt(Math.abs(balances[account.id]))}</option>
+              ))}
+            </select>
+            {accountId && <div className="tool-note">Balance and saved APR are loaded from this account. Set the loan term below to calculate its payoff.</div>}
+          </div>
+        )}
         <div className="form-row">
           <div className="form-group">
             <label>Loan amount</label>

@@ -9,6 +9,7 @@ import { EmptyState } from "../common/EmptyState";
 import { StatCard } from "../common/StatCard";
 import { fmt, fmtMonths } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
+import { isDebtAccount } from "../../state/accounts";
 
 // Simulates paying off a set of debts under a given strategy ("avalanche" pays
 // the highest-APR debt first, "snowball" pays the smallest balance first).
@@ -79,15 +80,15 @@ export function DebtPayoffPlanner({ onBack, accounts, balances }) {
   ]);
   const [extra, setExtra] = useState(100);
 
-  const creditAccounts = useMemo(
-    () => (accounts || []).filter((a) => a.type === "credit" && Number(balances?.[a.id]) < 0),
+  const debtAccounts = useMemo(
+    () => (accounts || []).filter((a) => isDebtAccount(a) && Number(balances?.[a.id]) < 0),
     [accounts, balances]
   );
   const loadedAccountIds = useMemo(() => new Set(debts.map((d) => d.accountId).filter(Boolean)), [debts]);
-  const hasUnloadedAccounts = creditAccounts.some((a) => !loadedAccountIds.has(a.id));
+  const hasUnloadedAccounts = debtAccounts.some((a) => !loadedAccountIds.has(a.id));
 
   const loadFromAccounts = () => {
-    const newRows = creditAccounts
+    const newRows = debtAccounts
       .filter((a) => !loadedAccountIds.has(a.id))
       .map((a) => {
         const bal = Math.round(Math.abs(balances[a.id]) * 100) / 100;
@@ -153,7 +154,7 @@ export function DebtPayoffPlanner({ onBack, accounts, balances }) {
           <span>Your debts</span>
           {hasUnloadedAccounts && (
             <button type="button" className="btn btn-ghost btn-sm" onClick={loadFromAccounts}>
-              <Download size={13} /> Load credit card balances
+              <Download size={13} /> Load account debts
             </button>
           )}
         </div>

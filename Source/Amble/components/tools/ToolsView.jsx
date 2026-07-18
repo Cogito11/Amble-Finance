@@ -23,7 +23,7 @@ export function ToolsView({ accounts, balances, transactions }) {
   if (activeToolId === "net-worth-projection") return <NetWorthProjection onBack={back} accounts={accounts} balances={balances} />;
   if (activeToolId === "recurring-spend") return <RecurringSpendAudit onBack={back} transactions={transactions} />;
   if (activeToolId === "credit-card-interest") return <CreditCardInterestCalculator onBack={back} accounts={accounts} balances={balances} />;
-  if (activeToolId === "loan-payoff") return <LoanPayoffCalculator onBack={back} />;
+  if (activeToolId === "loan-payoff") return <LoanPayoffCalculator onBack={back} accounts={accounts} balances={balances} />;
 
   return (
     <div className="tools-view">
