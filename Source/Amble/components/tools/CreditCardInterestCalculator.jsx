@@ -15,6 +15,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   const [payMode, setPayMode] = useState("fixed");
   const [fixedPayment, setFixedPayment] = useState(150);
   const [minPercent, setMinPercent] = useState(2);
+  const [sourceMode, setSourceMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
 
   const creditAccounts = useMemo(
@@ -23,7 +24,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   );
 
   useEffect(() => {
-    if (accountId && balances?.[accountId] !== undefined) {
+    if (sourceMode === "account" && accountId && balances?.[accountId] !== undefined) {
       setBalance(Math.round(Math.abs(balances[accountId]) * 100) / 100);
       const acct = (accounts || []).find((a) => a.id === accountId);
       if (acct && acct.interestRate != null) {
@@ -31,7 +32,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, balances, accounts]);
+  }, [sourceMode, accountId, balances, accounts]);
 
   const result = useMemo(() => {
     const startBalance = Math.max(0, Number(balance) || 0);
@@ -70,23 +71,30 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
         <div className="card-title">
           <span>Balance</span>
           {creditAccounts.length > 0 && (
-            <select className="select" style={{ width: 220 }} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Enter manually</option>
-              {creditAccounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name} · {fmt(Math.abs(balances[a.id]))}</option>
-              ))}
-            </select>
+            <div className="seg card-corner-seg" role="group" aria-label="Balance source">
+              <button type="button" className={`seg-btn ${sourceMode === "manual" ? "active" : ""}`} onClick={() => setSourceMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${sourceMode === "account" ? "active" : ""}`} onClick={() => setSourceMode("account")}>From account</button>
+            </div>
           )}
         </div>
         <div className="form-row">
           <div className="form-group">
             <label>Balance / purchase amount</label>
-            <input className="input" type="number" min="0" step="10" value={balance} onWheel={blurOnWheel} onChange={(e) => { setAccountId(""); setBalance(e.target.value); }} />
+            {sourceMode === "account" && creditAccounts.length > 0 ? (
+              <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">Select an account…</option>
+                {creditAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name} · {fmt(Math.abs(balances[account.id]))}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="input" type="number" min="0" step="10" value={balance} onWheel={blurOnWheel} onChange={(e) => setBalance(e.target.value)} />
+            )}
           </div>
           <div className="form-group">
             <label>APR (%)</label>
             <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
-            {accountId && (accounts || []).find((a) => a.id === accountId)?.interestRate != null && (
+            {sourceMode === "account" && accountId && (accounts || []).find((a) => a.id === accountId)?.interestRate != null && (
               <div className="tool-note">Pulled from the account's saved APR - edit freely.</div>
             )}
           </div>

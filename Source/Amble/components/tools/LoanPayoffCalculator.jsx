@@ -47,6 +47,7 @@ export function LoanPayoffCalculator({ onBack, accounts, balances }) {
   const [apr, setApr] = useState(6.5);
   const [termYears, setTermYears] = useState(30);
   const [extra, setExtra] = useState(0);
+  const [sourceMode, setSourceMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
   const loanAccounts = useMemo(
     () => (accounts || []).filter((a) => a.type === "loan" && Number(balances?.[a.id]) < 0),
@@ -54,11 +55,11 @@ export function LoanPayoffCalculator({ onBack, accounts, balances }) {
   );
 
   useEffect(() => {
-    if (!accountId || balances?.[accountId] === undefined) return;
+    if (sourceMode !== "account" || !accountId || balances?.[accountId] === undefined) return;
     const account = (accounts || []).find((a) => a.id === accountId);
     setPrincipal(Math.round(Math.abs(balances[accountId]) * 100) / 100);
     if (account?.interestRate != null) setApr(account.interestRate);
-  }, [accountId, accounts, balances]);
+  }, [sourceMode, accountId, accounts, balances]);
 
   const withExtra = useMemo(() => computeAmortization(principal, apr, termYears, extra), [principal, apr, termYears, extra]);
   const noExtra = useMemo(() => computeAmortization(principal, apr, termYears, 0), [principal, apr, termYears]);
@@ -74,27 +75,33 @@ export function LoanPayoffCalculator({ onBack, accounts, balances }) {
       <div className="tool-page-title"><Landmark size={18} /> Loan / Mortgage Payoff Calculator</div>
 
       <div className="card">
-        <div className="card-title">Loan details</div>
-        {loanAccounts.length > 0 && (
-          <div className="form-group">
-            <label>Load a saved loan <span className="muted">· optional</span></label>
-            <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Enter manually</option>
-              {loanAccounts.map((account) => (
-                <option key={account.id} value={account.id}>{account.name} · {fmt(Math.abs(balances[account.id]))}</option>
-              ))}
-            </select>
-            {accountId && <div className="tool-note">Balance and saved APR are loaded from this account. Set the loan term below to calculate its payoff.</div>}
-          </div>
-        )}
+        <div className="card-title">
+          <span>Loan details</span>
+          {loanAccounts.length > 0 && (
+            <div className="seg card-corner-seg" role="group" aria-label="Loan source">
+              <button type="button" className={`seg-btn ${sourceMode === "manual" ? "active" : ""}`} onClick={() => setSourceMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${sourceMode === "account" ? "active" : ""}`} onClick={() => setSourceMode("account")}>From account</button>
+            </div>
+          )}
+        </div>
         <div className="form-row">
           <div className="form-group">
             <label>Loan amount</label>
-            <input className="input" type="number" min="0" step="1000" value={principal} onWheel={blurOnWheel} onChange={(e) => setPrincipal(e.target.value)} />
+            {sourceMode === "account" && loanAccounts.length > 0 ? (
+              <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">Select an account…</option>
+                {loanAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name} · {fmt(Math.abs(balances[account.id]))}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="input" type="number" min="0" step="1000" value={principal} onWheel={blurOnWheel} onChange={(e) => setPrincipal(e.target.value)} />
+            )}
           </div>
           <div className="form-group">
             <label>Interest rate (APR %)</label>
             <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
+            {sourceMode === "account" && accountId && <div className="tool-note">Balance and saved APR are loaded from this account. Set the loan term below.</div>}
           </div>
         </div>
         <div className="form-row">
