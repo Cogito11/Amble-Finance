@@ -187,6 +187,17 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .search-input:focus-within { border-color: var(--brass); box-shadow: 0 0 0 3px var(--brass-soft); }
 .search-input input { background:transparent; border:none; color:var(--text); font-size:13.5px; width:100%; outline:none; }
 .search-input input:focus, .search-input input:focus-visible { outline:none; }
+.tx-column-heading { display:flex; align-items:center; gap:4px; position:relative; white-space:nowrap; }
+.tx-column-heading-right { justify-content:flex-end; }
+.tx-column-filter { display:flex; }
+.tx-filter-trigger { display:flex; align-items:center; justify-content:center; border:none; background:transparent; color:var(--text-faint); padding:3px; border-radius:4px; cursor:pointer; }
+.tx-filter-trigger:hover, .tx-filter-trigger.active { color:var(--brass); background:var(--brass-soft); }
+.tx-filter-menu { position:absolute; z-index:15; top:calc(100% + 7px); left:0; width:220px; padding:12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); box-shadow:0 12px 24px rgba(0,0,0,0.16); display:flex; flex-direction:column; gap:7px; text-transform:none; letter-spacing:normal; font-size:12px; font-weight:400; color:var(--text-muted); }
+.tx-column-heading-right .tx-filter-menu { left:auto; right:0; }
+.tx-filter-menu-title { display:flex; align-items:center; justify-content:space-between; color:var(--text); font-size:13px; font-weight:600; padding-bottom:5px; border-bottom:1px solid var(--border); }
+.tx-filter-menu-title .icon-btn { padding:2px; }
+.tx-filter-menu label { font-size:11px; color:var(--text-faint); margin-top:3px; }
+.tx-filter-menu .select, .tx-filter-menu .input { width:100%; min-width:0; padding:7px 8px; font-size:12px; }
 .select, .input { background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13.5px; font-family:'Inter',sans-serif; }
 .input[readonly] { color: var(--text-muted); cursor:default; }
 .input.mono, .select.mono { font-family:'JetBrains Mono',monospace; }
