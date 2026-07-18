@@ -24,14 +24,16 @@ function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
   );
 }
 
+const DEFAULT_FILTERS = {
+  dateFrom: "", dateTo: "", description: "", categoryId: "all", type: "all",
+  accountId: "all", amountMin: "", amountMax: "",
+};
+
 /* ---------------------------------- transactions view ---------------------------------- */
 export function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, onDelete, searchInputRef }) {
   const [search, setSearch] = useState("");
   const [openFilter, setOpenFilter] = useState(null);
-  const [filters, setFilters] = useState({
-    dateFrom: "", dateTo: "", description: "", categoryId: "all", type: "all",
-    accountId: "all", amountMin: "", amountMax: "",
-  });
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ column: "date", direction: "desc" });
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
@@ -53,6 +55,8 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
     account: filters.accountId !== "all",
     amount: filters.amountMin !== "" || filters.amountMax !== "",
   };
+  const isAnyFiltered = Object.values(isColumnFiltered).some(Boolean);
+  const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
   const filtered = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
@@ -104,6 +108,11 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
           <Search size={15} />
           <input ref={searchInputRef} placeholder="Search all transactions" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
+        {isAnyFiltered && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={resetFilters}>
+            <X size={13} /> Reset filters
+          </button>
+        )}
       </div>
 
       <div className="card no-pad">
