@@ -36,6 +36,11 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ column: "date", direction: "desc" });
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
+  const categoryFilterOptions = useMemo(() => {
+    const parentIds = new Set(categories.filter((c) => c.parentCategoryId).map((c) => c.parentCategoryId));
+    const names = new Set(categories.filter((c) => !parentIds.has(c.id)).map((c) => c.name));
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [categories]);
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
   const updateFilter = (patch) => setFilters((current) => ({ ...current, ...patch }));
   const clearFilter = (column) => {
@@ -69,7 +74,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
         if (filters.categoryId === "all") return true;
         if (filters.categoryId === "transfer") return transaction.type === "transfer";
         if (filters.categoryId === "uncategorized") return !transaction.categoryId && transaction.type !== "transfer";
-        return transaction.categoryId === filters.categoryId;
+        return catName(transaction.categoryId) === filters.categoryId;
       })
       .filter((transaction) => filters.accountId === "all" || transaction.accountId === filters.accountId || transaction.toAccountId === filters.accountId)
       .filter((transaction) => filters.amountMin === "" || transaction.amount >= Number(filters.amountMin))
@@ -131,7 +136,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                 <th><div className="tx-column-heading">Category / route<ColumnFilter label="Category / route" active={isColumnFiltered.category} open={openFilter === "category"} onToggle={() => setOpenFilter(openFilter === "category" ? null : "category")} onClear={() => clearFilter("category")}>
                   <label>Sort</label><select className="select" value={sortValue("category")} onChange={(event) => setColumnSort("category", event.target.value)}><option value="asc">A to Z</option><option value="desc">Z to A</option></select>
                   <label>Transaction type</label><select className="select" value={filters.type} onChange={(event) => updateFilter({ type: event.target.value })}><option value="all">All types</option><option value="income">Income</option><option value="expense">Expense</option><option value="transfer">Transfer</option></select>
-                  <label>Category / route</label><select className="select" value={filters.categoryId} onChange={(event) => updateFilter({ categoryId: event.target.value })}><option value="all">All categories and routes</option><option value="transfer">Transfers</option><option value="uncategorized">Uncategorized</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.parentCategoryId ? `↳ ${category.name}` : category.name}</option>)}</select>
+                  <label>Category / route</label><select className="select" value={filters.categoryId} onChange={(event) => updateFilter({ categoryId: event.target.value })}><option value="all">All categories and routes</option><option value="transfer">Transfers</option><option value="uncategorized">Uncategorized</option>{categoryFilterOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select>
                 </ColumnFilter></div></th>
                 <th><div className="tx-column-heading">Account<ColumnFilter label="Account" active={isColumnFiltered.account} open={openFilter === "account"} onToggle={() => setOpenFilter(openFilter === "account" ? null : "account")} onClear={() => clearFilter("account")}>
                   <label>Sort</label><select className="select" value={sortValue("account")} onChange={(event) => setColumnSort("account", event.target.value)}><option value="asc">A to Z</option><option value="desc">Z to A</option></select>
