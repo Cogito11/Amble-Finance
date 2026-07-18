@@ -10,7 +10,7 @@ import { Gauge } from "../common/Gauge";
 import { StatCard } from "../common/StatCard";
 import { planTotalSpent } from "./BudgetsView";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS, DASHBOARD_WIDGETS, defaultWidgetPrefs } from "../../constants";
-import { computeBalance, sortedAccountsList } from "../../state/accounts";
+import { computeBalance, isAssetAccount, isDebtAccount, sortedAccountsList } from "../../state/accounts";
 import { categorySpend, planAllocated } from "../../state/categories";
 import { currentMonthKey, isWithinRolling30Days, monthKeyOf, toLocalDateStr, todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
@@ -20,8 +20,8 @@ import { sortTransactionsNewestFirst } from "../../utils/misc";
 export function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx, onNavigate, widgets, onCustomize }) {
   const w = widgets || defaultWidgetPrefs();
   const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
-  const totalAssets = accounts.filter((a) => a.type !== "credit").reduce((s, a) => s + balances[a.id], 0);
-  const totalDebt = accounts.filter((a) => a.type === "credit").reduce((s, a) => s + Math.max(0, -balances[a.id]), 0);
+  const totalAssets = accounts.filter(isAssetAccount).reduce((s, a) => s + balances[a.id], 0);
+  const totalDebt = accounts.filter(isDebtAccount).reduce((s, a) => s + Math.max(0, -balances[a.id]), 0);
 
   const cmk = currentMonthKey();
   const monthTx = transactions.filter((t) => monthKeyOf(t.date) === cmk);
@@ -156,7 +156,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
   const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
 
   if (accounts.length === 0) {
-    return <EmptyState icon={Wallet} title="Set up your first account" message="Add a checking, savings, or credit card account to start tracking your money." actionLabel="Add account" onAction={onGoTx} />;
+    return <EmptyState icon={Wallet} title="Set up your first account" message="Add a cash, bank, asset, credit card, or loan account to start tracking your money." actionLabel="Add account" onAction={onGoTx} />;
   }
 
   const anyWidgetOn = DASHBOARD_WIDGETS.some((d) => w[d.id]);
@@ -198,7 +198,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
                 {sortedAccountsList(accounts).slice(0, 3).map((a) => {
                   const Icon = ACCOUNT_ICONS[a.type];
                   const bal = balances[a.id];
-                  const isDebt = a.type === "credit";
+                  const isDebt = isDebtAccount(a);
                   return (
                     <div key={a.id} className="dash-acc-row">
                       <div className="dash-acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={16} /></div>

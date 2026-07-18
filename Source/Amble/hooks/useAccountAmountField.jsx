@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { fmt } from "../utils/format";
 import { blurOnWheel } from "../utils/misc";
+import { isAssetAccount } from "../state/accounts";
 
 // Backs a number field that can optionally pull its value from one of the
 // user's real accounts instead of being typed in manually. Returns a small
 // toggle (meant for a card's top-right corner) plus the field body, so the
 // toggle isn't forced to live next to the label where it crowds the layout.
-// Credit cards are excluded since their balance represents debt, not savings.
+// Debt accounts are excluded since their balances represent amounts owed, not savings.
 export function useAccountAmountField({ value, onChange, accounts, balances }) {
   const [mode, setMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
-  const savingsAccounts = useMemo(() => (accounts || []).filter((a) => a.type !== "credit"), [accounts]);
+  const savingsAccounts = useMemo(() => (accounts || []).filter(isAssetAccount), [accounts]);
   const selectedAccount = savingsAccounts.find((a) => a.id === accountId) || null;
   const selectedBalance = accountId ? balances?.[accountId] : undefined;
 

@@ -15,6 +15,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   const [payMode, setPayMode] = useState("fixed");
   const [fixedPayment, setFixedPayment] = useState(150);
   const [minPercent, setMinPercent] = useState(2);
+  const [sourceMode, setSourceMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
 
   const creditAccounts = useMemo(
@@ -23,7 +24,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   );
 
   useEffect(() => {
-    if (accountId && balances?.[accountId] !== undefined) {
+    if (sourceMode === "account" && accountId && balances?.[accountId] !== undefined) {
       setBalance(Math.round(Math.abs(balances[accountId]) * 100) / 100);
       const acct = (accounts || []).find((a) => a.id === accountId);
       if (acct && acct.interestRate != null) {
@@ -31,7 +32,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, balances, accounts]);
+  }, [sourceMode, accountId, balances, accounts]);
 
   const result = useMemo(() => {
     const startBalance = Math.max(0, Number(balance) || 0);
@@ -58,6 +59,13 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
     return { months, totalInterest, points, maxedOut: months >= 600, totalPaid: startBalance + totalInterest, stuck: false };
   }, [balance, apr, payMode, fixedPayment, minPercent]);
 
+  // Minimum payments change as the balance falls. Show the first payment so the
+  // user can immediately see the amount the calculation starts with.
+  const initialMinimumPayment = Math.min(
+    Math.max(0, Number(balance) || 0),
+    Math.max((Math.max(0, Number(balance) || 0) * (Math.max(0, Number(minPercent) || 0)) / 100), Math.min(25, Math.max(0, Number(balance) || 0)))
+  );
+
   return (
     <div className="tool-detail">
       <button type="button" className="btn btn-ghost btn-sm tool-back-btn" onClick={onBack}>
@@ -70,23 +78,30 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
         <div className="card-title">
           <span>Balance</span>
           {creditAccounts.length > 0 && (
-            <select className="select" style={{ width: 220 }} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Enter manually</option>
-              {creditAccounts.map((a) => (
-                <option key={a.id} value={a.id}>{a.name} · {fmt(Math.abs(balances[a.id]))}</option>
-              ))}
-            </select>
+            <div className="seg card-corner-seg" role="group" aria-label="Balance source">
+              <button type="button" className={`seg-btn ${sourceMode === "manual" ? "active" : ""}`} onClick={() => setSourceMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${sourceMode === "account" ? "active" : ""}`} onClick={() => setSourceMode("account")}>From account</button>
+            </div>
           )}
         </div>
         <div className="form-row">
           <div className="form-group">
             <label>Balance / purchase amount</label>
-            <input className="input" type="number" min="0" step="10" value={balance} onWheel={blurOnWheel} onChange={(e) => { setAccountId(""); setBalance(e.target.value); }} />
+            {sourceMode === "account" && creditAccounts.length > 0 ? (
+              <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                <option value="">Select an account…</option>
+                {creditAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.name} · {fmt(Math.abs(balances[account.id]))}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="input" type="number" min="0" step="10" value={balance} onWheel={blurOnWheel} onChange={(e) => setBalance(e.target.value)} />
+            )}
           </div>
           <div className="form-group">
             <label>APR (%)</label>
             <input className="input" type="number" min="0" step="0.1" value={apr} onWheel={blurOnWheel} onChange={(e) => setApr(e.target.value)} />
-            {accountId && (accounts || []).find((a) => a.id === accountId)?.interestRate != null && (
+            {sourceMode === "account" && accountId && (accounts || []).find((a) => a.id === accountId)?.interestRate != null && (
               <div className="tool-note">Pulled from the account's saved APR - edit freely.</div>
             )}
           </div>
@@ -109,6 +124,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
             <label>Minimum payment</label>
             <input className="input" type="number" min="0" step="0.5" value={minPercent} onWheel={blurOnWheel} onChange={(e) => setMinPercent(e.target.value)} />
             <div className="tool-note">Uses whichever is greater: {minPercent || 0}% of the balance, or $25.</div>
+            <div className="tool-note">Initial monthly payment: {fmt(initialMinimumPayment)}</div>
           </div>
         )}
       </div>

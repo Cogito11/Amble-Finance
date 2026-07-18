@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
-import { sortedAccountsList } from "../../state/accounts";
+import { isDebtAccount, sortedAccountsList } from "../../state/accounts";
 import { fmt } from "../../utils/format";
 
 export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, error }) {
@@ -14,7 +14,7 @@ export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onRe
   const [overId, setOverId] = useState(null);
 
   if (accounts.length === 0) {
-    return <EmptyState icon={Wallet} title="No accounts yet" message="Add a checking, savings, or credit card account to begin tracking balances." actionLabel="Add account" onAction={onAdd} />;
+    return <EmptyState icon={Wallet} title="No accounts yet" message="Add a cash, bank, asset, credit card, or loan account to begin tracking balances." actionLabel="Add account" onAction={onAdd} />;
   }
 
   const sorted = sortedAccountsList(accounts);
@@ -26,7 +26,7 @@ export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onRe
         {sorted.map((a) => {
           const Icon = ACCOUNT_ICONS[a.type];
           const bal = balances[a.id];
-          const isDebt = a.type === "credit";
+          const isDebt = isDebtAccount(a);
           return (
             <div
               key={a.id}

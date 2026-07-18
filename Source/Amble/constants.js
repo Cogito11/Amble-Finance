@@ -51,9 +51,23 @@ export const SHORTCUTS = [
   },
 ];
 
-export const ACCOUNT_ICONS = { checking: Landmark, savings: PiggyBank, credit: CreditCard };
+export const ACCOUNT_ICONS = {
+  checking: Landmark,
+  savings: PiggyBank,
+  cash: Wallet,
+  asset: TrendingUp,
+  credit: CreditCard,
+  loan: Landmark,
+};
 
-export const ACCOUNT_LABELS = { checking: "Checking", savings: "Savings", credit: "Credit Card" };
+export const ACCOUNT_LABELS = {
+  checking: "Checking",
+  savings: "Savings",
+  cash: "Cash",
+  asset: "Asset",
+  credit: "Credit Card",
+  loan: "Loan",
+};
 
 export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -215,3 +229,5 @@ export const STORAGE_KEY = "vault-finance-data-v1";
 export const THEME_KEY = "amble-theme-pref-v1";
 
 export const WIDGETS_KEY = "amble-dashboard-widgets-v1";
+
+export const SIDEBAR_KEY = "amble-sidebar-prefs-v1";

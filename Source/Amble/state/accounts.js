@@ -1,3 +1,11 @@
+export function isDebtAccount(account) {
+  return account.type === "credit" || account.type === "loan";
+}
+
+export function isAssetAccount(account) {
+  return !isDebtAccount(account);
+}
+
 export function computeBalance(account, transactions) {
   let balance = account.startingBalance || 0;
   transactions.forEach((t) => {

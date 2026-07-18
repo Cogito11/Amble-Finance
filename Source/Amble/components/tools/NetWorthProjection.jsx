@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  ArrowUpRight, Download, ArrowLeft, TrendingUp, BarChart3
+  ArrowUpRight, ArrowLeft, TrendingUp, BarChart3
 } from "lucide-react";
 import {
   ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, LineChart, Line, Legend
@@ -21,6 +21,11 @@ export function NetWorthProjection({ onBack, accounts, balances }) {
   const [extra, setExtra] = useState(200);
   const [returnRate, setReturnRate] = useState(7);
   const [years, setYears] = useState(20);
+  const [sourceMode, setSourceMode] = useState("manual");
+
+  useEffect(() => {
+    if (sourceMode === "accounts") setStartingNetWorth(Math.round(computedNetWorth * 100) / 100);
+  }, [sourceMode, computedNetWorth]);
 
   const project = (monthlyAmount) => {
     const annualRate = (Number(returnRate) || 0) / 100;
@@ -67,14 +72,15 @@ export function NetWorthProjection({ onBack, accounts, balances }) {
         <div className="card-title">
           <span>Starting net worth</span>
           {hasAccounts && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStartingNetWorth(Math.round(computedNetWorth * 100) / 100)}>
-              <Download size={13} /> Use my current net worth
-            </button>
+            <div className="seg card-corner-seg" role="group" aria-label="Starting net worth source">
+              <button type="button" className={`seg-btn ${sourceMode === "manual" ? "active" : ""}`} onClick={() => setSourceMode("manual")}>Manual</button>
+              <button type="button" className={`seg-btn ${sourceMode === "accounts" ? "active" : ""}`} onClick={() => setSourceMode("accounts")}>From accounts</button>
+            </div>
           )}
         </div>
         <div className="form-group">
-          <input className="input" type="number" step="100" value={startingNetWorth} onWheel={blurOnWheel} onChange={(e) => setStartingNetWorth(e.target.value)} />
-          {hasAccounts && <div className="tool-note">Your accounts currently total {fmt(computedNetWorth)} in net worth.</div>}
+          <input className="input" type="number" step="100" value={startingNetWorth} readOnly={sourceMode === "accounts"} onWheel={blurOnWheel} onChange={(e) => setStartingNetWorth(e.target.value)} />
+          {sourceMode === "accounts" && <div className="tool-note">Your accounts currently total {fmt(computedNetWorth)} in net worth.</div>}
         </div>
       </div>
 
