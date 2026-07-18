@@ -115,7 +115,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
         )}
       </div>
 
-      <div className="card no-pad">
+      <div className={`card no-pad${filtered.length === 0 ? " tx-empty" : ""}`}>
           <table className="table full">
             <thead>
               <tr>

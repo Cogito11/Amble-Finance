@@ -198,6 +198,8 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tx-filter-menu-title .icon-btn { padding:2px; }
 .tx-filter-menu label { font-size:11px; color:var(--text-faint); margin-top:3px; }
 .tx-filter-menu .select, .tx-filter-menu .input { width:100%; min-width:0; padding:7px 8px; font-size:12px; }
+.card.no-pad.tx-empty { display:flex; flex-direction:column; min-height:420px; }
+.card.no-pad.tx-empty .table.full { flex:1; height:100%; }
 .table.full tbody td.tx-filter-empty { padding:34px 20px; min-height:280px; text-align:center; color:var(--text-muted); }
 .tx-filter-empty strong, .tx-filter-empty span { display:block; }
 .tx-filter-empty strong { color:var(--text); font-size:14px; margin-bottom:4px; }
