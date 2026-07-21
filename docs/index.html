@@ -25,24 +25,26 @@
     --text-muted: #5b7a91;
     --text-faint: #7c9db4;
     --shadow: 0 1px 2px rgba(18,50,73,0.04), 0 12px 32px -16px rgba(18,50,73,0.16);
-    color-scheme: light;
+    color-scheme: light dark;
   }
-  html[data-theme="dark"] {
-    --ink: #1a212c;
-    --surface: #212936;
-    --surface-2: #293344;
-    --border: #384457;
-    --brass: #6fb8ee;
-    --brass-soft: rgba(111,184,238,0.14);
-    --on-brass: #16222c;
-    --teal: #57b8ac;
-    --rust: #e08277;
-    --amber: #e0b361;
-    --text: #e5edf5;
-    --text-muted: #a7b8c9;
-    --text-faint: #77899c;
-    --shadow: 0 1px 2px rgba(0,0,0,0.2), 0 20px 40px -20px rgba(0,0,0,0.5);
-    color-scheme: dark;
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #1a212c;
+      --surface: #212936;
+      --surface-2: #293344;
+      --border: #384457;
+      --brass: #6fb8ee;
+      --brass-soft: rgba(111,184,238,0.14);
+      --on-brass: #16222c;
+      --teal: #57b8ac;
+      --rust: #e08277;
+      --amber: #e0b361;
+      --text: #e5edf5;
+      --text-muted: #a7b8c9;
+      --text-faint: #77899c;
+      --shadow: 0 1px 2px rgba(0,0,0,0.2), 0 20px 40px -20px rgba(0,0,0,0.5);
+    }
   }
 
   * { box-sizing: border-box; }
@@ -71,7 +73,7 @@
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
   }
-  .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; max-width: 1120px; margin: 0 auto; }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; padding: 0 28px; max-width: 1120px; margin: 0 auto; box-sizing: border-box; }
   .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
   .brand-mark {
     width: 32px; height: 32px; border-radius: 8px;
@@ -84,13 +86,6 @@
   .nav-links a { font-size: 14px; font-weight: 500; color: var(--text-muted); text-decoration: none; }
   .nav-links a:hover { color: var(--text); }
   .nav-right { display: flex; align-items: center; gap: 26px; }
-
-  .icon-btn {
-    width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text-muted); display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease;
-  }
-  .icon-btn:hover { color: var(--brass); border-color: var(--brass); }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -110,7 +105,14 @@
   }
 
   /* -------- hero -------- */
-  .hero { padding: 76px 0 64px; }
+  .hero {
+    min-height: calc(100vh - 73px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px 0;
+    box-sizing: border-box;
+  }
   .hero-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 56px; align-items: center; }
   .eyebrow {
     display: inline-flex; align-items: center; gap: 8px;
@@ -163,6 +165,27 @@
 
   .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
+  /* -------- why amble -------- */
+  .why-section { background: var(--surface-2); }
+  .why-lede { max-width: 680px; margin: 0 auto 40px; text-align: center; font-size: 15.5px; line-height: 1.7; color: var(--text-muted); }
+  .why-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 40px; }
+  .why-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px 22px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .why-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--brass); }
+  .why-card h3 { font-size: 15.5px; }
+  .why-card p { font-size: 13.5px; line-height: 1.6; color: var(--text-muted); }
+  .why-quote {
+    max-width: 720px; margin: 0 auto; text-align: center; padding: 30px 34px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  }
+  .why-quote p { font-family: 'Fraunces', serif; font-size: 19px; line-height: 1.55; color: var(--text); font-weight: 500; }
+  .why-quote span { display: block; margin-top: 12px; font-size: 12.5px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; }
+
+  @media (max-width: 860px) { .why-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .why-grid { grid-template-columns: 1fr; } }
+
   /* -------- features -------- */
   .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .feature-card {
@@ -180,7 +203,7 @@
   @media (max-width: 600px) { .feature-grid { grid-template-columns: 1fr; } }
 
   /* -------- how it works -------- */
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; counter-reset: step; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 30px; counter-reset: step; }
   .step { position: relative; padding-top: 6px; }
   .step-num {
     font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--brass);
@@ -193,6 +216,7 @@
     background: var(--border); display: none;
   }
   @media (min-width: 761px) { .step:not(:last-child)::after { display: block; } }
+  @media (max-width: 900px) { .steps { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 760px) { .steps { grid-template-columns: 1fr; gap: 28px; } }
 
   /* -------- download -------- */
@@ -269,14 +293,11 @@
       </a>
       <div class="nav-right">
         <div class="nav-links">
+          <a href="#why">Why Amble</a>
           <a href="#features">Features</a>
           <a href="#how-it-works">How it works</a>
         </div>
         <a class="btn btn-primary btn-sm" href="#download">Download</a>
-        <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">
-          <svg id="iconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
-          <svg id="iconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-        </button>
       </div>
     </div>
   </nav>
@@ -311,6 +332,49 @@
         </div>
       </div>
     </header>
+
+    <section id="why" class="why-section">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="section-eyebrow">WHY IT MATTERS</div>
+          <h2>Money you can't see is money you can't manage.</h2>
+        </div>
+        <p class="why-lede">
+          Most people don't overspend on purpose. They overspend because nothing shows them the
+          total until the bill arrives. A clear, current picture of your accounts and your budget
+          is one of the simplest changes you can make to your financial life, and one of the few
+          that pays off almost immediately.
+        </p>
+        <div class="why-grid">
+          <div class="why-card">
+            <span class="why-num mono">01</span>
+            <h3>See where it actually goes</h3>
+            <p>Small, recurring purchases are easy to lose track of one at a time and easy to spot once they're logged and totalled by category.</p>
+          </div>
+          <div class="why-card">
+            <span class="why-num mono">02</span>
+            <h3>Catch problems while they're small</h3>
+            <p>A budget gauge that's three-quarters full on the 12th of the month is a warning you can act on. A maxed-out card at month's end is not.</p>
+          </div>
+          <div class="why-card">
+            <span class="why-num mono">03</span>
+            <h3>Turn goals into numbers</h3>
+            <p>"Save more" isn't a plan. "$200 into savings every payday" is, and it only works if you can see whether you actually did it.</p>
+          </div>
+          <div class="why-card">
+            <span class="why-num mono">04</span>
+            <h3>Make debt visible, not abstract</h3>
+            <p>Tracking balances and interest rates side by side with everything else you own makes payoff progress concrete instead of a number you'd rather not think about.</p>
+          </div>
+        </div>
+        <div class="why-quote">
+          <p>You don't need a finance background to manage money well. You need to be able to see it clearly, consistently, in one place.</p>
+          <span>THE IDEA BEHIND AMBLE</span>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider" />
 
     <section id="features">
       <div class="wrap">
@@ -369,6 +433,30 @@
             <p>Everything is stored on your own computer. No account to create, no server to trust, nothing to subscribe to.</p>
           </div>
 
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <h3>Easy Debt Tracking</h3>
+            <p>Credit cards and loans carry their own balance and APR, kept alongside everything you own so payoff progress is easy to see instead of easy to avoid.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-11M12 6V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 10h6M17 16h6"/></svg>
+            </div>
+            <h3>Make it your own</h3>
+            <p>Show or hide dashboard widgets, reorder the sidebar, pick your footer summary, and set your currency. Amble adapts to how you actually want to use it.</p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            </div>
+            <h3>Back up and own your data</h3>
+            <p>Export a full JSON backup any time, or pull your transactions into a CSV for a spreadsheet. Your data can leave whenever you want it to. That's your call, not an app's.</p>
+          </div>
+
         </div>
       </div>
     </section>
@@ -379,23 +467,29 @@
       <div class="wrap">
         <div class="section-head">
           <div class="section-eyebrow">GETTING STARTED</div>
-          <h2>Up and running in three steps.</h2>
+          <h2>Up and running in four steps.</h2>
+          <p>With Amble it's easy to get started tracking your finances, the way it should be.</p>
         </div>
         <div class="steps">
           <div class="step">
             <span class="step-num mono">01</span>
             <h3>Add your accounts</h3>
-            <p>Checking, savings, credit cards - enter a starting balance for each and you're already tracking.</p>
+            <p>Checking, savings, credit cards, loans, or cash - enter a starting balance for each and you're already tracking your net worth.</p>
           </div>
           <div class="step">
             <span class="step-num mono">02</span>
-            <h3>Log what you spend</h3>
-            <p>Every expense, income, and transfer gets categorized as you go, in a few taps.</p>
+            <h3>Build a budget</h3>
+            <p>Split a paycheck or a monthly income into categories with real limits, and set it as your active plan.</p>
           </div>
           <div class="step">
             <span class="step-num mono">03</span>
+            <h3>Log what you spend</h3>
+            <p>Every expense, income, and transfer gets categorized as you go, in a few taps - searchable and filterable later.</p>
+          </div>
+          <div class="step">
+            <span class="step-num mono">04</span>
             <h3>Watch your gauges</h3>
-            <p>Set a budget per category and see exactly how much you have left, updated in real time.</p>
+            <p>Check the dashboard whenever you like and see exactly what's left in each category, updated in real time.</p>
           </div>
         </div>
       </div>
@@ -496,29 +590,6 @@ npm run build</pre>
   </footer>
 
   <script>
-    // ---- theme toggle, mirrors the app's own light/dark tokens ----
-    (function () {
-      var root = document.documentElement;
-      var stored = localStorage.getItem('amble-site-theme');
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var initial = stored || (prefersDark ? 'dark' : 'light');
-      if (initial === 'dark') root.setAttribute('data-theme', 'dark');
-
-      function syncIcons() {
-        var isDark = root.getAttribute('data-theme') === 'dark';
-        document.getElementById('iconMoon').style.display = isDark ? 'none' : 'block';
-        document.getElementById('iconSun').style.display = isDark ? 'block' : 'none';
-      }
-      syncIcons();
-
-      document.getElementById('themeToggle').addEventListener('click', function () {
-        var isDark = root.getAttribute('data-theme') === 'dark';
-        if (isDark) { root.removeAttribute('data-theme'); localStorage.setItem('amble-site-theme', 'light'); }
-        else { root.setAttribute('data-theme', 'dark'); localStorage.setItem('amble-site-theme', 'dark'); }
-        syncIcons();
-      });
-    })();
-
     // ---- download panel: OS detection + live GitHub release assets ----
     (function () {
       var REPO = 'Cogito11/Amble-Finance';
@@ -608,7 +679,7 @@ npm run build</pre>
           });
         })
         .catch(function () {
-          if (metaEl) metaEl.textContent = 'No published release yet — build it from source below.';
+          if (metaEl) metaEl.textContent = 'No published release yet. Build it from source below.';
         });
     })();
 
