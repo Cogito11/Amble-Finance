@@ -131,11 +131,32 @@
   }
 
   /* -------- gauge card (hero signature) -------- */
-  .hero-visual { display: flex; justify-content: center; }
+  .hero-visual { display: flex; justify-content: center; position: relative; }
+  .hero-glow {
+    position: absolute; width: 280px; height: 280px; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--brass) 16%, transparent) 0%, transparent 72%);
+    filter: blur(24px);
+    z-index: 0;
+    animation: heroGlowDrift 13s ease-in-out infinite alternate;
+  }
+  @keyframes heroGlowDrift {
+    0%   { transform: translate(-8px, -6px) scale(1); }
+    50%  { transform: translate(6px, 5px) scale(1.04); }
+    100% { transform: translate(-4px, 7px) scale(0.98); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-glow { animation: none; }
+  }
   .gauge-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
     box-shadow: var(--shadow); padding: 32px 40px 28px; width: 100%; max-width: 340px;
     display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1;
+    transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.8s ease;
+  }
+  .gauge-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 28px 50px -20px rgba(0,0,0,0.32);
   }
   .gauge-card-tag { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
   .gauge-amount-text { font-family: 'JetBrains Mono', monospace; font-weight: 600; fill: var(--text); }
@@ -165,6 +186,22 @@
 
   .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
+  /* -------- scroll reveal -------- */
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.is-visible { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { transition: none; opacity: 1; transform: none; }
+  }
+
+  /* -------- badge strip -------- */
+  .badge-strip { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
+  .badge-strip-inner {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 14px 40px;
+    padding: 20px 0; max-width: 1120px; margin: 0 auto;
+  }
+  .badge-strip-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  .badge-strip-item svg { color: var(--brass); flex-shrink: 0; }
+
   /* -------- why amble -------- */
   .why-section { background: var(--surface-2); }
   .why-lede { max-width: 680px; margin: 0 auto 40px; text-align: center; font-size: 15.5px; line-height: 1.7; color: var(--text-muted); }
@@ -172,6 +209,12 @@
   .why-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     padding: 24px 22px; display: flex; flex-direction: column; gap: 10px;
+    transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.8s ease, border-color 0.8s ease;
+  }
+  .why-card:hover {
+    transform: translateY(-7px);
+    border-color: color-mix(in srgb, var(--brass) 45%, var(--border));
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 20px 34px -18px rgba(0,0,0,0.28);
   }
   .why-num { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--brass); }
   .why-card h3 { font-size: 15.5px; }
@@ -191,6 +234,16 @@
   .feature-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     padding: 26px 24px; display: flex; flex-direction: column; gap: 12px;
+    transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.8s ease, border-color 0.8s ease;
+  }
+  .feature-card:hover {
+    transform: translateY(-7px);
+    border-color: color-mix(in srgb, var(--brass) 45%, var(--border));
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 20px 34px -18px rgba(0,0,0,0.28);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gauge-card, .why-card, .feature-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+    .gauge-card:hover, .why-card:hover, .feature-card:hover { transform: none; }
   }
   .feature-icon {
     width: 38px; height: 38px; border-radius: 10px; background: var(--brass-soft); color: var(--brass);
@@ -218,6 +271,27 @@
   @media (min-width: 761px) { .step:not(:last-child)::after { display: block; } }
   @media (max-width: 900px) { .steps { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 760px) { .steps { grid-template-columns: 1fr; gap: 28px; } }
+
+  /* -------- faq -------- */
+  .faq-list { max-width: 760px; margin: 0 auto; }
+  .faq-item { border-bottom: 1px solid var(--border); }
+  .faq-question {
+    all: unset; box-sizing: border-box; width: 100%; cursor: pointer; padding: 20px 4px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; color: var(--text);
+  }
+  .faq-question svg { flex-shrink: 0; color: var(--text-faint); transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+  .faq-item.open .faq-question svg { transform: rotate(45deg); }
+  .faq-answer-wrap {
+    display: grid; grid-template-rows: 0fr;
+    transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .faq-item.open .faq-answer-wrap { grid-template-rows: 1fr; }
+  .faq-answer-inner { overflow: hidden; min-height: 0; }
+  .faq-answer-inner p { padding: 0 4px 20px; font-size: 14.5px; line-height: 1.65; color: var(--text-muted); max-width: 62ch; }
+  @media (prefers-reduced-motion: reduce) {
+    .faq-question svg, .faq-answer-wrap { transition: none; }
+  }
 
   /* -------- download -------- */
   .dl-meta { text-align: center; font-size: 12.5px; color: var(--text-faint); margin-top: -20px; margin-bottom: 8px; }
@@ -296,6 +370,7 @@
           <a href="#why">Why Amble</a>
           <a href="#features">Features</a>
           <a href="#how-it-works">How it works</a>
+          <a href="#faq">FAQ</a>
         </div>
         <a class="btn btn-primary btn-sm" href="#download">Download</a>
       </div>
@@ -323,6 +398,7 @@
         </div>
 
         <div class="hero-visual">
+          <div class="hero-glow" aria-hidden="true"></div>
           <div class="gauge-card">
             <span class="gauge-card-tag">Category budget</span>
             <svg viewBox="0 0 180 180" width="180" height="180" id="heroGauge"></svg>
@@ -333,41 +409,50 @@
       </div>
     </header>
 
+    <div class="badge-strip">
+      <div class="badge-strip-inner">
+        <span class="badge-strip-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Free</span>
+        <span class="badge-strip-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Open source</span>
+        <span class="badge-strip-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> No account required</span>
+        <span class="badge-strip-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Works offline</span>
+      </div>
+    </div>
+
     <section id="why" class="why-section">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <div class="section-eyebrow">WHY IT MATTERS</div>
           <h2>Money you can't see is money you can't manage.</h2>
         </div>
-        <p class="why-lede">
+        <p class="why-lede reveal">
           Most people don't overspend on purpose. They overspend because nothing shows them the
           total until the bill arrives. A clear, current picture of your accounts and your budget
           is one of the simplest changes you can make to your financial life, and one of the few
           that pays off almost immediately.
         </p>
         <div class="why-grid">
-          <div class="why-card">
+          <div class="why-card reveal">
             <span class="why-num mono">01</span>
             <h3>See where it actually goes</h3>
             <p>Small, recurring purchases are easy to lose track of one at a time and easy to spot once they're logged and totalled by category.</p>
           </div>
-          <div class="why-card">
+          <div class="why-card reveal">
             <span class="why-num mono">02</span>
             <h3>Catch problems while they're small</h3>
             <p>A budget gauge that's three-quarters full on the 12th of the month is a warning you can act on. A maxed-out card at month's end is not.</p>
           </div>
-          <div class="why-card">
+          <div class="why-card reveal">
             <span class="why-num mono">03</span>
             <h3>Turn goals into numbers</h3>
             <p>"Save more" isn't a plan. "$200 into savings every payday" is, and it only works if you can see whether you actually did it.</p>
           </div>
-          <div class="why-card">
+          <div class="why-card reveal">
             <span class="why-num mono">04</span>
             <h3>Make debt visible, not abstract</h3>
             <p>Tracking balances and interest rates side by side with everything else you own makes payoff progress concrete instead of a number you'd rather not think about.</p>
           </div>
         </div>
-        <div class="why-quote">
+        <div class="why-quote reveal">
           <p>You don't need a finance background to manage money well. You need to be able to see it clearly, consistently, in one place.</p>
           <span>THE IDEA BEHIND AMBLE</span>
         </div>
@@ -378,14 +463,14 @@
 
     <section id="features">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <div class="section-eyebrow">FEATURES</div>
           <h2>Everything you need. Nothing you don't.</h2>
           <p>Amble covers the basics of managing money well, without becoming complicated.</p>
         </div>
         <div class="feature-grid">
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1"/><path d="M21 12H12a2 2 0 0 0 0 4h9"/></svg>
             </div>
@@ -393,7 +478,7 @@
             <p>Track checking, savings, and credit cards together, with your net worth calculated automatically as you go.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
             </div>
@@ -401,7 +486,7 @@
             <p>Set a limit for any category and watch a live gauge show what's spent and what's left. No math required.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.2v-2a4 4 0 0 1 4-4h14"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.8v2a4 4 0 0 1-4 4H3"/></svg>
             </div>
@@ -409,7 +494,7 @@
             <p>Build a budget around a paycheck, split it into categories, and set it active. Have it repeat weekly, every two weeks, monthly, or on your own schedule.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6M9 11h3"/></svg>
             </div>
@@ -417,7 +502,7 @@
             <p>Log income, expenses, and transfers quickly, then search and filter your history whenever you need it.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
             </div>
@@ -425,7 +510,7 @@
             <p>See net worth, spending by category, and income versus expenses over the last six months at a glance.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 9 8 11 4.6-2 8-6 8-11V5z"/></svg>
             </div>
@@ -433,7 +518,7 @@
             <p>Everything is stored on your own computer. No account to create, no server to trust, nothing to subscribe to.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
@@ -441,7 +526,7 @@
             <p>Credit cards and loans carry their own balance and APR, kept alongside everything you own so payoff progress is easy to see instead of easy to avoid.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-11M12 6V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 10h6M17 16h6"/></svg>
             </div>
@@ -449,7 +534,7 @@
             <p>Show or hide dashboard widgets, reorder the sidebar, pick your footer summary, and set your currency. Amble adapts to how you actually want to use it.</p>
           </div>
 
-          <div class="feature-card">
+          <div class="feature-card reveal">
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
             </div>
@@ -465,28 +550,28 @@
 
     <section id="how-it-works">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <div class="section-eyebrow">GETTING STARTED</div>
           <h2>Up and running in four steps.</h2>
           <p>With Amble it's easy to get started tracking your finances, the way it should be.</p>
         </div>
         <div class="steps">
-          <div class="step">
+          <div class="step reveal">
             <span class="step-num mono">01</span>
             <h3>Add your accounts</h3>
             <p>Checking, savings, credit cards, loans, or cash - enter a starting balance for each and you're already tracking your net worth.</p>
           </div>
-          <div class="step">
+          <div class="step reveal">
             <span class="step-num mono">02</span>
             <h3>Build a budget</h3>
             <p>Split a paycheck or a monthly income into categories with real limits, and set it as your active plan.</p>
           </div>
-          <div class="step">
+          <div class="step reveal">
             <span class="step-num mono">03</span>
             <h3>Log what you spend</h3>
             <p>Every expense, income, and transfer gets categorized as you go, in a few taps - searchable and filterable later.</p>
           </div>
-          <div class="step">
+          <div class="step reveal">
             <span class="step-num mono">04</span>
             <h3>Watch your gauges</h3>
             <p>Check the dashboard whenever you like and see exactly what's left in each category, updated in real time.</p>
@@ -497,9 +582,77 @@
 
     <hr class="divider" />
 
+    <section id="faq">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="section-eyebrow">QUESTIONS</div>
+          <h2>Good to know before you download.</h2>
+        </div>
+        <div class="faq-list">
+          <div class="faq-item reveal open">
+            <button class="faq-question" aria-expanded="true" aria-controls="faq-a1" id="faq-q1">
+              Is my data actually private?
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="faq-answer-wrap" id="faq-a1" role="region" aria-labelledby="faq-q1">
+              <div class="faq-answer-inner">
+                <p>Yes. Amble stores everything locally on your own device. There's no account to create and no server your numbers pass through, so nothing about your finances leaves your computer unless you choose to export it.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item reveal">
+            <button class="faq-question" aria-expanded="false" aria-controls="faq-a2" id="faq-q2">
+              Does Amble cost anything?
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="faq-answer-wrap" id="faq-a2" role="region" aria-labelledby="faq-q2">
+              <div class="faq-answer-inner">
+                <p>No. Amble is free to download and free to use, with no subscription, paywalled features, or ads. The source code is public on GitHub as well.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item reveal">
+            <button class="faq-question" aria-expanded="false" aria-controls="faq-a3" id="faq-q3">
+              Can I use Amble on more than one device?
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="faq-answer-wrap" id="faq-a3" role="region" aria-labelledby="faq-q3">
+              <div class="faq-answer-inner">
+                <p>Amble doesn't sync across devices automatically since your data stays local rather than living in the cloud. You can move it yourself by exporting a JSON backup on one device and importing it on another.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item reveal">
+            <button class="faq-question" aria-expanded="false" aria-controls="faq-a4" id="faq-q4">
+              What happens if I uninstall the app or get a new computer?
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="faq-answer-wrap" id="faq-a4" role="region" aria-labelledby="faq-q4">
+              <div class="faq-answer-inner">
+                <p>As long as you've exported a backup from the Data tab first, you can import that JSON file into a fresh install and pick up right where you left off. Without a backup, uninstalling removes your local data, so it's worth exporting one regularly.</p>
+              </div>
+            </div>
+          </div>
+          <div class="faq-item reveal">
+            <button class="faq-question" aria-expanded="false" aria-controls="faq-a5" id="faq-q5">
+              Which platforms does it run on?
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="faq-answer-wrap" id="faq-a5" role="region" aria-labelledby="faq-q5">
+              <div class="faq-answer-inner">
+                <p>Windows, macOS, and Linux are all supported. Download links for each are below.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="divider" />
+
     <section id="download">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head reveal">
           <div class="section-eyebrow">DOWNLOAD</div>
           <h2>Get Amble.</h2>
           <p>Free to download. Free to use. No account required.</p>
@@ -590,6 +743,50 @@ npm run build</pre>
   </footer>
 
   <script>
+    // ---- faq accordion: animated expand/collapse ----
+    (function () {
+      var questions = document.querySelectorAll('.faq-question');
+      questions.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var item = btn.closest('.faq-item');
+          var isOpen = item.classList.contains('open');
+          item.classList.toggle('open', !isOpen);
+          btn.setAttribute('aria-expanded', String(!isOpen));
+        });
+      });
+    })();
+
+    // ---- scroll reveal: fades/slides sections and cards in as they enter view ----
+    (function () {
+      var reveals = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+      if (!reveals.length) return;
+
+      // Stagger cards within the same grid/list a little, based on their order.
+      var counters = new Map();
+      reveals.forEach(function (el) {
+        var parent = el.parentElement;
+        var idx = counters.get(parent) || 0;
+        el.style.transitionDelay = Math.min(idx * 70, 350) + 'ms';
+        counters.set(parent, idx + 1);
+      });
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        reveals.forEach(function (el) { el.classList.add('is-visible'); });
+        return;
+      }
+
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+
+      reveals.forEach(function (el) { observer.observe(el); });
+    })();
+
     // ---- download panel: OS detection + live GitHub release assets ----
     (function () {
       var REPO = 'Cogito11/Amble-Finance';
