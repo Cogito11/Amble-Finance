@@ -369,6 +369,50 @@
     overflow-x: auto; white-space: pre;
   }
 
+  /* -------- mac gatekeeper notice modal -------- */
+  .mac-modal-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(10, 16, 22, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .mac-modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .mac-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    max-width: 520px; width: 100%; max-height: 86vh; overflow-y: auto;
+    padding: 26px 26px 22px; box-shadow: 0 20px 60px -20px rgba(0,0,0,0.45);
+    transform: translateY(10px); transition: transform 0.2s ease;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .mac-modal::-webkit-scrollbar { display: none; }
+  .mac-modal-overlay.open .mac-modal { transform: translateY(0); }
+  .mac-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 4px; }
+  .mac-modal-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; color: var(--text); display: flex; align-items: center; gap: 9px; }
+  .mac-modal-title svg { color: var(--amber); flex-shrink: 0; }
+  .mac-modal-close {
+    all: unset; cursor: pointer; color: var(--text-faint); padding: 4px; border-radius: 6px; flex-shrink: 0;
+  }
+  .mac-modal-close:hover { color: var(--text); background: var(--surface-2); }
+  .mac-modal p { font-size: 13.5px; line-height: 1.6; color: var(--text-muted); margin-top: 12px; }
+  .mac-modal-step-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; color: var(--brass); margin-top: 18px; margin-bottom: 8px; }
+  .mac-modal-code-row { position: relative; }
+  .mac-modal-code-row .dl-code { margin: 0; padding-right: 42px; font-size: 12px; }
+  .mac-modal-copy {
+    all: unset; position: absolute; top: 8px; right: 8px; cursor: pointer;
+    color: var(--text-faint); padding: 6px; border-radius: 6px; display: flex;
+  }
+  .mac-modal-copy:hover { color: var(--brass); background: var(--surface-2); }
+  .mac-modal-copy.copied { color: var(--teal); }
+  .mac-modal-fix-note {
+    margin-top: 18px; padding: 12px 14px; border-radius: 10px;
+    background: var(--brass-soft); border: 1px solid color-mix(in srgb, var(--brass) 35%, var(--border));
+    font-size: 12.5px; line-height: 1.55; color: var(--text);
+  }
+  .mac-modal-footer { margin-top: 20px; display: flex; justify-content: flex-end; }
+
+
   @media (max-width: 860px) {
     .dl-os-grid { grid-template-columns: 1fr; }
   }
@@ -768,6 +812,47 @@ npm run build</pre>
     </div>
   </footer>
 
+  <div class="mac-modal-overlay" id="macModalOverlay" role="dialog" aria-modal="true" aria-labelledby="macModalTitle">
+    <div class="mac-modal">
+      <div class="mac-modal-head">
+        <div class="mac-modal-title" id="macModalTitle">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+          One-time setup for macOS
+        </div>
+        <button type="button" class="mac-modal-close" id="macModalClose" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <p>Dear macOS User,<br />Thank you for downloading Amble! Before you run the program there's one thing you need to do.</p>
+      <p>Because Amble isn't signed with the Apple Developer Certificate yet, macOS marks it as <strong>"damaged and can't be opened"</strong> the first time you try to launch it. The app isn't actually damaged. One simple command clears the issue.</p>
+
+      <p class="mac-modal-step-label">IF YOU DOWNLOADED THE .DMG INSTALLER</p>
+      <p style="margin-top: 0;">After dragging Amble into your Applications folder, run this command.</p>
+      <div class="mac-modal-code-row">
+        <pre class="dl-code mono" id="macCmdDmg">xattr -dr com.apple.quarantine /Applications/Amble.app</pre>
+        <button type="button" class="mac-modal-copy" data-copy-target="macCmdDmg" aria-label="Copy command">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+
+      <p class="mac-modal-step-label">IF YOU DOWNLOADED THE .ZIP</p>
+      <p style="margin-top: 0;">Run this command right after the download finishes.</p>
+      <div class="mac-modal-code-row">
+        <pre class="dl-code mono" id="macCmdZip">xattr -dr com.apple.quarantine ~/Downloads/Amble.app</pre>
+        <button type="button" class="mac-modal-copy" data-copy-target="macCmdZip" aria-label="Copy command">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <p style="margin-top: 8px; font-size: 12px;">Adjust the path if you extracted or moved the app somewhere other than <span class="mono">Downloads</span>. Paste the command into Terminal (Applications → Utilities → Terminal) and press Return.</p>
+
+      <div class="mac-modal-fix-note">We're working on getting Amble properly signed and notarized so this step goes away entirely, we want opening it to be as easy as the rest of the app.</div>
+
+      <div class="mac-modal-footer">
+        <button type="button" class="btn btn-primary btn-sm" id="macModalGotIt">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ---- badge strip: hide entirely if it no longer fits on one line ----
     (function () {
@@ -833,6 +918,69 @@ npm run build</pre>
       }, { threshold: 0.01, rootMargin: '0px 0px 120px 0px' });
 
       reveals.forEach(function (el) { observer.observe(el); });
+    })();
+
+    // ---- mac gatekeeper notice modal ----
+    (function () {
+      var overlay = document.getElementById('macModalOverlay');
+      if (!overlay) return;
+      var closeBtn = document.getElementById('macModalClose');
+      var gotItBtn = document.getElementById('macModalGotIt');
+      var macCard = document.querySelector('.dl-os-card[data-os="mac"]');
+
+      function openModal() {
+        overlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      }
+      function closeModal() {
+        overlay.classList.remove('open');
+        document.body.style.overflow = '';
+      }
+
+      if (macCard) {
+        macCard.querySelectorAll('.dl-btn').forEach(function (btn) {
+          // Downloads (and even the "not in this release" fallback tab) don't
+          // unload this page, so it's safe to just show the notice alongside the click
+          // rather than intercepting/blocking the download itself.
+          btn.addEventListener('click', function () {
+            openModal();
+          });
+        });
+      }
+
+      closeBtn.addEventListener('click', closeModal);
+      gotItBtn.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeModal();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && overlay.classList.contains('open')) closeModal();
+      });
+
+      document.querySelectorAll('.mac-modal-copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var targetId = btn.getAttribute('data-copy-target');
+          var codeEl = document.getElementById(targetId);
+          if (!codeEl) return;
+          var text = codeEl.textContent;
+          var markCopied = function () {
+            btn.classList.add('copied');
+            setTimeout(function () { btn.classList.remove('copied'); }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(markCopied).catch(function () {});
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); markCopied(); } catch (err) {}
+            document.body.removeChild(ta);
+          }
+        });
+      });
     })();
 
     // ---- download panel: OS detection + live GitHub release assets ----
