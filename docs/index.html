@@ -27,6 +27,7 @@
     --text-muted: #5b7a91;
     --text-faint: #7c9db4;
     --shadow: 0 1px 2px rgba(18,50,73,0.04), 0 12px 32px -16px rgba(18,50,73,0.16);
+    --nav-h: 73px;
     color-scheme: light dark;
   }
 
@@ -50,13 +51,14 @@
   }
 
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; background: var(--ink); }
+  html { scroll-behavior: smooth; background: var(--ink); overflow-x: hidden; }
   body {
     margin: 0;
     background: var(--ink);
     color: var(--text);
     font-family: 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior-x: none;
     transition: background 0.25s ease, color 0.25s ease;
   }
   h1, h2, h3 { font-family: 'Fraunces', serif; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
@@ -66,7 +68,7 @@
   img, svg { display: block; max-width: 100%; }
   :focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; border-radius: 4px; }
 
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 max(28px, env(safe-area-inset-right)) 0 max(28px, env(safe-area-inset-left)); }
 
   /* -------- nav -------- */
   .nav {
@@ -75,24 +77,29 @@
     backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
   }
-  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; padding: 0 28px; max-width: 1120px; margin: 0 auto; box-sizing: border-box; }
-  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between; height: 72px;
+    padding: 0 max(28px, env(safe-area-inset-right)) 0 max(28px, env(safe-area-inset-left));
+    max-width: 1120px; margin: 0 auto; box-sizing: border-box;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; min-width: 0; }
   .brand-mark {
-    width: 32px; height: 32px; border-radius: 8px;
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
     background: var(--brass-soft); color: var(--brass); border: 1px solid var(--brass);
     display: flex; align-items: center; justify-content: center;
     font-family: 'Fraunces', serif; font-weight: 700; font-size: 21px;
   }
-  .brand-word { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; letter-spacing: 0.08em; color: var(--text); }
+  .brand-word { font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px; letter-spacing: 0.08em; color: var(--text); white-space: nowrap; }
   .nav-links { display: flex; align-items: center; gap: 30px; }
   .nav-links a { font-size: 14px; font-weight: 500; color: var(--text-muted); text-decoration: none; }
   .nav-links a:hover { color: var(--text); }
-  .nav-right { display: flex; align-items: center; gap: 26px; }
+  .nav-right { display: flex; align-items: center; gap: 26px; flex-shrink: 0; }
 
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     padding: 11px 18px; border-radius: 9px; font-size: 14px; font-weight: 600;
     text-decoration: none; border: 1px solid transparent; cursor: pointer;
+    white-space: nowrap;
     transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
   }
   .btn:active { transform: translateY(1px); }
@@ -106,9 +113,17 @@
     .nav-links { display: none; }
   }
 
+  @media (max-width: 400px) {
+    :root { --nav-h: 63px; }
+    .nav-inner { height: 62px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    .brand-mark { width: 28px; height: 28px; font-size: 18px; }
+    .brand-word { font-size: 14.5px; letter-spacing: 0.05em; }
+    .btn-sm { padding: 8px 12px; font-size: 12.5px; }
+  }
+
   /* -------- hero -------- */
   .hero {
-    min-height: calc(100vh - 73px);
+    min-height: calc(100vh - var(--nav-h));
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -189,10 +204,14 @@
   .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
   /* -------- scroll reveal -------- */
-  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.6s ease, transform 0.6s ease; }
-  .reveal.is-visible { opacity: 1; transform: none; }
+  .reveal {
+    opacity: 0; transform: translateY(14px);
+    transition: opacity 0.45s ease-out, transform 0.45s ease-out;
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible { opacity: 1; transform: none; will-change: auto; }
   @media (prefers-reduced-motion: reduce) {
-    .reveal { transition: none; opacity: 1; transform: none; }
+    .reveal { transition: none; opacity: 1; transform: none; will-change: auto; }
   }
 
   /* -------- badge strip -------- */
@@ -203,6 +222,11 @@
   }
   .badge-strip-item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
   .badge-strip-item svg { color: var(--brass); flex-shrink: 0; }
+
+  @media (max-width: 400px) {
+    .badge-strip-inner { gap: 10px 22px; padding: 16px max(16px, env(safe-area-inset-left)); }
+    .badge-strip-item { font-size: 12px; gap: 6px; }
+  }
 
   /* -------- why amble -------- */
   .why-section { background: var(--surface-2); }
@@ -430,23 +454,23 @@
           Most people don't overspend on purpose. They overspend because nothing shows them the
           total until the bill arrives. A clear, current picture of your accounts and your budget
           is one of the simplest changes you can make to your financial life, and one of the few
-          that pays off almost immediately.
+          that pays off almost immediately. Here's how Amble helps you see your money clearly.
         </p>
         <div class="why-grid">
           <div class="why-card reveal">
             <span class="why-num mono">01</span>
             <h3>See where it actually goes</h3>
-            <p>Small, recurring purchases are easy to lose track of one at a time and easy to spot once they're logged and totalled by category.</p>
+            <p>Amble lets you assign every purchase to a category, so the small charges that would be easy to lose individually are now tracked exactly so you know where your money goes.</p>
           </div>
           <div class="why-card reveal">
             <span class="why-num mono">02</span>
             <h3>Catch problems while they're small</h3>
-            <p>A budget gauge that's three-quarters full on the 12th of the month is a warning you can act on. A maxed-out card at month's end is not.</p>
+            <p>Amble's budget gauges show you how much of each category you've used before the month is over, so a card that's three-quarters full on the 12th is a warning you can act on, not a bill you find out about later.</p>
           </div>
           <div class="why-card reveal">
             <span class="why-num mono">03</span>
             <h3>Turn goals into numbers</h3>
-            <p>"Save more" isn't a plan. "$200 into savings every payday" is, and it only works if you can see whether you actually did it.</p>
+            <p>"Save more" isn't a plan that's easy to act on. "Put $200 into savings every payday" is, and Amble makes it easy to stick to to your goals by turning them into measurable actions.</p>
           </div>
           <div class="why-card reveal">
             <span class="why-num mono">04</span>
@@ -745,6 +769,28 @@ npm run build</pre>
   </footer>
 
   <script>
+    // ---- badge strip: hide entirely if it no longer fits on one line ----
+    (function () {
+      var strip = document.querySelector('.badge-strip');
+      var items = document.querySelectorAll('.badge-strip-item');
+      if (!strip || !items.length) return;
+
+      function checkWrap() {
+        strip.style.display = '';
+        var firstTop = items[0].offsetTop;
+        var wrapped = Array.prototype.some.call(items, function (item) {
+          return item.offsetTop !== firstTop;
+        });
+        strip.style.display = wrapped ? 'none' : '';
+      }
+
+      checkWrap();
+      window.addEventListener('resize', checkWrap);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(checkWrap);
+      }
+    })();
+
     // ---- faq accordion: animated expand/collapse ----
     (function () {
       var questions = document.querySelectorAll('.faq-question');
@@ -768,7 +814,7 @@ npm run build</pre>
       reveals.forEach(function (el) {
         var parent = el.parentElement;
         var idx = counters.get(parent) || 0;
-        el.style.transitionDelay = Math.min(idx * 70, 350) + 'ms';
+        el.style.transitionDelay = Math.min(idx * 50, 220) + 'ms';
         counters.set(parent, idx + 1);
       });
 
@@ -784,7 +830,7 @@ npm run build</pre>
             observer.unobserve(entry.target);
           }
         });
-      }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+      }, { threshold: 0.01, rootMargin: '0px 0px 120px 0px' });
 
       reveals.forEach(function (el) { observer.observe(el); });
     })();
