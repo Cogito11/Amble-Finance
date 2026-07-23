@@ -6,6 +6,36 @@ export const CAT_PALETTE = [
   "#1EABC3", "#D42B2B", "#35B866", "#2365D2", "#D7AB22",
 ];
 
+// Small stable string hash (not cryptographic - just needs to spread names
+// evenly across the palette) used to break ties deterministically instead
+// of via Math.random(), so a given name always resolves the same way.
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return hash;
+}
+
+// Picks a color for a new category from CAT_PALETTE, preferring colors that
+// aren't already in use by an existing category so categories stay visually
+// distinct for as long as possible (up to the palette size). Once every color
+// is in use at least once, falls back to picking among the least-used colors,
+// breaking ties by hashing the category's name so the same name reliably
+// lands on the same color rather than jittering between reloads/edits.
+export function nextCategoryColor(existingCategories, name) {
+  const counts = new Map(CAT_PALETTE.map((c) => [c, 0]));
+  // Sub-items (parentCategoryId set) deliberately inherit their parent's color
+  // rather than picking their own, so they aren't a genuine additional "use"
+  // of that color - only count top-level categories toward usage.
+  for (const c of existingCategories || []) {
+    if (c.parentCategoryId) continue;
+    if (c.color && counts.has(c.color)) counts.set(c.color, counts.get(c.color) + 1);
+  }
+  const minCount = Math.min(...counts.values());
+  const leastUsed = CAT_PALETTE.filter((c) => counts.get(c) === minCount);
+  const hash = hashString(name || "");
+  return leastUsed[hash % leastUsed.length];
+}
+
 // The general (unowned by any budget) starter categories - just the income
 // categories. The rest of the starter expense categories live inside the
 // seeded Default Budget below.
@@ -71,7 +101,7 @@ export function syncPlanCategories(plan, categories) {
       keepIds.add(parentId);
     } else {
       parentId = uid();
-      parentColor = CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)];
+      parentColor = nextCategoryColor(cats, pc.name);
       cats.push({
         id: parentId, name: pc.name, type: "expense", limit: total,
         color: parentColor, planId: plan.id, parentCategoryId: null, date: pc.date || null,

@@ -851,7 +851,7 @@ export default function App() {
         <AccountModal initial={accModal} onSave={saveAccount} onClose={() => { setAccModal(null); setAccError(""); }} onDelete={requestDeleteAccount} />
       )}
       {catModal !== null && (
-        <CategoryModal initial={catModal} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
+        <CategoryModal initial={catModal} categories={state.categories} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
       )}
       {planModal !== null && (
         <PlanModal initial={planModal} onSave={savePlan} onClose={() => setPlanModal(null)} onDelete={requestDeletePlan} />

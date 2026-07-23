@@ -3,10 +3,10 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { CAT_PALETTE } from "../../state/categories";
+import { nextCategoryColor } from "../../state/categories";
 import { blurOnWheel, uid } from "../../utils/misc";
 
-export function CategoryModal({ initial, onSave, onClose, onDelete }) {
+export function CategoryModal({ initial, categories, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [type, setType] = useState(initial.type || "expense");
@@ -21,7 +21,7 @@ export function CategoryModal({ initial, onSave, onClose, onDelete }) {
       name: name.trim(),
       type,
       limit: type === "expense" ? (parseFloat(limit) || 0) : 0,
-      color: initial.color || CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)],
+      color: initial.color || nextCategoryColor(categories, name.trim()),
       planId: initial.planId ?? null,
     });
   };
