@@ -2,8 +2,8 @@ import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
 export const CAT_PALETTE = [
-  "#C9A24B", "#3E8E7E", "#8B6F47", "#6B8E9F", "#B0463C",
-  "#7A6A8A", "#A3763F", "#4F7C6B", "#9C7B4F", "#6E5B4A",
+  "#2A2DC6", "#D12E7E", "#27AB9C", "#E17C36", "#5C26D9",
+  "#1EABC3", "#D42B2B", "#35B866", "#2365D2", "#D7AB22",
 ];
 
 // The general (unowned by any budget) starter categories - just the income
