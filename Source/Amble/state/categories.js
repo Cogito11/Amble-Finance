@@ -2,8 +2,8 @@ import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
 export const CAT_PALETTE = [
-  "#2A2DC6", "#D12E7E", "#27AB9C", "#E17C36", "#5C26D9",
-  "#1EABC3", "#D42B2B", "#35B866", "#2365D2", "#D7AB22",
+  "#3B3DB5", "#BF407E", "#369C91", "#CE7F49", "#643AC5",
+  "#309EB1", "#C13E3E", "#43AA6A", "#366ABF", "#C3A136",
 ];
 
 // Small stable string hash (not cryptographic - just needs to spread names
