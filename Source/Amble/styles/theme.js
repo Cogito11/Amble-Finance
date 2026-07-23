@@ -394,6 +394,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
 .modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; }
 .modal-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-top:1px solid var(--border); }
+.modal-status-bar { display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap; text-align:center; background: var(--surface-2); border-top:1px solid var(--border); padding:11px 22px; font-size:12.5px; color:var(--text-muted); }
+.modal-status-bar strong { color:var(--text); font-weight:600; }
+.modal-status-amount { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .form-group { display:flex; flex-direction:column; gap:6px; }
 .form-group label { font-size:12px; color:var(--text-muted); }

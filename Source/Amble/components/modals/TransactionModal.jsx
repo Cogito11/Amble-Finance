@@ -3,11 +3,13 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { categorySpend } from "../../state/categories";
 import { todayStr } from "../../utils/dates";
+import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 /* ---------------------------------- modals ---------------------------------- */
-export function TransactionModal({ initial, accounts, categories, plans, onSave, onClose, onDelete }) {
+export function TransactionModal({ initial, accounts, categories, plans, transactions, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
   const [date, setDate] = useState(initial.date || todayStr());
@@ -76,6 +78,28 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
     const cat = categories.find((c) => c.id === newCategoryId);
     if (cat) setDescription(cat.name);
   };
+
+  // Status line shown above the footer: the remaining balance for whichever category
+  // (or, if picked, its specific sub-expense) is currently selected - not just its
+  // saved-so-far spend, but a live preview that swaps out this transaction's old
+  // amount (if editing) for whatever's currently typed in the amount field, so the
+  // number updates as the user adjusts it instead of only reflecting what's already saved.
+  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId);
+  const categoryStatus = (() => {
+    if (!selectedCategory || type === "income") return null;
+    const typedAmount = parseFloat(amount);
+    const otherTxs = transactions.filter((t) => t.id !== initial.id);
+    const baseSpend = categorySpend(selectedCategory, otherTxs, plans, categories);
+    const spent = baseSpend + (isCurrentSpend && typedAmount > 0 ? typedAmount : 0);
+    const hasLimit = (selectedCategory.limit || 0) > 0;
+    return {
+      name: selectedCategory.name,
+      spent,
+      limit: selectedCategory.limit || 0,
+      hasLimit,
+      remaining: hasLimit ? selectedCategory.limit - spent : null,
+    };
+  })();
 
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
 
@@ -156,6 +180,26 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
           </div>
         )}
       </div>
+      {categoryStatus && (
+        <div className="modal-status-bar">
+          {categoryStatus.hasLimit ? (
+            <>
+              <span className={`modal-status-amount ${categoryStatus.remaining < 0 ? "tone-rust" : "tone-teal"}`}>{fmt(categoryStatus.remaining)}</span>
+              <span>/</span>
+              <span className="modal-status-amount">{fmt(categoryStatus.limit)}</span>
+              <span>remaining for</span>
+              <strong>{categoryStatus.name}</strong>
+            </>
+          ) : (
+            <>
+              <span className="modal-status-amount">{fmt(categoryStatus.spent)}</span>
+              <span>spent for</span>
+              <strong>{categoryStatus.name}</strong>
+              <span>· no budget set</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}
         <div style={{ display: "flex", gap: 8 }}>

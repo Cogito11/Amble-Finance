@@ -842,6 +842,7 @@ export default function App() {
           accounts={state.accounts}
           categories={state.categories}
           plans={state.plans}
+          transactions={state.transactions}
           onSave={saveTransaction}
           onClose={() => setTxModal(null)}
           onDelete={requestDeleteTransaction}
