@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import {
-  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Database, Github, Globe
+  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe
 } from "lucide-react";
 import { ShortcutsList } from "../common/Shortcuts";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
@@ -15,6 +15,24 @@ export function MoreView({
 }) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
+
+  // Brief visual feedback for the "Refresh" color button: the icon spins for a
+  // moment, then flips to a checkmark + "Refreshed" before settling back to idle.
+  // Runs on a timer rather than waiting on the actual state update since the color
+  // shuffle itself is effectively instant - this is purely to confirm to the user
+  // that their click registered and did something.
+  const [colorRefreshState, setColorRefreshState] = useState("idle"); // idle | spinning | done
+  const colorRefreshTimerRef = useRef(null);
+
+  const handleRefreshColors = () => {
+    onRefreshCategoryColors();
+    clearTimeout(colorRefreshTimerRef.current);
+    setColorRefreshState("spinning");
+    colorRefreshTimerRef.current = setTimeout(() => {
+      setColorRefreshState("done");
+      colorRefreshTimerRef.current = setTimeout(() => setColorRefreshState("idle"), 1100);
+    }, 450);
+  };
 
   return (
     <div className="more-view">
@@ -64,8 +82,9 @@ export function MoreView({
               <div className="settings-row-label">Category colors</div>
               <div className="settings-desc">Re-assigns colors across your categories, spreading them out evenly. Run it as often as you'd like.</div>
             </div>
-            <button className="btn btn-ghost" onClick={onRefreshCategoryColors}>
-              <RefreshCw size={14} /> Refresh
+            <button className="btn btn-ghost" onClick={handleRefreshColors}>
+              {colorRefreshState === "done" ? <Check size={14} /> : <RefreshCw size={14} className={colorRefreshState === "spinning" ? "spin" : ""} />}
+              {" "}{colorRefreshState === "done" ? "Refreshed" : "Refresh"}
             </button>
           </div>
         </div>
