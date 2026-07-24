@@ -19,7 +19,7 @@ import { PlansView } from "./components/views/PlansView";
 import { TransactionsView } from "./components/views/TransactionsView";
 import { NAV_ITEMS, SIDEBAR_KEY, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
-import { clearRemovedCategoryRefs, syncPlanCategories } from "./state/categories";
+import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncPlanCategories } from "./state/categories";
 import { defaultState, migratePlanOrder, nextTopPlanOrder, rolloverDuePlans, sortedPlansList } from "./state/plans";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
@@ -675,6 +675,17 @@ export default function App() {
     });
   };
 
+  // Redistributes every category's color from scratch, spreading them out evenly
+  // across CAT_PALETTE. Purely cosmetic and non-destructive, so unlike the other
+  // maintenance actions this runs immediately without a confirmation dialog, and
+  // can be run as many times as you like.
+  const refreshCategoryColors = () => {
+    setState((s) => {
+      const { categories, changedCount } = redistributeCategoryColors(s.categories);
+      return changedCount ? { ...s, categories } : s;
+    });
+  };
+
   const requestResetSampleData = () => {
     setConfirmDialog({
       title: "Reset sample/default data?",
@@ -821,6 +832,7 @@ export default function App() {
                 accountCount={state.accounts.length}
                 budgetCount={state.plans.length}
                 categoryCount={state.categories.length}
+                onRefreshCategoryColors={refreshCategoryColors}
                 dbSizeBytes={new Blob([JSON.stringify(state)]).size}
                 lastBackupAt={state.lastBackupAt}
                 onDeleteAllTransactions={requestDeleteAllTransactions}

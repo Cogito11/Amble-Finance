@@ -1,9 +1,17 @@
 import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
+// Hand-curated (not evenly hue-rotated) so neighbors read as distinct colors
+// rather than blending into a gradient - saturation/lightness vary per entry
+// on purpose. Weighted toward reds/oranges/greens/teals/blues; purple/pink
+// kept to a handful of calmer accents (indigo through rose below); "slate"
+// and "sand" at the end are true desaturated neutrals, not another hue family.
 export const CAT_PALETTE = [
-  "#3B3DB5", "#BF407E", "#369C91", "#CE7F49", "#643AC5",
-  "#309EB1", "#C13E3E", "#43AA6A", "#366ABF", "#C3A136",
+  "#D2414D", "#DC7160", "#D07039", "#DE9E54", "#D4AB49", "#D6C066",
+  "#C0C44F", "#A0C251", "#71B045", "#5DBF4A", "#3E984A", "#42A975",
+  "#36A192", "#3DB7C2", "#3895BC", "#4A8AC9", "#587CD0", "#3E51CC",
+  "#3F36BF", "#466B9B", "#6A4AB5", "#8D5BB9", "#AF67C1", "#C760A2",
+  "#D06287", "#A84F38", "#6E9245", "#397F50", "#535C65", "#BCB19F",
 ];
 
 // Small stable string hash (not cryptographic - just needs to spread names
