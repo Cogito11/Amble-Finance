@@ -737,11 +737,11 @@
               <span class="dl-os-name">Windows</span>
               <span class="dl-os-recommended" hidden>Recommended</span>
             </div>
-            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="setup\.exe$">
+            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*setup\.exe$">
               <span class="dl-btn-label">Installer</span>
               <span class="dl-btn-sub"></span>
             </a>
-            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="portable\.exe$">
+            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*portable\.exe$">
               <span class="dl-btn-label">Portable</span>
               <span class="dl-btn-sub"></span>
             </a>
@@ -753,11 +753,11 @@
               <span class="dl-os-name">macOS</span>
               <span class="dl-os-recommended" hidden>Recommended</span>
             </div>
-            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="mac.*\.dmg$">
+            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="mac.*arm64.*\.dmg$">
               <span class="dl-btn-label">.dmg Installer</span>
               <span class="dl-btn-sub"></span>
             </a>
-            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="mac.*\.zip$">
+            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="mac.*arm64.*\.zip$">
               <span class="dl-btn-label">Zip Archive</span>
               <span class="dl-btn-sub"></span>
             </a>
@@ -769,11 +769,11 @@
               <span class="dl-os-name">Linux</span>
               <span class="dl-os-recommended" hidden>Recommended</span>
             </div>
-            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="\.deb$">
+            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*\.deb$">
               <span class="dl-btn-label">.deb Installer</span>
               <span class="dl-btn-sub"></span>
             </a>
-            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="\.appimage$">
+            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*\.appimage$">
               <span class="dl-btn-label">AppImage</span>
               <span class="dl-btn-sub"></span>
             </a>
@@ -1011,12 +1011,17 @@ npm run build</pre>
         return assets.find(function (asset) { return regex.test(asset.name); });
       }
 
-      // Windows ships two .exe files with no fixed naming convention, so resolve
-      // them together: whichever .exe matches "setup" is the installer, any other is portable.
+      // Windows can ship several .exe files (arm64, x64, and an unlabeled/generic
+      // build) with no fixed naming convention. Default to the x64 build: drop
+      // anything arm-labeled, then prefer an explicit "x64" match over a generic
+      // one if both exist. Whichever remaining .exe matches "setup" is the
+      // installer, any other is portable.
       function resolveWindowsAssets(assets) {
-        var exeAssets = assets.filter(function (a) { return /\.exe$/i.test(a.name); });
-        var installer = exeAssets.find(function (a) { return /setup/i.test(a.name); }) || null;
-        var portable = exeAssets.find(function (a) { return a !== installer; }) || null;
+        var exeAssets = assets.filter(function (a) { return /\.exe$/i.test(a.name) && !/arm/i.test(a.name); });
+        var x64Assets = exeAssets.filter(function (a) { return /x64/i.test(a.name); });
+        var candidates = x64Assets.length ? x64Assets : exeAssets;
+        var installer = candidates.find(function (a) { return /setup/i.test(a.name); }) || null;
+        var portable = candidates.find(function (a) { return a !== installer; }) || null;
         return { installer: installer, portable: portable };
       }
 
