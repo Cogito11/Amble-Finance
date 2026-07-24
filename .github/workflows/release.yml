@@ -1,0 +1,43 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win --x64 --arm64
+          - os: ubuntu-latest
+            args: --linux --x64 --arm64
+          - os: macos-latest
+            args: --mac --x64 --arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.19.1
+          cache: npm
+          cache-dependency-path: Source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Source
+        run: npm ci
+
+      - name: Build
+        working-directory: Source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build -- ${{ matrix.args }}

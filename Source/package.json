@@ -32,6 +32,11 @@
   },
   "build": {
     "appId": "com.bishop.amble",
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ],
     "artifactName": "Amble_${version}_Setup_${os}_${arch}.${ext}",
     "files": [
       "dist/**/*",
