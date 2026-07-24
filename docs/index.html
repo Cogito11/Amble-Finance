@@ -322,9 +322,9 @@
   /* -------- download -------- */
   .dl-meta { text-align: center; font-size: 12.5px; color: var(--text-faint); margin-top: -20px; margin-bottom: 8px; }
 
-  .dl-os-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 28px; }
+  .dl-os-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 28px; align-items: stretch; }
   .dl-os-card {
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: column; min-height: 380px;
     background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
@@ -349,9 +349,21 @@
   .dl-btn.dl-btn-primary { border-color: color-mix(in srgb, var(--brass) 45%, var(--border)); background: var(--brass-soft); }
   .dl-btn.dl-btn-primary:hover { border-color: var(--brass); }
   .dl-btn-label { font-size: 13.5px; font-weight: 600; }
-  .dl-btn-sub { margin-top: 4px; font-size: 11px; color: var(--text-faint); }
+  .dl-btn-desc { margin-top: 3px; font-size: 11.5px; color: var(--text-muted); line-height: 1.5; }
+  .dl-btn-sub {
+    margin-top: 9px; padding-top: 8px; width: 100%;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-faint);
+  }
+  .dl-btn-file {
+    margin-top: 3px; font-size: 10.5px; color: var(--text-faint);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .dl-btn[aria-disabled="true"] { opacity: 0.5; }
-  .dl-os-note { margin-top: auto; padding-top: 14px; font-size: 11.5px; color: var(--text-faint); line-height: 1.55; }
+  .dl-os-note {
+    margin-top: auto; padding-top: 14px;
+    font-size: 11.5px; color: var(--text-faint); line-height: 1.55;
+  }
 
   .dl-fallback { margin-top: 28px; text-align: center; font-size: 13px; color: var(--text-muted); }
   .dl-fallback a { color: var(--brass); font-weight: 500; text-decoration: none; }
@@ -739,13 +751,17 @@
             </div>
             <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*setup\.exe$">
               <span class="dl-btn-label">Installer</span>
+              <span class="dl-btn-desc">Recommended for most users</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
             <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*portable\.exe$">
               <span class="dl-btn-label">Portable</span>
+              <span class="dl-btn-desc">Run without installing</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
-            <p class="dl-os-note">Installs into Windows and adds shortcuts. The portable build runs from any folder or USB drive.</p>
+            <p class="dl-os-note">Installs into Windows and adds shortcuts. The portable build runs from any folder or USB drive. These are the 64-bit (x64) builds; arm64 builds are also available on GitHub.</p>
           </div>
 
           <div class="dl-os-card" data-os="mac">
@@ -755,13 +771,17 @@
             </div>
             <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="mac.*arm64.*\.dmg$">
               <span class="dl-btn-label">.dmg Installer</span>
+              <span class="dl-btn-desc">Recommended for most users</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
             <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="mac.*arm64.*\.zip$">
               <span class="dl-btn-label">Zip Archive</span>
+              <span class="dl-btn-desc">Unzip and run, no install needed</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
-            <p class="dl-os-note">Built for Apple Silicon (M1 and later).</p>
+            <p class="dl-os-note">Built for Apple Silicon (M1 and later). Intel Macs aren't supported yet.</p>
           </div>
 
           <div class="dl-os-card" data-os="linux">
@@ -771,13 +791,17 @@
             </div>
             <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*\.deb$">
               <span class="dl-btn-label">.deb Installer</span>
+              <span class="dl-btn-desc">Debian, Ubuntu, and Linux Mint</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
             <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*\.appimage$">
               <span class="dl-btn-label">AppImage</span>
+              <span class="dl-btn-desc">Portable, works on most distributions</span>
               <span class="dl-btn-sub"></span>
+              <span class="dl-btn-file mono"></span>
             </a>
-            <p class="dl-os-note">Install system-wide with the .deb package, or run the AppImage directly.</p>
+            <p class="dl-os-note">Install system-wide with the .deb package, or run the AppImage directly. These are the 64-bit (amd64/x86_64) builds; arm64 builds are also available on GitHub.</p>
           </div>
 
         </div>
@@ -1037,6 +1061,7 @@ npm run build</pre>
             : matchAsset(releaseAssets, btn.dataset.pattern);
 
           var sub = btn.querySelector('.dl-btn-sub');
+          var file = btn.querySelector('.dl-btn-file');
           if (asset) {
             btn.href = asset.browser_download_url;
             btn.removeAttribute('aria-disabled');
@@ -1044,11 +1069,16 @@ npm run build</pre>
               var sizeMb = asset.size ? (asset.size / (1024 * 1024)).toFixed(1) : null;
               sub.textContent = 'v' + version + (sizeMb ? ' · ' + sizeMb + ' MB' : '');
             }
+            if (file) {
+              file.textContent = asset.name;
+              file.title = asset.name;
+            }
           } else {
             btn.href = releasesUrl;
             btn.target = '_blank';
             btn.rel = 'noopener';
             if (sub) sub.textContent = 'Not in this release';
+            if (file) { file.textContent = ''; file.removeAttribute('title'); }
           }
         }
 
