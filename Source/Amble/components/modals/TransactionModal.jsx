@@ -179,27 +179,27 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
             </select>
           </div>
         )}
+        {categoryStatus && (
+          <div className="modal-status-card">
+            {categoryStatus.hasLimit ? (
+              <>
+                <span className={`modal-status-amount ${categoryStatus.remaining < 0 ? "tone-rust" : "tone-teal"}`}>{fmt(categoryStatus.remaining)}</span>
+                <span>/</span>
+                <span className="modal-status-amount">{fmt(categoryStatus.limit)}</span>
+                <span>remaining for</span>
+                <strong>{categoryStatus.name}</strong>
+              </>
+            ) : (
+              <>
+                <span className="modal-status-amount">{fmt(categoryStatus.spent)}</span>
+                <span>spent for</span>
+                <strong>{categoryStatus.name}</strong>
+                <span>· no budget set</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
-      {categoryStatus && (
-        <div className="modal-status-bar">
-          {categoryStatus.hasLimit ? (
-            <>
-              <span className={`modal-status-amount ${categoryStatus.remaining < 0 ? "tone-rust" : "tone-teal"}`}>{fmt(categoryStatus.remaining)}</span>
-              <span>/</span>
-              <span className="modal-status-amount">{fmt(categoryStatus.limit)}</span>
-              <span>remaining for</span>
-              <strong>{categoryStatus.name}</strong>
-            </>
-          ) : (
-            <>
-              <span className="modal-status-amount">{fmt(categoryStatus.spent)}</span>
-              <span>spent for</span>
-              <strong>{categoryStatus.name}</strong>
-              <span>· no budget set</span>
-            </>
-          )}
-        </div>
-      )}
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}
         <div style={{ display: "flex", gap: 8 }}>
