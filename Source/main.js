@@ -11,6 +11,8 @@ function getIconPath() {
   }
 }
 
+let mainWindow = null;
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1320,
@@ -42,15 +44,44 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, "dist/index.html"));
   }
+
+  // Track the first window as "main" so a relaunch attempt (blocked by the
+  // single-instance lock) has something to focus. Pop-out windows created
+  // later are not tracked here, so they don't interfere with this.
+  if (!mainWindow) {
+    mainWindow = win;
+    win.on("closed", () => {
+      mainWindow = null;
+    });
+  }
+
+  return win;
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
+// Ensure only one instance of the app can run, so a second launch
+// can't spawn a second window in a separate process.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
+
+  app.whenReady().then(() => {
+    createWindow();
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+}

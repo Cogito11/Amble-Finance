@@ -63,6 +63,12 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const isAnyFiltered = Object.values(isColumnFiltered).some(Boolean);
   const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
+  const orderById = useMemo(() => {
+    const map = new Map();
+    transactions.forEach((transaction, index) => map.set(transaction.id, index));
+    return map;
+  }, [transactions]);
+
   const filtered = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
     const rows = transactions
@@ -95,9 +101,13 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       const first = valueFor(a, sort.column);
       const second = valueFor(b, sort.column);
       const result = typeof first === "number" ? first - second : String(first).localeCompare(String(second));
-      return sort.direction === "asc" ? result : -result;
+      if (result !== 0) return sort.direction === "asc" ? result : -result;
+      // Tie (e.g. same date): fall back to insertion order so the most
+      // recently added transaction surfaces first within the tied group,
+      // rather than relying on sort stability (which would push it last).
+      return orderById.get(b.id) - orderById.get(a.id);
     });
-  }, [transactions, filters, search, sort, accounts, categories]);
+  }, [transactions, filters, search, sort, accounts, categories, orderById]);
 
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";

@@ -1,10 +1,48 @@
 import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
+// Hand-curated (not evenly hue-rotated) so neighbors read as distinct colors
+// rather than blending into a gradient - saturation/lightness vary per entry
+// on purpose. Weighted toward reds/oranges/greens/teals/blues; purple/pink
+// kept to a handful of calmer accents (indigo through rose below); "slate"
+// and "sand" at the end are true desaturated neutrals, not another hue family.
 export const CAT_PALETTE = [
-  "#C9A24B", "#3E8E7E", "#8B6F47", "#6B8E9F", "#B0463C",
-  "#7A6A8A", "#A3763F", "#4F7C6B", "#9C7B4F", "#6E5B4A",
+  "#D2414D", "#DC7160", "#D07039", "#DE9E54", "#D4AB49", "#D6C066",
+  "#C0C44F", "#A0C251", "#71B045", "#5DBF4A", "#3E984A", "#42A975",
+  "#36A192", "#3DB7C2", "#3895BC", "#4A8AC9", "#587CD0", "#3E51CC",
+  "#3F36BF", "#466B9B", "#6A4AB5", "#8D5BB9", "#AF67C1", "#C760A2",
+  "#D06287", "#A84F38", "#6E9245", "#397F50", "#535C65", "#BCB19F",
 ];
+
+// Small stable string hash (not cryptographic - just needs to spread names
+// evenly across the palette) used to break ties deterministically instead
+// of via Math.random(), so a given name always resolves the same way.
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  return hash;
+}
+
+// Picks a color for a new category from CAT_PALETTE, preferring colors that
+// aren't already in use by an existing category so categories stay visually
+// distinct for as long as possible (up to the palette size). Once every color
+// is in use at least once, falls back to picking among the least-used colors,
+// breaking ties by hashing the category's name so the same name reliably
+// lands on the same color rather than jittering between reloads/edits.
+export function nextCategoryColor(existingCategories, name) {
+  const counts = new Map(CAT_PALETTE.map((c) => [c, 0]));
+  // Sub-items (parentCategoryId set) deliberately inherit their parent's color
+  // rather than picking their own, so they aren't a genuine additional "use"
+  // of that color - only count top-level categories toward usage.
+  for (const c of existingCategories || []) {
+    if (c.parentCategoryId) continue;
+    if (c.color && counts.has(c.color)) counts.set(c.color, counts.get(c.color) + 1);
+  }
+  const minCount = Math.min(...counts.values());
+  const leastUsed = CAT_PALETTE.filter((c) => counts.get(c) === minCount);
+  const hash = hashString(name || "");
+  return leastUsed[hash % leastUsed.length];
+}
 
 // The general (unowned by any budget) starter categories - just the income
 // categories. The rest of the starter expense categories live inside the
@@ -71,7 +109,7 @@ export function syncPlanCategories(plan, categories) {
       keepIds.add(parentId);
     } else {
       parentId = uid();
-      parentColor = CAT_PALETTE[Math.floor(Math.random() * CAT_PALETTE.length)];
+      parentColor = nextCategoryColor(cats, pc.name);
       cats.push({
         id: parentId, name: pc.name, type: "expense", limit: total,
         color: parentColor, planId: plan.id, parentCategoryId: null, date: pc.date || null,

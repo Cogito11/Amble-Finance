@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import {
-  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, Database, Github, Globe
+  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe
 } from "lucide-react";
 import { ShortcutsList } from "../common/Shortcuts";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
@@ -8,12 +8,31 @@ import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
 
 export function MoreView({
   onExportJSON, onImportJSON, onExportCSV, transactionCount, themeMode, onChangeThemeMode,
-  currency, onChangeCurrency, accountCount, budgetCount, categoryCount, dbSizeBytes, lastBackupAt,
+  currency, onChangeCurrency, accountCount, budgetCount, categoryCount, onRefreshCategoryColors,
+  dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
   dashboardWidgets, onToggleWidget,
 }) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
+
+  // Brief visual feedback for the "Refresh" color button: the icon spins for a
+  // moment, then flips to a checkmark + "Refreshed" before settling back to idle.
+  // Runs on a timer rather than waiting on the actual state update since the color
+  // shuffle itself is effectively instant - this is purely to confirm to the user
+  // that their click registered and did something.
+  const [colorRefreshState, setColorRefreshState] = useState("idle"); // idle | spinning | done
+  const colorRefreshTimerRef = useRef(null);
+
+  const handleRefreshColors = () => {
+    onRefreshCategoryColors();
+    clearTimeout(colorRefreshTimerRef.current);
+    setColorRefreshState("spinning");
+    colorRefreshTimerRef.current = setTimeout(() => {
+      setColorRefreshState("done");
+      colorRefreshTimerRef.current = setTimeout(() => setColorRefreshState("idle"), 1100);
+    }, 450);
+  };
 
   return (
     <div className="more-view">
@@ -47,7 +66,7 @@ export function MoreView({
               ))}
             </div>
           </div>
-          <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+          <div className="settings-row">
             <div>
               <div className="settings-row-label">Currency</div>
               <div className="settings-desc">Amounts throughout Amble will be displayed in this currency.</div>
@@ -57,6 +76,16 @@ export function MoreView({
                 <option key={c.code} value={c.code}>{c.symbol} {c.code} ({c.name})</option>
               ))}
             </select>
+          </div>
+          <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
+            <div>
+              <div className="settings-row-label">Category colors</div>
+              <div className="settings-desc">Re-assigns colors across your categories, spreading them out evenly. Run it as often as you'd like.</div>
+            </div>
+            <button className="btn btn-ghost" onClick={handleRefreshColors}>
+              {colorRefreshState === "done" ? <Check size={14} /> : <RefreshCw size={14} className={colorRefreshState === "spinning" ? "spin" : ""} />}
+              {" "}{colorRefreshState === "done" ? "Refreshed" : "Refresh"}
+            </button>
           </div>
         </div>
       )}

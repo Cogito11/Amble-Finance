@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { categorySpend } from "../../state/categories";
 import { todayStr } from "../../utils/dates";
+import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 /* ---------------------------------- modals ---------------------------------- */
-export function TransactionModal({ initial, accounts, categories, plans, onSave, onClose, onDelete }) {
+export function TransactionModal({ initial, accounts, categories, plans, transactions, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
   const [date, setDate] = useState(initial.date || todayStr());
@@ -16,6 +18,10 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
   const [accountId, setAccountId] = useState(initial.accountId || accounts[0]?.id || "");
   const [toAccountId, setToAccountId] = useState(initial.toAccountId || "");
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
+  // Tracks whether the user has manually typed into the description box - either just now,
+  // or already (editing a transaction that already has a description). Once true, category
+  // changes stop touching the description entirely; only our own autofill leaves it false.
+  const userTypedDescRef = useRef(!!initial.description);
 
   // A category that's mirrored from a budget (planId set) should only be pickable
   // while that budget is the active one - once a budget is deactivated its
@@ -38,7 +44,9 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
   // as the current selection isn't one (e.g. right after picking a parent that has items).
   useEffect(() => {
     if (subCategories.length > 0 && !subCategories.some((c) => c.id === categoryId)) {
-      setCategoryId(subCategories[0].id);
+      const firstSub = subCategories[0];
+      setCategoryId(firstSub.id);
+      if (!userTypedDescRef.current) setDescription(firstSub.name);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedParentId, subCategories.length]);
@@ -55,6 +63,43 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
     if (!parent || parent.type !== type) setCategoryId("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type]);
+
+  // Picking a category is a strong signal of what the transaction is - default the
+  // description to the category's name, and keep it in sync as the user switches
+  // categories, but only until they've typed something of their own into the box.
+  // If the picked category has sub-expenses, its own name is just a placeholder
+  // ("General X") - leave the naming to the effect above, which resolves it to the
+  // actual sub-expense once one is selected.
+  const handleCategoryChange = (newCategoryId) => {
+    setCategoryId(newCategoryId);
+    if (!newCategoryId || userTypedDescRef.current) return;
+    const hasSubs = categories.some((c) => c.parentCategoryId === newCategoryId);
+    if (hasSubs) return;
+    const cat = categories.find((c) => c.id === newCategoryId);
+    if (cat) setDescription(cat.name);
+  };
+
+  // Status line shown above the footer: the remaining balance for whichever category
+  // (or, if picked, its specific sub-expense) is currently selected - not just its
+  // saved-so-far spend, but a live preview that swaps out this transaction's old
+  // amount (if editing) for whatever's currently typed in the amount field, so the
+  // number updates as the user adjusts it instead of only reflecting what's already saved.
+  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId);
+  const categoryStatus = (() => {
+    if (!selectedCategory || type === "income") return null;
+    const typedAmount = parseFloat(amount);
+    const otherTxs = transactions.filter((t) => t.id !== initial.id);
+    const baseSpend = categorySpend(selectedCategory, otherTxs, plans, categories);
+    const spent = baseSpend + (isCurrentSpend && typedAmount > 0 ? typedAmount : 0);
+    const hasLimit = (selectedCategory.limit || 0) > 0;
+    return {
+      name: selectedCategory.name,
+      spent,
+      limit: selectedCategory.limit || 0,
+      hasLimit,
+      remaining: hasLimit ? selectedCategory.limit - spent : null,
+    };
+  })();
 
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
 
@@ -90,7 +135,7 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
         </div>
         <div className="form-group">
           <label>Description</label>
-          <input className="input" placeholder="e.g. Trader Joe's" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input className="input" placeholder="e.g. Trader Joe's" value={description} onChange={(e) => { userTypedDescRef.current = true; setDescription(e.target.value); }} />
         </div>
         <div className="form-row">
           <div className="form-group">
@@ -110,7 +155,7 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
           ) : (
             <div className="form-group">
               <label>Category</label>
-              <select className="select" value={selectedParentId} onChange={(e) => setCategoryId(e.target.value)}>
+              <select className="select" value={selectedParentId} onChange={(e) => handleCategoryChange(e.target.value)}>
                 <option value="">Uncategorized</option>
                 {parentCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -120,7 +165,7 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
         {type === "transfer" && (
           <div className="form-group">
             <label>Category (optional)</label>
-            <select className="select" value={selectedParentId} onChange={(e) => setCategoryId(e.target.value)}>
+            <select className="select" value={selectedParentId} onChange={(e) => handleCategoryChange(e.target.value)}>
               <option value="">Uncategorized</option>
               {parentCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -129,9 +174,29 @@ export function TransactionModal({ initial, accounts, categories, plans, onSave,
         {subCategories.length > 0 && (
           <div className="form-group">
             <label>Specific expense</label>
-            <select className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <select className="select" value={categoryId} onChange={(e) => handleCategoryChange(e.target.value)}>
               {subCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+        )}
+        {categoryStatus && (
+          <div className="modal-status-card">
+            {categoryStatus.hasLimit ? (
+              <>
+                <span className={`modal-status-amount ${categoryStatus.remaining < 0 ? "tone-rust" : "tone-teal"}`}>{fmt(categoryStatus.remaining)}</span>
+                <span>/</span>
+                <span className="modal-status-amount">{fmt(categoryStatus.limit)}</span>
+                <span>remaining for</span>
+                <strong>{categoryStatus.name}</strong>
+              </>
+            ) : (
+              <>
+                <span className="modal-status-amount">{fmt(categoryStatus.spent)}</span>
+                <span>spent for</span>
+                <strong>{categoryStatus.name}</strong>
+                <span>· no budget set</span>
+              </>
+            )}
           </div>
         )}
       </div>
