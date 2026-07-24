@@ -44,6 +44,54 @@ export function nextCategoryColor(existingCategories, name) {
   return leastUsed[hash % leastUsed.length];
 }
 
+// Reassigns every top-level category's color, shuffled to a fresh arrangement each
+// time it's called - not just ones whose color happens to have fallen outside the
+// palette (that almost never happens in practice, since categories always get
+// their color from the palette to begin with). Unlike nextCategoryColor (used when
+// a single new category is created, where a name-based hash keeps its color stable
+// across reloads), this deliberately uses real randomness: it shuffles a working
+// copy of CAT_PALETTE and hands the colors out in that shuffled order, so repeated
+// clicks keep landing on a different layout instead of converging on one
+// deterministic "balanced" result and going stale after the first click. Colors
+// are still handed out round-robin through the shuffled palette, so usage stays
+// even - it's the order that's randomized, not which colors get used how often.
+// Sub-expenses always mirror their parent's color rather than choosing their own
+// (see nextCategoryColor), so afterward every child is re-synced to its parent's
+// freshly shuffled color.
+// Returns the updated category list plus how many categories actually ended up
+// with a different color than before (informational only - the caller doesn't
+// need this to decide whether to apply the update).
+export function refreshCategoryColors(categories) {
+  let cats = (categories || []).map((c) => ({ ...c }));
+  let changedCount = 0;
+
+  const shuffled = [...CAT_PALETTE];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  let nextIdx = 0;
+  cats = cats.map((c) => {
+    if (c.parentCategoryId) return c;
+    const newColor = shuffled[nextIdx % shuffled.length];
+    nextIdx++;
+    if (newColor !== c.color) changedCount++;
+    return { ...c, color: newColor };
+  });
+
+  const parentColorById = new Map(cats.filter((c) => !c.parentCategoryId).map((c) => [c.id, c.color]));
+  cats = cats.map((c) => {
+    if (!c.parentCategoryId) return c;
+    const parentColor = parentColorById.get(c.parentCategoryId);
+    if (!parentColor || c.color === parentColor) return c;
+    changedCount++;
+    return { ...c, color: parentColor };
+  });
+
+  return { categories: cats, changedCount };
+}
+
 // The general (unowned by any budget) starter categories - just the income
 // categories. The rest of the starter expense categories live inside the
 // seeded Default Budget below.
