@@ -7,6 +7,20 @@
 <meta name="theme-color" content="#1a212c" media="(prefers-color-scheme: dark)" />
 <title>Amble Finance</title>
 <meta name="description" content="Amble is a free personal finance and budgeting app for Windows, macOS, and Linux. Track accounts, log transactions, and see real budget gauges - no account, no subscription, no learning curve." />
+<link rel="canonical" href="https://www.amble-finance.app/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Amble Finance" />
+<meta property="og:title" content="Amble Finance: free, private personal finance app" />
+<meta property="og:description" content="Track accounts, build real budgets, and see exactly where your money goes. Free, open source, no account required." />
+<meta property="og:url" content="https://www.amble-finance.app/" />
+<meta property="og:image" content="https://www.amble-finance.app/og-image.png" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Amble Finance: free, private personal finance app" />
+<meta name="twitter:description" content="Track accounts, build real budgets, and see exactly where your money goes. Free, open source, no account required." />
+<meta name="twitter:image" content="https://www.amble-finance.app/og-image.png" />
+
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%231f7dc4'/%3E%3Ctext x='32' y='46' font-family='Georgia,serif' font-size='44' font-weight='600' fill='white' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,7 +41,7 @@
     --text-muted: #5b7a91;
     --text-faint: #7c9db4;
     --shadow: 0 1px 2px rgba(18,50,73,0.04), 0 12px 32px -16px rgba(18,50,73,0.16);
-    --nav-h: 73px;
+    --nav-h: 59px;
     --content-w: min(1120px, 94vw);
     color-scheme: light dark;
   }
@@ -86,7 +100,7 @@
     border-bottom: 1px solid var(--border);
   }
   .nav-inner {
-    display: flex; align-items: center; justify-content: space-between; height: 72px;
+    display: flex; align-items: center; justify-content: space-between; height: 58px;
     padding: 0 max(28px, env(safe-area-inset-right)) 0 max(28px, env(safe-area-inset-left));
     max-width: var(--content-w); margin: 0 auto; box-sizing: border-box;
   }
@@ -122,8 +136,8 @@
   }
 
   @media (max-width: 400px) {
-    :root { --nav-h: 63px; }
-    .nav-inner { height: 62px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+    :root { --nav-h: 78px; }
+    .nav-inner { height: 50px; padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
     .brand-mark { width: 28px; height: 28px; font-size: 18px; }
     .brand-word { font-size: 14.5px; letter-spacing: 0.05em; }
     .btn-sm { padding: 8px 12px; font-size: 12.5px; }
@@ -443,7 +457,7 @@
           <h1>Amble Finance</h1>
           <p class="hero-sub">
             Amble is a free personal finance app that lets you track what you spend, set real budgets,
-            and see exactly where your money goes. no sign-ups and no hassle required.
+            and see exactly where your money goes. No sign-ups and no hassle required.
           </p>
           <div class="hero-ctas">
             <a class="btn btn-primary" href="#download">Download Amble</a>
@@ -502,7 +516,7 @@
           <div class="why-card reveal">
             <span class="why-num mono">03</span>
             <h3>Turn goals into numbers</h3>
-            <p>"Save more" isn't a plan that's easy to act on. "Put $200 into savings every payday" is, and Amble makes it easy to stick to to your goals by turning them into measurable actions.</p>
+            <p>"Save more" isn't a plan that's easy to act on. "Put $200 into savings every payday" is, and Amble makes it easy to stick to your goals by turning them into measurable actions.</p>
           </div>
           <div class="why-card reveal">
             <span class="why-num mono">04</span>
@@ -580,7 +594,7 @@
             <div class="feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
             </div>
-            <h3>Easy Debt Tracking</h3>
+            <h3>Easy debt tracking</h3>
             <p>Credit cards and loans carry their own balance and APR, kept alongside everything you own so payoff progress is easy to see instead of easy to avoid.</p>
           </div>
 
@@ -698,7 +712,7 @@
             </button>
             <div class="faq-answer-wrap" id="faq-a5" role="region" aria-labelledby="faq-q5">
               <div class="faq-answer-inner">
-                <p>Windows, macOS, and Linux are all supported. Download links for each are below.</p>
+                <p>Amble runs on Windows, macOS, and Linux. Builds for Windows and Linux are available below. macOS builds aren't being distributed at the moment (see the download section for why); macOS users can build from source in the meantime.</p>
               </div>
             </div>
           </div>
@@ -725,13 +739,13 @@
               <span class="dl-os-name">Windows</span>
               <span class="dl-os-recommended" hidden>Recommended</span>
             </div>
-            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*setup\.exe$">
+            <a class="dl-btn dl-btn-primary" href="https://github.com/Cogito11/Amble-Finance/releases" target="_blank" rel="noopener" data-type="installer" data-pattern="^(?!.*arm).*setup\.exe$">
               <span class="dl-btn-label">Installer</span>
               <span class="dl-btn-desc">Recommended for most users</span>
               <span class="dl-btn-sub"></span>
               <span class="dl-btn-file mono"></span>
             </a>
-            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*portable\.exe$">
+            <a class="dl-btn dl-btn-secondary" href="https://github.com/Cogito11/Amble-Finance/releases" target="_blank" rel="noopener" data-type="portable" data-pattern="^(?!.*arm).*portable\.exe$">
               <span class="dl-btn-label">Portable</span>
               <span class="dl-btn-desc">Run without installing</span>
               <span class="dl-btn-sub"></span>
@@ -761,13 +775,13 @@
               <span class="dl-os-name">Linux</span>
               <span class="dl-os-recommended" hidden>Recommended</span>
             </div>
-            <a class="dl-btn dl-btn-primary" href="#" data-type="installer" data-pattern="^(?!.*arm).*\.deb$">
+            <a class="dl-btn dl-btn-primary" href="https://github.com/Cogito11/Amble-Finance/releases" target="_blank" rel="noopener" data-type="installer" data-pattern="^(?!.*arm).*\.deb$">
               <span class="dl-btn-label">.deb Installer</span>
               <span class="dl-btn-desc">Debian, Ubuntu, and Linux Mint</span>
               <span class="dl-btn-sub"></span>
               <span class="dl-btn-file mono"></span>
             </a>
-            <a class="dl-btn dl-btn-secondary" href="#" data-type="portable" data-pattern="^(?!.*arm).*\.appimage$">
+            <a class="dl-btn dl-btn-secondary" href="https://github.com/Cogito11/Amble-Finance/releases" target="_blank" rel="noopener" data-type="portable" data-pattern="^(?!.*arm).*\.appimage$">
               <span class="dl-btn-label">AppImage</span>
               <span class="dl-btn-desc">Portable, works on most distributions</span>
               <span class="dl-btn-sub"></span>
@@ -933,6 +947,8 @@ npm run build</pre>
           if (asset) {
             btn.href = asset.browser_download_url;
             btn.removeAttribute('aria-disabled');
+            btn.removeAttribute('target');
+            btn.removeAttribute('rel');
             if (sub) {
               var sizeMb = asset.size ? (asset.size / (1024 * 1024)).toFixed(1) : null;
               sub.textContent = 'v' + version + (sizeMb ? ' · ' + sizeMb + ' MB' : '');
@@ -956,7 +972,17 @@ npm run build</pre>
 
       fetch('https://api.github.com/repos/' + REPO + '/releases/latest')
         .then(function (res) {
-          if (!res.ok) throw new Error('No releases yet');
+          if (res.status === 404) {
+            throw new Error('no-release');
+          }
+          if (res.status === 403 || res.status === 429) {
+            var remaining = res.headers.get('X-RateLimit-Remaining');
+            if (remaining === '0' || res.status === 429) throw new Error('rate-limited');
+            throw new Error('fetch-failed');
+          }
+          if (!res.ok) {
+            throw new Error('fetch-failed');
+          }
           return res.json();
         })
         .then(function (release) {
@@ -974,8 +1000,16 @@ npm run build</pre>
             if (card) setDownloadButtons(card, assets, version);
           });
         })
-        .catch(function () {
-          if (metaEl) metaEl.textContent = 'No published release yet. Build it from source below.';
+        .catch(function (err) {
+          if (!metaEl) return;
+          var reason = err && err.message;
+          if (reason === 'no-release') {
+            metaEl.textContent = 'No published release yet. Build it from source below.';
+          } else if (reason === 'rate-limited') {
+            metaEl.textContent = "GitHub's API rate limit was hit. Try again in a few minutes, or use the buttons below to go straight to the releases page.";
+          } else {
+            metaEl.textContent = "Couldn't check the latest release right now. The buttons below will take you straight to the releases page.";
+          }
         });
     })();
 
