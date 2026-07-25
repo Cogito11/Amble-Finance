@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Loader2, Moon, Sun, MoreHorizontal, Sliders
+  Plus, Loader2, MoreHorizontal, Sliders
 } from "lucide-react";
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
@@ -759,13 +759,6 @@ export default function App() {
           <header className="topbar">
             <h1 className="view-title">{VIEW_TITLES[view]}</h1>
             <div className="topbar-actions">
-              <button
-                className="icon-btn theme-toggle"
-                onClick={() => setThemeMode(darkMode ? "light" : "dark")}
-                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-              >
-                {darkMode ? <Sun size={17} /> : <Moon size={17} />}
-              </button>
               {view === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
