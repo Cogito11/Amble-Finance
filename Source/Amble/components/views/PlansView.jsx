@@ -5,10 +5,10 @@ import {
 import { EmptyState } from "../common/EmptyState";
 import { PlanCategoryTable } from "./BudgetsView";
 import { planAllocated } from "../../state/categories";
-import { REPEAT_LABELS, sortedPlansList } from "../../state/plans";
+import { REPEAT_LABELS, planIncomeTotal, sortedPlansList } from "../../state/plans";
 import { fmt, fmtDate } from "../../utils/format";
 
-export function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetActive, onDuplicate, onReorder }) {
+export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDelete, onSetActive, onDuplicate, onReorder }) {
   if (plans.length === 0) {
     return (
       <EmptyState
@@ -31,7 +31,8 @@ export function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetA
       <div className="plans-list">
         {sorted.map((p, pi) => {
           const allocated = planAllocated(p);
-          const remaining = (Number(p.income) || 0) - allocated;
+          const income = planIncomeTotal(p, transactions, plans, categories);
+          const remaining = income - allocated;
           return (
             <div key={p.id} className={`plan-card ${p.active ? "plan-active" : ""}`}>
               <div className="plan-card-top">
@@ -79,7 +80,7 @@ export function PlansView({ plans, transactions, onAdd, onEdit, onDelete, onSetA
               <div className="plan-card-stats">
                 <div>
                   <div className="plan-stat-label">Income</div>
-                  <div className="plan-stat-value">{fmt(p.income)}</div>
+                  <div className="plan-stat-value">{fmt(income)}</div>
                 </div>
                 <div>
                   <div className="plan-stat-label">Allocated</div>

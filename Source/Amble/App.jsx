@@ -588,7 +588,7 @@ export default function App() {
       startDate: p.startDate || "",
       endDate: p.endDate || "",
       income: p.income,
-      incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
+      incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, mode: it.mode === "category" ? "category" : "manual", amount: it.amount })),
       active: false,
       repeat: p.repeat ? { ...p.repeat } : { enabled: false, frequency: "monthly" },
       categories: (p.categories || []).map((c) => ({
@@ -735,6 +735,7 @@ export default function App() {
               categoryId: undefined,
               items: (c.items || []).map((it) => ({ ...it, categoryId: undefined })),
             })),
+            incomeItems: (p.incomeItems || []).map((it) => ({ ...it, categoryId: undefined })),
           }));
           let categories = [];
           // Re-mirror the active budget right away so its category badges don't
@@ -900,6 +901,7 @@ export default function App() {
               <PlansView
                 plans={state.plans}
                 transactions={state.transactions}
+                categories={state.categories}
                 onAdd={() => setPlanModal({})}
                 onEdit={setPlanModal}
                 onDelete={requestDeletePlan}
@@ -957,7 +959,15 @@ export default function App() {
         <CategoryModal initial={catModal} categories={state.categories} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
       )}
       {planModal !== null && (
-        <PlanModal initial={planModal} onSave={savePlan} onClose={() => setPlanModal(null)} onDelete={requestDeletePlan} />
+        <PlanModal
+          initial={planModal}
+          transactions={state.transactions}
+          plans={state.plans}
+          categories={state.categories}
+          onSave={savePlan}
+          onClose={() => setPlanModal(null)}
+          onDelete={requestDeletePlan}
+        />
       )}
       {widgetModalOpen && (
         <WidgetSettingsModal widgets={dashboardWidgets} onToggle={toggleWidget} onClose={() => setWidgetModalOpen(false)} />

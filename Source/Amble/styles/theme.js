@@ -313,8 +313,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
+.plan-income-mode-seg { flex-shrink:0; width:150px; }
+.plan-income-tracked { display:flex; align-items:center; justify-content:flex-end; background: var(--surface-2); color: var(--text-muted); }
+.plan-income-cat-note { margin: 2px 0 0; font-size:12px; }
 .plan-cat-bulk { margin:0; }
 .plan-items { display:flex; flex-direction:column; gap:8px; }
+.plan-income-item { display:flex; flex-direction:column; gap:4px; }
 .plan-item-row { display:flex; align-items:center; gap:8px; }
 .plan-item-row .input { flex:1; }
 .plan-item-amount { width:110px; flex-shrink:0; }

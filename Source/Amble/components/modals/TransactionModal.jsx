@@ -3,7 +3,7 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { categorySpend } from "../../state/categories";
+import { categoryIncome, categorySpend } from "../../state/categories";
 import { todayStr } from "../../utils/dates";
 import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
@@ -84,9 +84,10 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   // saved-so-far spend, but a live preview that swaps out this transaction's old
   // amount (if editing) for whatever's currently typed in the amount field, so the
   // number updates as the user adjusts it instead of only reflecting what's already saved.
-  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId);
+  const isIncomeCategory = selectedCategory && selectedCategory.type === "income";
+  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId && !isIncomeCategory);
   const categoryStatus = (() => {
-    if (!selectedCategory || type === "income") return null;
+    if (!selectedCategory || type === "income" || isIncomeCategory) return null;
     const typedAmount = parseFloat(amount);
     const otherTxs = transactions.filter((t) => t.id !== initial.id);
     const baseSpend = categorySpend(selectedCategory, otherTxs, plans, categories);
@@ -99,6 +100,19 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
       hasLimit,
       remaining: hasLimit ? selectedCategory.limit - spent : null,
     };
+  })();
+
+  // Same idea as categoryStatus above, but for a category tracked on the income
+  // side (see PlanModal's "Category" income mode) - just a running total, since
+  // income entries don't carry a limit the way expense categories can.
+  const isCurrentIncomeContribution = type === "income" || (type === "transfer" && !!categoryId && isIncomeCategory);
+  const incomeCategoryStatus = (() => {
+    if (!selectedCategory || !isIncomeCategory) return null;
+    const typedAmount = parseFloat(amount);
+    const otherTxs = transactions.filter((t) => t.id !== initial.id);
+    const baseIncome = categoryIncome(selectedCategory, otherTxs, plans, categories);
+    const tracked = baseIncome + (isCurrentIncomeContribution && typedAmount > 0 ? typedAmount : 0);
+    return { name: selectedCategory.name, tracked };
   })();
 
   const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
@@ -197,6 +211,13 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
                 <span>· no budget set</span>
               </>
             )}
+          </div>
+        )}
+        {incomeCategoryStatus && (
+          <div className="modal-status-card">
+            <span className="modal-status-amount tone-teal">{fmt(incomeCategoryStatus.tracked)}</span>
+            <span>tracked for</span>
+            <strong>{incomeCategoryStatus.name}</strong>
           </div>
         )}
       </div>
