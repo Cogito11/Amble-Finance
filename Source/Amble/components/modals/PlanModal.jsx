@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown
+  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { categoryIncome, planCategoryTotal } from "../../state/categories";
@@ -162,51 +162,6 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
             <input type="date" className="input mono" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
-        <div className="form-group">
-          <label>Income</label>
-          <div className="plan-items">
-            {incomeItems.map((it) => {
-              const isCategory = it.mode === "category";
-              return (
-                <div key={it.id} className="plan-income-item">
-                  <div className="plan-item-row">
-                    <input
-                      className="input"
-                      placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
-                      value={it.name}
-                      onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })}
-                    />
-                    <div className="seg plan-income-mode-seg">
-                      <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
-                      <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
-                    </div>
-                    {isCategory ? (
-                      <div className="input mono plan-item-amount plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
-                        {fmt(itemAmount(it))}
-                      </div>
-                    ) : (
-                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
-                    )}
-                    {incomeItems.length > 1 && (
-                      <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><X size={14} /></button>
-                    )}
-                  </div>
-                  {isCategory && (
-                    <p className="settings-desc plan-income-cat-note">
-                      {it.categoryId
-                        ? "Tracked live - selectable on income (and transfer) transactions while this budget is active. Tagging a transaction with it adds to the total above automatically."
-                        : "New category - save this budget to create it, after which it becomes selectable on transactions and starts tracking."}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-            <div className="plan-items-footer">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
-              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
-            </div>
-          </div>
-        </div>
 
         <div className="plan-repeat-block">
           <label className="checkbox-row">
@@ -240,6 +195,59 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
               Warning: This budget is set to run for {matchDays} day{matchDays === 1 ? "" : "s"} (Ending on {fmtDate(endDate)}). Repeating {REPEAT_DUE_PHRASES[repeatFreq]} its start date means the next cycle begins on {fmtDate(repeatPreview.due)}. This budget will be cut off and end early.
             </p>
           )}
+        </div>
+
+        <div className="plan-categories">
+          <div className="plan-categories-header">
+            <div className="card-title" style={{ marginBottom: 0 }}>
+              <span className="plan-section-title-text">
+                Income
+                <button
+                  type="button"
+                  className="icon-btn plan-info-icon"
+                  aria-label="How income modes work"
+                  title="Manual: type in a fixed amount yourself. Category: creates a real category you can tag on income (and transfer) transactions - the total tracks live as you log them, instead of you typing a number in."
+                >
+                  <Info size={13} />
+                </button>
+              </span>
+            </div>
+          </div>
+          <div className="plan-items">
+            {incomeItems.map((it) => {
+              const isCategory = it.mode === "category";
+              return (
+                <div key={it.id} className="plan-income-item">
+                  <div className="plan-item-row">
+                    <input
+                      className="input"
+                      placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
+                      value={it.name}
+                      onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })}
+                    />
+                    <div className="seg plan-income-mode-seg">
+                      <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
+                      <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
+                    </div>
+                    {isCategory ? (
+                      <div className="input mono plan-item-amount plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
+                        {fmt(itemAmount(it))}
+                      </div>
+                    ) : (
+                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
+                    )}
+                    {incomeItems.length > 1 && (
+                      <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><X size={14} /></button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="plan-items-footer">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
+              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
+            </div>
+          </div>
         </div>
 
         <div className="plan-summary-bar">
