@@ -793,7 +793,7 @@ export default function App() {
   const netWorth = state.accounts.reduce((s, a) => s + balances[a.id], 0);
   const totalDebt = state.accounts.filter(isDebtAccount).reduce((sum, account) => sum + Math.max(0, -balances[account.id]), 0);
   const totalAssets = state.accounts.filter(isAssetAccount).reduce((sum, account) => sum + balances[account.id], 0);
-  const cash = state.accounts.filter((account) => account.type === "cash").reduce((sum, account) => sum + balances[account.id], 0);
+  const cash = state.accounts.filter((account) => ["checking", "savings", "cash"].includes(account.type)).reduce((sum, account) => sum + balances[account.id], 0);
   const netThisMonth = state.transactions.filter((transaction) => monthKeyOf(transaction.date) === currentMonthKey()).reduce((sum, transaction) => sum + (transaction.type === "income" ? transaction.amount : transaction.type === "expense" ? -transaction.amount : 0), 0);
   const footerMetrics = {
     netWorth: { label: "Net worth", value: netWorth },
