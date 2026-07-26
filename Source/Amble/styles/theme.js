@@ -73,6 +73,10 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .app-root ::-webkit-scrollbar-corner, .app-loading ::-webkit-scrollbar-corner { background: transparent; }
 
 .app-shell { display: grid; grid-template-columns: 232px 1fr; height: 100vh; overflow: hidden; }
+/* Popout windows never render the <aside>, so with only one grid item left
+   the default two-column template would place it in the narrow 232px
+   sidebar column instead of spanning the row - this is what fixes it. */
+.app-shell-popout { grid-template-columns: 1fr; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; height: 100%; overflow-y: auto; }
 .brand { display:flex; align-items:center; gap:10px; padding: 6px 8px 20px; }
@@ -85,6 +89,10 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--brass-soft); color: var(--brass); border-left: 2px solid var(--brass); }
 .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--brass-soft); }
+.nav-popout-dot { width:7px; height:7px; border-radius:50%; background: var(--teal); margin-left:auto; flex-shrink:0; }
+
+.icon-btn.popout-open { color: var(--teal); }
+.icon-btn.popout-open:hover { color: var(--teal); background: var(--surface-2); }
 
 .sidebar-footer { border-top:1px solid var(--border); padding-top:14px; margin-top:10px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .sidebar-footer .icon-btn { margin-top:-5px; }
@@ -94,10 +102,20 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .main { display:flex; flex-direction:column; min-width:0; height:100%; min-height:0; }
 .topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 32px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .topbar-actions { display:flex; align-items:center; gap:10px; }
-.theme-toggle { border:1px solid var(--border); background: var(--surface); width:36px; height:36px; align-items:center; justify-content:center; border-radius:8px; color: var(--text-muted); }
-.theme-toggle:hover { color: var(--brass); border-color: var(--brass); }
 .view-title { font-family:'Fraunces',serif; font-weight:600; font-size:24px; margin:0; }
 .content { padding: 24px 32px 48px; overflow-y:auto; flex:1; min-height:0; }
+
+/* Popout windows have no sidebar to absorb the squeeze, so once the window
+   gets narrow, the title and topbar-actions stop fighting for the same row -
+   the title takes its own line and the buttons move below it, full-width and
+   evenly split, instead of shrinking, wrapping mid-row, or clipping. */
+@media (max-width: 520px) {
+  .app-shell-popout .topbar { flex-direction:column; align-items:stretch; gap:12px; padding:18px 20px; }
+  .app-shell-popout .view-title { text-align:center; }
+  .app-shell-popout .topbar-actions { justify-content:stretch; }
+  .app-shell-popout .topbar-actions .btn { flex:1; justify-content:center; }
+  .app-shell-popout .content { padding:16px; }
+}
 
 .btn { display:inline-flex; align-items:center; gap:6px; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:500; cursor:pointer; border:1px solid transparent; font-family:'Inter',sans-serif; transition: filter .15s, background .15s; }
 .btn-primary { background: var(--brass); color: var(--on-brass); }
@@ -300,13 +318,17 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories { display:flex; flex-direction:column; gap:12px; }
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
-.plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
+.plan-cat-block, .plan-income-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
 .plan-cat-move-btns, .plan-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
 .plan-cat-move-btn, .plan-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
 .plan-cat-move-btn:disabled, .plan-move-btn:disabled { opacity:0.3; cursor:default; }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
+.plan-income-mode-seg { flex-shrink:0; width:160px; }
+.plan-income-tracked { display:flex; align-items:center; color: var(--text-muted); cursor:default; }
+.plan-section-title-text { display:flex; align-items:center; gap:6px; }
+.plan-info-icon { padding:3px; cursor:help; }
 .plan-cat-bulk { margin:0; }
 .plan-items { display:flex; flex-direction:column; gap:8px; }
 .plan-item-row { display:flex; align-items:center; gap:8px; }

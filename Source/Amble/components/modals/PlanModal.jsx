@@ -1,16 +1,16 @@
 import React, { useState } from "react";
 import {
-  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown
+  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info
 } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { planCategoryTotal } from "../../state/categories";
+import { categoryIncome, planCategoryTotal } from "../../state/categories";
 import { REPEAT_DUE_PHRASES, nextPlanDates, planDueDate, planMatchDurationDays } from "../../state/plans";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 /* ---------------------------------- plan modal ---------------------------------- */
-export function PlanModal({ initial, onSave, onClose, onDelete }) {
+export function PlanModal({ initial, transactions, plans, categories, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [startDate, setStartDate] = useState(initial.startDate || "");
@@ -23,7 +23,7 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
   const [incomeItems, setIncomeItems] = useState(
     initial.incomeItems && initial.incomeItems.length
       ? initial.incomeItems
-      : [{ id: uid(), name: "Income", amount: initial.income ?? "" }]
+      : [{ id: uid(), name: "Income", mode: "manual", amount: initial.income ?? "" }]
   );
   const [cats, setCats] = useState(
     initial.categories && initial.categories.length ? initial.categories : []
@@ -57,12 +57,22 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
   const repeatCutoffWarning = canRepeat && repeatOn && repeatFreq !== "match" && repeatPreview && repeatPreview.due < endDate;
 
   const canSave = name.trim().length > 0;
-  const totalIncome = incomeItems.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+  // Manual rows use whatever's typed in; rows tracked by category resolve to
+  // a live total (money already logged against that category), the same
+  // relationship categorySpend has to an expense category - so this can move
+  // on its own as new income transactions come in, without editing the budget.
+  const itemAmount = (it) => {
+    if (it.mode !== "category") return Number(it.amount) || 0;
+    if (!it.categoryId) return 0;
+    const cat = (categories || []).find((c) => c.id === it.categoryId);
+    return cat ? categoryIncome(cat, transactions || [], plans || [], categories || []) : 0;
+  };
+  const totalIncome = incomeItems.reduce((s, it) => s + itemAmount(it), 0);
   const allocated = cats.reduce((s, c) => s + planCategoryTotal(c), 0);
   const remaining = totalIncome - allocated;
 
   const addIncomeItem = () => {
-    setIncomeItems((items) => [...items, { id: uid(), name: "", amount: "" }]);
+    setIncomeItems((items) => [...items, { id: uid(), name: "", mode: "manual", amount: "" }]);
   };
   const updateIncomeItem = (id, patch) => {
     setIncomeItems((items) => items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -105,7 +115,13 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
 
   const submit = () => {
     if (!canSave) return;
-    const cleanedIncomeItems = incomeItems.map((it) => ({ id: it.id, name: it.name.trim() || "Income", amount: Number(it.amount) || 0 }));
+    const cleanedIncomeItems = incomeItems.map((it) => ({
+      id: it.id,
+      name: it.name.trim() || (it.mode === "category" ? "Untitled category" : "Income"),
+      mode: it.mode === "category" ? "category" : "manual",
+      amount: itemAmount(it),
+      categoryId: it.mode === "category" ? (it.categoryId || undefined) : undefined,
+    }));
     onSave({
       id: initial.id || uid(),
       name: name.trim(),
@@ -146,24 +162,6 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
             <input type="date" className="input mono" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
-        <div className="form-group">
-          <label>Income</label>
-          <div className="plan-items">
-            {incomeItems.map((it) => (
-              <div key={it.id} className="plan-item-row">
-                <input className="input" placeholder="e.g. Paycheck 1, Rollover from last month" value={it.name} onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })} />
-                <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
-                {incomeItems.length > 1 && (
-                  <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><X size={14} /></button>
-                )}
-              </div>
-            ))}
-            <div className="plan-items-footer">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
-              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
-            </div>
-          </div>
-        </div>
 
         <div className="plan-repeat-block">
           <label className="checkbox-row">
@@ -199,6 +197,65 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
           )}
         </div>
 
+        <div className="plan-categories">
+          <div className="plan-categories-header">
+            <div className="card-title" style={{ marginBottom: 0 }}>
+              <span className="plan-section-title-text">
+                Income
+                <button
+                  type="button"
+                  className="icon-btn plan-info-icon"
+                  aria-label="How income modes work"
+                  title={"Income entries have 2 different modes.\n\nManual: Type in a fixed amount yourself.\n\nCategory: Create this income field as a category that you can assign income and transfer transactions to. The total value of transactions assigned to that category will be the value used."}
+                >
+                  <Info size={13} />
+                </button>
+              </span>
+            </div>
+          </div>
+          <div className="plan-items">
+            {incomeItems.map((it) => {
+              const isCategory = it.mode === "category";
+              return (
+                <div key={it.id} className="plan-income-block">
+                  <div className="plan-cat-row">
+                    <input
+                      className="input"
+                      placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
+                      value={it.name}
+                      onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })}
+                    />
+                    <div className="seg plan-income-mode-seg">
+                      <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
+                      <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
+                    </div>
+                    {incomeItems.length > 1 && (
+                      <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><Trash2 size={14} /></button>
+                    )}
+                  </div>
+                  {isCategory ? (
+                    <div className="form-group plan-cat-bulk">
+                      <label>Tracked total</label>
+                      <div className="input mono plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
+                        {fmt(itemAmount(it))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="form-group plan-cat-bulk">
+                      <label>Amount</label>
+                      <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div className="plan-items-footer">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
+              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
+            </div>
+          </div>
+        </div>
+
         <div className="plan-summary-bar">
           <div><span className="muted">Income</span><strong>{fmt(totalIncome)}</strong></div>
           <div><span className="muted">Allocated</span><strong>{fmt(allocated)}</strong></div>
@@ -210,7 +267,19 @@ export function PlanModal({ initial, onSave, onClose, onDelete }) {
 
         <div className="plan-categories">
           <div className="plan-categories-header">
-            <div className="card-title" style={{ marginBottom: 0 }}>Budget categories</div>
+            <div className="card-title" style={{ marginBottom: 0 }}>
+              <span className="plan-section-title-text">
+                Budget categories
+                <button
+                  type="button"
+                  className="icon-btn plan-info-icon"
+                  aria-label="How budget category modes work"
+                  title={"Budget categories have 2 different modes.\n\nBulk: Set one fixed budgeted amount for the whole category.\n\nItemized: Break the category down into individual expenses, each with their own budgeted amount and optional date, which roll up into the category's total."}
+                >
+                  <Info size={13} />
+                </button>
+              </span>
+            </div>
           </div>
           {cats.length === 0 && (
             <p className="settings-desc">No categories yet - break your income down into spending buckets, like Rent or Groceries.</p>

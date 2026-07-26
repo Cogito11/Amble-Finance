@@ -4,12 +4,14 @@ import {
 } from "lucide-react";
 import { Gauge } from "../common/Gauge";
 import { categorySpend, isSpendTx, planAllocated, planCategoryTotal } from "../../state/categories";
+import { planIncomeTotal } from "../../state/plans";
 import { isWithinRolling30Days } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 
 /* ---------------------------------- budgets view ---------------------------------- */
 export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
   const activePlan = (plans || []).find((p) => p.active);
+  const activePlanIncome = activePlan ? planIncomeTotal(activePlan, transactions, plans, categories) : 0;
 
   // Only top-level categories; itemized sub-expenses roll their spend up into the parent.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
@@ -21,7 +23,11 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
   // "General" means not owned by any plan at all - categories from other (inactive) plans
   // stay out of this list entirely, so they can't be edited/deleted from the Status tab.
   const generalExpenseCats = withSpend.filter((c) => !c.planId);
-  const incomeCats = categories.filter((c) => c.type === "income");
+  // Same protection as expense categories above: a budget-tracked income category
+  // should only be renamed/removed through its owning budget (PlanModal), never
+  // deleted straight from here - doing so would leave that budget's income entry
+  // pointing at nothing until it's next opened/saved.
+  const incomeCats = categories.filter((c) => c.type === "income" && !c.planId);
 
   // "Uncategorized" isn't tied to any budget, so - like any category with no time
   // frame - it's scoped to a rolling 30 days rather than the calendar month.
@@ -68,7 +74,7 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           <div className="plan-card-stats">
             <div>
               <div className="plan-stat-label">Income</div>
-              <div className="plan-stat-value">{fmt(activePlan.income)}</div>
+              <div className="plan-stat-value">{fmt(activePlanIncome)}</div>
             </div>
             <div>
               <div className="plan-stat-label">Allocated</div>
@@ -76,8 +82,8 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
             </div>
             <div>
               <div className="plan-stat-label">Remaining to allocate</div>
-              <div className={`plan-stat-value ${(Number(activePlan.income) || 0) - planAllocated(activePlan) < 0 ? "tone-rust" : "tone-teal"}`}>
-                {fmt((Number(activePlan.income) || 0) - planAllocated(activePlan))}
+              <div className={`plan-stat-value ${activePlanIncome - planAllocated(activePlan) < 0 ? "tone-rust" : "tone-teal"}`}>
+                {fmt(activePlanIncome - planAllocated(activePlan))}
               </div>
             </div>
           </div>

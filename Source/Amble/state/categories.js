@@ -135,6 +135,27 @@ export function categorySpend(category, transactions, plans, categories) {
   return txs.reduce((s, t) => s + t.amount, 0);
 }
 
+// A transaction counts toward income-category tracking if it's a normal income
+// transaction, or a transfer that's been explicitly tagged with that category
+// (e.g. an incoming transfer that represents a paycheck deposit). Mirrors
+// isSpendTx on the expense side.
+export function isIncomeTx(t) {
+  return t.type === "income" || (t.type === "transfer" && !!t.categoryId);
+}
+
+// Live total tracked for an income category: same time-frame rule as
+// categorySpend (all-time for a category owned by a plan with a start/end
+// date, otherwise a rolling 30 days) - so a budget-scoped income entry's
+// total automatically covers its whole time frame, while a general income
+// category behaves like a rolling monthly figure.
+export function categoryIncome(category, transactions, plans, categories) {
+  const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
+  let txs = transactions.filter((t) => isIncomeTx(t) && t.categoryId === category.id);
+  const hasTimeFrame = !!(ownerPlan && (ownerPlan.startDate || ownerPlan.endDate));
+  if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
+  return txs.reduce((s, t) => s + t.amount, 0);
+}
+
 // Mirrors a plan's categories into the app-wide category list so they can be
 // assigned to real transactions. Keeps existing links, creates new categories
 // for new plan categories, and deletes ones removed from the plan (their ids are
@@ -187,11 +208,35 @@ export function syncPlanCategories(plan, categories) {
 
     return { ...pc, categoryId: parentId, items: newItems };
   });
+
+  // Income entries set to "track by category" get the exact same mirroring
+  // treatment as expense categories above - just simpler, since income
+  // entries don't have sub-items. Sharing `keepIds` with the expense loop
+  // means a single removedCategoryIds pass below cleanly covers both.
+  const newIncomeItems = (plan.incomeItems || []).map((it) => {
+    if (it.mode !== "category") return it;
+    const existingIdx = it.categoryId ? cats.findIndex((c) => c.id === it.categoryId) : -1;
+    let categoryId;
+    if (existingIdx >= 0) {
+      categoryId = it.categoryId;
+      cats[existingIdx] = { ...cats[existingIdx], name: it.name, type: "income", planId: plan.id, parentCategoryId: null };
+      keepIds.add(categoryId);
+    } else {
+      categoryId = uid();
+      cats.push({
+        id: categoryId, name: it.name, type: "income", limit: 0,
+        color: nextCategoryColor(cats, it.name), planId: plan.id, parentCategoryId: null,
+      });
+      keepIds.add(categoryId);
+    }
+    return { ...it, categoryId };
+  });
+
   const removedCategoryIds = cats
     .filter((c) => c.planId === plan.id && !keepIds.has(c.id))
     .map((c) => c.id);
   cats = cats.filter((c) => !(c.planId === plan.id && !keepIds.has(c.id)));
-  return { categories: cats, plan: { ...plan, categories: newPlanCats }, removedCategoryIds };
+  return { categories: cats, plan: { ...plan, categories: newPlanCats, incomeItems: newIncomeItems }, removedCategoryIds };
 }
 
 // Applies the removedCategoryIds from syncPlanCategories to a transactions list,

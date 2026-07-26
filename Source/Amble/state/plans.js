@@ -1,4 +1,4 @@
-import { clearRemovedCategoryRefs, seedCategories, syncPlanCategories } from "./categories";
+import { categoryIncome, clearRemovedCategoryRefs, seedCategories, syncPlanCategories } from "./categories";
 import { addMonthsClamped, currentMonthRange, toLocalDateStr, todayStr } from "../utils/dates";
 import { uid } from "../utils/misc";
 
@@ -35,6 +35,26 @@ export function defaultState() {
     accounts: [], categories: synced.categories, transactions: [], plans: [synced.plan],
     currency: "USD", lastBackupAt: null,
   };
+}
+
+// Total income for a plan: sums each manual entry's typed amount, plus - for
+// any entry set to track by category - its live category total (money
+// actually logged against that category so far, via categoryIncome). This is
+// why income entries can't just be re-summed once at save time: a
+// category-tracked entry's contribution changes on its own as new income
+// transactions come in, the same way a category's "spent" figure does on the
+// expense side. Falls back to the plain `income` number for plans saved
+// before incomeItems existed.
+export function planIncomeTotal(plan, transactions, plans, categories) {
+  const items = plan.incomeItems;
+  if (!items || !items.length) return Number(plan.income) || 0;
+  return items.reduce((sum, it) => {
+    if (it.mode === "category") {
+      const cat = it.categoryId ? (categories || []).find((c) => c.id === it.categoryId) : null;
+      return sum + (cat ? categoryIncome(cat, transactions, plans, categories) : 0);
+    }
+    return sum + (Number(it.amount) || 0);
+  }, 0);
 }
 
 export const REPEAT_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", match: "Match time frame" };
@@ -144,7 +164,7 @@ export function rolloverDuePlans(state) {
         startDate: dates.startDate,
         endDate: dates.endDate,
         income: p.income,
-        incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount })),
+        incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, mode: it.mode === "category" ? "category" : "manual", amount: it.amount })),
         dateCreated: today,
         // Guarantees the repeated budget lands at the top of the Plans list,
         // same as any other newly created plan (see nextTopPlanOrder).
