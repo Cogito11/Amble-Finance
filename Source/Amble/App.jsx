@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus, Loader2, MoreHorizontal, Sliders
+  Plus, Loader2, MoreHorizontal, Sliders, ExternalLink, ArrowLeft
 } from "lucide-react";
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
@@ -85,6 +85,60 @@ export default function App() {
 
   const darkMode = themeMode === "system" ? systemPrefersDark : themeMode === "dark";
   const [view, setView] = useState("dashboard");
+
+  // Popped-out windows are just this same app loaded with a ?popout=<view>
+  // param - read once on mount (a window never switches in or out of popout
+  // mode during its life) so the render below can swap the sidebar+multi-view
+  // shell for a single, chromeless view sized for sitting side-by-side with
+  // the main window.
+  const [popoutView] = useState(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get("popout");
+      return requested && VIEW_TITLES[requested] ? requested : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const effectiveView = popoutView || view;
+
+  useEffect(() => {
+    document.title = popoutView ? `Amble - ${VIEW_TITLES[effectiveView]}` : "Amble";
+  }, [popoutView, effectiveView]);
+
+  // Opens a view in its own browser/OS window, sized to roughly half the
+  // screen and docked to one side so it's ready for a side-by-side split with
+  // the main window. Reusing a stable window name (rather than "_blank") means
+  // clicking pop-out again for the same view focuses the existing window
+  // instead of spawning duplicates.
+  const openPopout = (viewId) => {
+    try {
+      const url = new URL(window.location.href);
+      url.search = `?popout=${viewId}`;
+      const width = Math.round((window.screen?.availWidth || 1280) / 2);
+      const height = window.screen?.availHeight || 900;
+      window.open(url.toString(), `amble-popout-${viewId}`, `width=${width},height=${height},left=${width},top=0,resizable=yes`);
+    } catch (e) {
+      window.open(`?popout=${viewId}`, "_blank");
+    }
+  };
+
+  // Which view ids currently have a popout window open, per the main process
+  // (electronAPI is only present in the Electron build - a plain browser/web
+  // build just won't show the indicator dots or the return button, and pop-out
+  // still works via ordinary window.open behavior).
+  const [openPopoutViews, setOpenPopoutViews] = useState([]);
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    let cancelled = false;
+    window.electronAPI.getPopoutState().then((ids) => { if (!cancelled) setOpenPopoutViews(ids || []); });
+    const unsubscribe = window.electronAPI.onPopoutStateChange((ids) => setOpenPopoutViews(ids || []));
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
+
+  const returnToMain = () => {
+    if (window.electronAPI) window.electronAPI.returnToMain();
+    else window.close();
+  };
   const contentRef = useRef(null);
   // Each view (dashboard, transactions, more, etc.) reuses the same scrollable
   // .content container, so switching views would otherwise leave you exactly
@@ -190,6 +244,29 @@ export default function App() {
       }
       setLoaded(true);
     })();
+  }, []);
+
+  // Cross-window live sync: every state change is already persisted to
+  // localStorage below (see the STORAGE_KEY effect), and the browser fires a
+  // native "storage" event in every *other* same-origin window whenever that
+  // happens (never in the window that made the change, so this can't loop).
+  // That's exactly what makes edits in a popped-out view show up instantly in
+  // the main window, and vice versa, without any extra sync channel.
+  useEffect(() => {
+    const handleStorageEvent = (e) => {
+      if (e.key !== STORAGE_KEY || e.newValue == null) return;
+      try {
+        const raw = JSON.parse(e.newValue);
+        setState({
+          ...defaultState(),
+          ...raw,
+          plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []),
+          accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+        });
+      } catch (err) { /* ignore malformed/partial writes */ }
+    };
+    window.addEventListener("storage", handleStorageEvent);
+    return () => window.removeEventListener("storage", handleStorageEvent);
   }, []);
 
   useEffect(() => {
@@ -730,45 +807,65 @@ export default function App() {
   return (
     <div className={`app-root${darkMode ? " dark" : ""}`}>
       <style>{CSS}</style>
-      <div className="app-shell">
-        <aside className="sidebar">
-          <div className="brand">
-            <div className="brand-mark">$</div>
-            <div className="brand-text">
-              <div className="brand-name">AMBLE</div>
-              <div className="brand-sub">personal finance</div>
+      <div className={`app-shell${popoutView ? " app-shell-popout" : ""}`}>
+        {!popoutView && (
+          <aside className="sidebar">
+            <div className="brand">
+              <div className="brand-mark">$</div>
+              <div className="brand-text">
+                <div className="brand-name">AMBLE</div>
+                <div className="brand-sub">personal finance</div>
+              </div>
             </div>
-          </div>
-          <nav className="nav">
-            {orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]).map((item) => (
-              <button key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                <item.icon size={18} /> <span>{item.label}</span>
-              </button>
-            ))}
-          </nav>
-          <div className="sidebar-footer">
-            <div>
-              <div className="nw-label">{footerMetric.label}</div>
-              <div className="nw-value">{fmt(footerMetric.value)}</div>
+            <nav className="nav">
+              {orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]).map((item) => (
+                <button key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
+                  <item.icon size={18} /> <span>{item.label}</span>
+                  {openPopoutViews.includes(item.id) && (
+                    <span className="nav-popout-dot" title="Popped out in its own window" aria-label="Popped out in its own window" />
+                  )}
+                </button>
+              ))}
+            </nav>
+            <div className="sidebar-footer">
+              <div>
+                <div className="nw-label">{footerMetric.label}</div>
+                <div className="nw-value">{fmt(footerMetric.value)}</div>
+              </div>
+              <button className="icon-btn" onClick={() => setSidebarModalOpen(true)} title="Customize sidebar" aria-label="Customize sidebar"><Sliders size={16} /></button>
             </div>
-            <button className="icon-btn" onClick={() => setSidebarModalOpen(true)} title="Customize sidebar" aria-label="Customize sidebar"><Sliders size={16} /></button>
-          </div>
-        </aside>
+          </aside>
+        )}
 
         <main className="main">
           <header className="topbar">
-            <h1 className="view-title">{VIEW_TITLES[view]}</h1>
+            <h1 className="view-title">{VIEW_TITLES[effectiveView]}</h1>
             <div className="topbar-actions">
-              {view === "dashboard" && (
+              {effectiveView === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {view !== "more" && view !== "plans" && view !== "tools" && (
+              {effectiveView !== "more" && effectiveView !== "plans" && effectiveView !== "tools" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
+              )}
+              {!popoutView && (
+                <button
+                  className={`icon-btn ${openPopoutViews.includes(effectiveView) ? "popout-open" : ""}`}
+                  onClick={() => openPopout(effectiveView)}
+                  title={openPopoutViews.includes(effectiveView) ? `${VIEW_TITLES[effectiveView]} is popped out - click to focus that window` : `Pop out ${VIEW_TITLES[effectiveView]} into its own window`}
+                  aria-label="Pop out view"
+                >
+                  <ExternalLink size={16} />
+                </button>
+              )}
+              {popoutView && (
+                <button className="btn btn-ghost" onClick={returnToMain} title="Close this window and return to the main Amble window">
+                  <ArrowLeft size={16} /> Back to main window
+                </button>
               )}
             </div>
           </header>
           <div className="content" ref={contentRef}>
-            {view === "dashboard" && (
+            {effectiveView === "dashboard" && (
               <Dashboard
                 accounts={state.accounts}
                 categories={state.categories}
@@ -781,13 +878,13 @@ export default function App() {
                 onCustomize={() => setWidgetModalOpen(true)}
               />
             )}
-            {view === "transactions" && (
+            {effectiveView === "transactions" && (
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
-            {view === "accounts" && (
+            {effectiveView === "accounts" && (
               <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} error={accError} />
             )}
-            {view === "budgets" && (
+            {effectiveView === "budgets" && (
               <BudgetsView
                 categories={state.categories}
                 transactions={state.transactions}
@@ -799,7 +896,7 @@ export default function App() {
                 onGoPlans={() => setView("plans")}
               />
             )}
-            {view === "plans" && (
+            {effectiveView === "plans" && (
               <PlansView
                 plans={state.plans}
                 transactions={state.transactions}
@@ -811,8 +908,8 @@ export default function App() {
                 onReorder={reorderPlan}
               />
             )}
-            {view === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
-            {view === "more" && (
+            {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
+            {effectiveView === "more" && (
               <MoreView
                 onExportJSON={exportJSON}
                 onImportJSON={requestImportJSON}

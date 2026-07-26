@@ -73,6 +73,10 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .app-root ::-webkit-scrollbar-corner, .app-loading ::-webkit-scrollbar-corner { background: transparent; }
 
 .app-shell { display: grid; grid-template-columns: 232px 1fr; height: 100vh; overflow: hidden; }
+/* Popout windows never render the <aside>, so with only one grid item left
+   the default two-column template would place it in the narrow 232px
+   sidebar column instead of spanning the row - this is what fixes it. */
+.app-shell-popout { grid-template-columns: 1fr; }
 
 .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 14px; height: 100%; overflow-y: auto; }
 .brand { display:flex; align-items:center; gap:10px; padding: 6px 8px 20px; }
@@ -85,6 +89,10 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--brass-soft); color: var(--brass); border-left: 2px solid var(--brass); }
 .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--brass-soft); }
+.nav-popout-dot { width:7px; height:7px; border-radius:50%; background: var(--teal); margin-left:auto; flex-shrink:0; }
+
+.icon-btn.popout-open { color: var(--teal); }
+.icon-btn.popout-open:hover { color: var(--teal); background: var(--surface-2); }
 
 .sidebar-footer { border-top:1px solid var(--border); padding-top:14px; margin-top:10px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
 .sidebar-footer .icon-btn { margin-top:-5px; }
