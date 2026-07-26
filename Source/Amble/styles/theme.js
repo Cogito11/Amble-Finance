@@ -105,6 +105,18 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .view-title { font-family:'Fraunces',serif; font-weight:600; font-size:24px; margin:0; }
 .content { padding: 24px 32px 48px; overflow-y:auto; flex:1; min-height:0; }
 
+/* Popout windows have no sidebar to absorb the squeeze, so once the window
+   gets narrow, the title and topbar-actions stop fighting for the same row -
+   the title takes its own line and the buttons move below it, full-width and
+   evenly split, instead of shrinking, wrapping mid-row, or clipping. */
+@media (max-width: 520px) {
+  .app-shell-popout .topbar { flex-direction:column; align-items:stretch; gap:12px; padding:18px 20px; }
+  .app-shell-popout .view-title { text-align:center; }
+  .app-shell-popout .topbar-actions { justify-content:stretch; }
+  .app-shell-popout .topbar-actions .btn { flex:1; justify-content:center; }
+  .app-shell-popout .content { padding:16px; }
+}
+
 .btn { display:inline-flex; align-items:center; gap:6px; border-radius:8px; padding:9px 14px; font-size:13.5px; font-weight:500; cursor:pointer; border:1px solid transparent; font-family:'Inter',sans-serif; transition: filter .15s, background .15s; }
 .btn-primary { background: var(--brass); color: var(--on-brass); }
 .btn-primary:hover { filter: brightness(1.08); }
