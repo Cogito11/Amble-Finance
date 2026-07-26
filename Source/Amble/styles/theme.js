@@ -102,8 +102,6 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .main { display:flex; flex-direction:column; min-width:0; height:100%; min-height:0; }
 .topbar { display:flex; align-items:center; justify-content:space-between; padding: 22px 32px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .topbar-actions { display:flex; align-items:center; gap:10px; }
-.theme-toggle { border:1px solid var(--border); background: var(--surface); width:36px; height:36px; align-items:center; justify-content:center; border-radius:8px; color: var(--text-muted); }
-.theme-toggle:hover { color: var(--brass); border-color: var(--brass); }
 .view-title { font-family:'Fraunces',serif; font-weight:600; font-size:24px; margin:0; }
 .content { padding: 24px 32px 48px; overflow-y:auto; flex:1; min-height:0; }
 
