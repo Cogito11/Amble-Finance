@@ -206,7 +206,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                   type="button"
                   className="icon-btn plan-info-icon"
                   aria-label="How income modes work"
-                  title="Manual: type in a fixed amount yourself. Category: creates a real category you can tag on income (and transfer) transactions - the total tracks live as you log them, instead of you typing a number in."
+                  title={"Income entries have 2 different modes.\n\nManual: Type in a fixed amount yourself.\n\nCategory: Create this income field as a category that you can assign income and transfer transactions to. The total value of transactions assigned to that category will be the value used."}
                 >
                   <Info size={13} />
                 </button>
@@ -217,8 +217,8 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
             {incomeItems.map((it) => {
               const isCategory = it.mode === "category";
               return (
-                <div key={it.id} className="plan-income-item">
-                  <div className="plan-item-row">
+                <div key={it.id} className="plan-income-block">
+                  <div className="plan-cat-row">
                     <input
                       className="input"
                       placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
@@ -229,17 +229,23 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                       <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
                       <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
                     </div>
-                    {isCategory ? (
-                      <div className="input mono plan-item-amount plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
-                        {fmt(itemAmount(it))}
-                      </div>
-                    ) : (
-                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
-                    )}
                     {incomeItems.length > 1 && (
-                      <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><X size={14} /></button>
+                      <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><Trash2 size={14} /></button>
                     )}
                   </div>
+                  {isCategory ? (
+                    <div className="form-group plan-cat-bulk">
+                      <label>Tracked total</label>
+                      <div className="input mono plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
+                        {fmt(itemAmount(it))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="form-group plan-cat-bulk">
+                      <label>Amount</label>
+                      <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -261,7 +267,19 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
 
         <div className="plan-categories">
           <div className="plan-categories-header">
-            <div className="card-title" style={{ marginBottom: 0 }}>Budget categories</div>
+            <div className="card-title" style={{ marginBottom: 0 }}>
+              <span className="plan-section-title-text">
+                Budget categories
+                <button
+                  type="button"
+                  className="icon-btn plan-info-icon"
+                  aria-label="How budget category modes work"
+                  title={"Budget categories have 2 different modes.\n\nBulk: Set one fixed budgeted amount for the whole category.\n\nItemized: Break the category down into individual expenses, each with their own budgeted amount and optional date, which roll up into the category's total."}
+                >
+                  <Info size={13} />
+                </button>
+              </span>
+            </div>
           </div>
           {cats.length === 0 && (
             <p className="settings-desc">No categories yet - break your income down into spending buckets, like Rent or Groceries.</p>

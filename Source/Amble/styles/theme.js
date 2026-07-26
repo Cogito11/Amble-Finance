@@ -306,20 +306,19 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-categories { display:flex; flex-direction:column; gap:12px; }
 .plan-categories-header { display:flex; align-items:center; justify-content:space-between; }
 .plan-add-category-btn { align-self:flex-start; }
-.plan-cat-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
+.plan-cat-block, .plan-income-block { border:1px solid var(--border); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; background: var(--surface-2); }
 .plan-cat-move-btns, .plan-move-btns { display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
 .plan-cat-move-btn, .plan-move-btn { width:18px; height:15px; padding:0; border-radius:4px; }
 .plan-cat-move-btn:disabled, .plan-move-btn:disabled { opacity:0.3; cursor:default; }
 .plan-cat-row { display:flex; align-items:center; gap:8px; }
 .plan-cat-row .input { flex:1; }
 .plan-cat-seg { flex-shrink:0; width:160px; }
-.plan-income-mode-seg { flex-shrink:0; width:150px; }
-.plan-income-tracked { display:flex; align-items:center; justify-content:flex-end; background: var(--surface-2); color: var(--text-muted); }
+.plan-income-mode-seg { flex-shrink:0; width:160px; }
+.plan-income-tracked { display:flex; align-items:center; color: var(--text-muted); cursor:default; }
 .plan-section-title-text { display:flex; align-items:center; gap:6px; }
 .plan-info-icon { padding:3px; cursor:help; }
 .plan-cat-bulk { margin:0; }
 .plan-items { display:flex; flex-direction:column; gap:8px; }
-.plan-income-item { display:flex; flex-direction:column; gap:4px; }
 .plan-item-row { display:flex; align-items:center; gap:8px; }
 .plan-item-row .input { flex:1; }
 .plan-item-amount { width:110px; flex-shrink:0; }
