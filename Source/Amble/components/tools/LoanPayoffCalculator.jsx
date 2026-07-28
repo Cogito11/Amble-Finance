@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend
 } from "recharts";
 import { StatCard } from "../common/StatCard";
+import { isOpenAccount } from "../../state/accounts";
 import { fmt, fmtMonths } from "../../utils/format";
 import { blurOnWheel } from "../../utils/misc";
 
@@ -50,7 +51,7 @@ export function LoanPayoffCalculator({ onBack, accounts, balances }) {
   const [sourceMode, setSourceMode] = useState("manual");
   const [accountId, setAccountId] = useState("");
   const loanAccounts = useMemo(
-    () => (accounts || []).filter((a) => a.type === "loan" && Number(balances?.[a.id]) < 0),
+    () => (accounts || []).filter((a) => a.type === "loan" && isOpenAccount(a) && Number(balances?.[a.id]) < 0),
     [accounts, balances]
   );
 

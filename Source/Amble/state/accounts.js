@@ -6,6 +6,14 @@ export function isAssetAccount(account) {
   return !isDebtAccount(account);
 }
 
+// An account still eligible to be picked - for new transactions, or as a
+// source in the financial tools' "from account" pickers. A closed account
+// keeps its balance and history but drops out of these selections; see
+// AccountModal / ClosedAccountsModal for how accounts get closed and reopened.
+export function isOpenAccount(account) {
+  return !account.closed;
+}
+
 export function computeBalance(account, transactions) {
   let balance = account.startingBalance || 0;
   transactions.forEach((t) => {

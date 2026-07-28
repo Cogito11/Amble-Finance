@@ -5,6 +5,7 @@ import {
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
 import { AccountModal } from "./components/modals/AccountModal";
+import { ClosedAccountsModal } from "./components/modals/ClosedAccountsModal";
 import { CategoryModal } from "./components/modals/CategoryModal";
 import { PlanModal } from "./components/modals/PlanModal";
 import { TransactionModal } from "./components/modals/TransactionModal";
@@ -152,6 +153,7 @@ export default function App() {
   const [catModal, setCatModal] = useState(null);
   const [planModal, setPlanModal] = useState(null);
   const [accError, setAccError] = useState("");
+  const [closedAccountsOpen, setClosedAccountsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   // Same synchronous-read pattern as darkMode above, so returning users don't see
   // every widget flash on before their saved preference (some hidden) applies.
@@ -312,7 +314,7 @@ export default function App() {
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
     txModal !== null || accModal !== null || catModal !== null || planModal !== null ||
-    widgetModalOpen || sidebarModalOpen || !!confirmDialog || shortcutsOpen;
+    widgetModalOpen || sidebarModalOpen || closedAccountsOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
   // above the loading-state early return below. It bails out immediately while
@@ -331,6 +333,7 @@ export default function App() {
         if (confirmDialog) { setConfirmDialog(null); return; }
         if (widgetModalOpen) { setWidgetModalOpen(false); return; }
         if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
+        if (closedAccountsOpen) { setClosedAccountsOpen(false); return; }
         if (txModal !== null) { setTxModal(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
@@ -391,7 +394,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -458,6 +461,27 @@ export default function App() {
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }));
     setAccModal(null);
     setAccError("");
+  };
+  // Closing an account leaves it (and its transactions) in place - it just gets
+  // hidden from the active account grid and from the account pickers used when
+  // adding/editing transactions, so people can phase out an account without
+  // losing its history or breaking anything it's tied to.
+  const closeAccount = (id) => {
+    setState((s) => ({ ...s, accounts: s.accounts.map((a) => (a.id === id ? { ...a, closed: true } : a)) }));
+    setAccModal(null);
+  };
+  const requestCloseAccount = (id) => {
+    const a = state.accounts.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Close account?",
+      message: `Are you sure you want to close “${a?.name || "this account"}”? It will no longer be selectable for new transactions, but you can reopen it anytime from the Closed Accounts menu. We recommend making sure it has a $0 balance before closing.`,
+      confirmLabel: "Close account",
+      onConfirm: () => { closeAccount(id); setConfirmDialog(null); },
+    });
+  };
+  const reopenAccount = (id) => {
+    setState((s) => ({ ...s, accounts: s.accounts.map((a) => (a.id === id ? { ...a, closed: false } : a)) }));
+    setAccModal(null);
   };
   const requestDeleteAccount = (id) => {
     const a = state.accounts.find((x) => x.id === id);
@@ -883,7 +907,7 @@ export default function App() {
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {effectiveView === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} onViewClosed={() => setClosedAccountsOpen(true)} error={accError} />
             )}
             {effectiveView === "budgets" && (
               <BudgetsView
@@ -953,7 +977,23 @@ export default function App() {
         />
       )}
       {accModal !== null && (
-        <AccountModal initial={accModal} onSave={saveAccount} onClose={() => { setAccModal(null); setAccError(""); }} onDelete={requestDeleteAccount} />
+        <AccountModal
+          initial={accModal}
+          onSave={saveAccount}
+          onClose={() => { setAccModal(null); setAccError(""); }}
+          onDelete={requestDeleteAccount}
+          onCloseAccount={requestCloseAccount}
+          onReopenAccount={reopenAccount}
+        />
+      )}
+      {closedAccountsOpen && (
+        <ClosedAccountsModal
+          accounts={state.accounts.filter((a) => a.closed)}
+          balances={balances}
+          onReopen={reopenAccount}
+          onEdit={(a) => { setClosedAccountsOpen(false); setAccModal(a); }}
+          onClose={() => setClosedAccountsOpen(false)}
+        />
       )}
       {catModal !== null && (
         <CategoryModal initial={catModal} categories={state.categories} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />

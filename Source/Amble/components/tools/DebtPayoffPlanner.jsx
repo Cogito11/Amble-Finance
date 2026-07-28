@@ -9,7 +9,7 @@ import { EmptyState } from "../common/EmptyState";
 import { StatCard } from "../common/StatCard";
 import { fmt, fmtMonths } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
-import { isDebtAccount } from "../../state/accounts";
+import { isDebtAccount, isOpenAccount } from "../../state/accounts";
 
 // Simulates paying off a set of debts under a given strategy ("avalanche" pays
 // the highest-APR debt first, "snowball" pays the smallest balance first).
@@ -81,7 +81,7 @@ export function DebtPayoffPlanner({ onBack, accounts, balances }) {
   const [extra, setExtra] = useState(100);
 
   const debtAccounts = useMemo(
-    () => (accounts || []).filter((a) => isDebtAccount(a) && Number(balances?.[a.id]) < 0),
+    () => (accounts || []).filter((a) => isDebtAccount(a) && isOpenAccount(a) && Number(balances?.[a.id]) < 0),
     [accounts, balances]
   );
   const loadedAccountIds = useMemo(() => new Set(debts.map((d) => d.accountId).filter(Boolean)), [debts]);

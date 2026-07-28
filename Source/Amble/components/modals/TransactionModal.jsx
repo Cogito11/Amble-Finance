@@ -15,7 +15,11 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   const [date, setDate] = useState(initial.date || todayStr());
   const [description, setDescription] = useState(initial.description || "");
   const [amount, setAmount] = useState(initial.amount ?? "");
-  const [accountId, setAccountId] = useState(initial.accountId || accounts[0]?.id || "");
+  // Closed accounts shouldn't be offered as a default for a brand-new transaction,
+  // but an existing transaction that already points at one (from before it was
+  // closed) still needs to keep working, so it's handled separately below.
+  const openAccounts = accounts.filter((a) => !a.closed);
+  const [accountId, setAccountId] = useState(initial.accountId || openAccounts[0]?.id || accounts[0]?.id || "");
   const [toAccountId, setToAccountId] = useState(initial.toAccountId || "");
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
   // Tracks whether the user has manually typed into the description box - either just now,
@@ -155,7 +159,7 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
           <div className="form-group">
             <label>{type === "transfer" ? "From account" : "Account"}</label>
             <select className="select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              {accounts.filter((a) => !a.closed || a.id === accountId).map((a) => <option key={a.id} value={a.id}>{a.name}{a.closed ? " (Closed)" : ""}</option>)}
             </select>
           </div>
           {type === "transfer" ? (
@@ -163,7 +167,7 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
               <label>To account</label>
               <select className="select" value={toAccountId} onChange={(e) => setToAccountId(e.target.value)}>
                 <option value="">Select account</option>
-                {accounts.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                {accounts.filter((a) => a.id !== accountId && (!a.closed || a.id === toAccountId)).map((a) => <option key={a.id} value={a.id}>{a.name}{a.closed ? " (Closed)" : ""}</option>)}
               </select>
             </div>
           ) : (

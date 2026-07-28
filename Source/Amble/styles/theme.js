@@ -248,6 +248,18 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .acc-add { align-items:center; justify-content:center; gap:8px; color:var(--text-faint); cursor:pointer; border-style:dashed; }
 .acc-add:hover { color: var(--brass); border-color: var(--brass); }
 
+.acc-action-btn { width:100%; justify-content:center; }
+
+.closed-acc-list { display:flex; flex-direction:column; gap:10px; }
+.closed-acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+.closed-acc-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.closed-acc-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+.closed-acc-text { min-width:0; }
+.closed-acc-name { font-weight:600; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.closed-acc-type { font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; margin-top:1px; }
+.closed-acc-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.closed-acc-balance { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; flex-shrink:0; }
+
 .inline-error { display:flex; align-items:center; gap:8px; background: rgba(193,84,74,0.1); border:1px solid var(--rust); color:#8a3327; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; }
 
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding: 70px 20px; color: var(--text-faint); text-align:center; }

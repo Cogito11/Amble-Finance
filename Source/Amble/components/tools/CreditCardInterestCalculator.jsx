@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, AreaChart, Area
 } from "recharts";
 import { StatCard } from "../common/StatCard";
+import { isOpenAccount } from "../../state/accounts";
 import { fmt, fmtMonths } from "../../utils/format";
 import { blurOnWheel } from "../../utils/misc";
 
@@ -19,7 +20,7 @@ export function CreditCardInterestCalculator({ onBack, accounts, balances }) {
   const [accountId, setAccountId] = useState("");
 
   const creditAccounts = useMemo(
-    () => (accounts || []).filter((a) => a.type === "credit" && Number(balances?.[a.id]) < 0),
+    () => (accounts || []).filter((a) => a.type === "credit" && isOpenAccount(a) && Number(balances?.[a.id]) < 0),
     [accounts, balances]
   );
 

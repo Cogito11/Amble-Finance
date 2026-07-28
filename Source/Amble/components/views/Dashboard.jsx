@@ -195,7 +195,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("accounts")}>View all <ChevronRight size={14} /></button>
               </div>
               <div className="dash-acc-list">
-                {sortedAccountsList(accounts).slice(0, 3).map((a) => {
+                {sortedAccountsList(accounts.filter((a) => !a.closed)).slice(0, 3).map((a) => {
                   const Icon = ACCOUNT_ICONS[a.type];
                   const bal = balances[a.id];
                   const isDebt = isDebtAccount(a);
