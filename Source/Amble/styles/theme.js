@@ -391,6 +391,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-rule-row-top { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13.5px; font-weight:500; }
 .budget-rule-row-top strong { font-family:'JetBrains Mono',monospace; font-size:15px; }
 
+.spend-breakdown-summary { margin-bottom:12px; }
+.spend-breakdown-track { display:flex; height:14px; border-radius:8px; overflow:hidden; border:1px solid var(--border); background: var(--surface-2); margin-bottom:18px; }
+.spend-breakdown-segment { height:100%; min-width:2px; }
+.spend-breakdown-rows { margin-top:0; }
+.spend-breakdown-row-name { display:flex; align-items:center; gap:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
 .more-view { display:flex; flex-direction:column; gap:16px; }
 .more-tabs { max-width:360px; margin-bottom:2px; }
 .settings-desc { font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 12px; }

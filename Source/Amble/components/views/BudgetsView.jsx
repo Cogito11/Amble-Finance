@@ -35,6 +35,43 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
   const uncategorizedSpent = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const totalRollingSpent = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
+  // Spending breakdown card: defaults to the active budget if one's set, else
+  // falls back to the rolling 30-day view, but can be toggled either way.
+  const [breakdownPeriod, setBreakdownPeriod] = useState(activePlan ? "budget" : "month");
+  const showingBudgetBreakdown = breakdownPeriod === "budget";
+
+  // Budget view: a budget's total is, by definition, just the sum of its own
+  // categories - nothing outside those categories counts toward it - so the
+  // rows always add up to exactly 100% of the total shown above them.
+  const budgetBreakdownRows = planCats.map((c) => ({ key: c.id, name: c.name, color: c.color, spent: c.spent }));
+  const budgetBreakdownTotal = budgetBreakdownRows.reduce((s, r) => s + r.spent, 0);
+
+  // Month view: every rolling-30-day expense, grouped by its top-level category
+  // (an itemized sub-expense rolls its spend up into its parent, same as the
+  // gauges above), plus a real Uncategorized row for spend with no category at
+  // all - so this total also always matches the sum of its rows.
+  const monthByTopCategory = {};
+  rolling30Tx.forEach((t) => {
+    if (!t.categoryId) return;
+    const cat = categories.find((c) => c.id === t.categoryId);
+    const top = cat ? (cat.parentCategoryId ? categories.find((c) => c.id === cat.parentCategoryId) : cat) : null;
+    if (!top) return;
+    monthByTopCategory[top.id] = (monthByTopCategory[top.id] || 0) + t.amount;
+  });
+  const monthBreakdownRows = Object.entries(monthByTopCategory).map(([id, spent]) => {
+    const cat = categories.find((c) => c.id === id);
+    return { key: id, name: cat?.name || "Unknown", color: cat?.color || "var(--text-faint)", spent };
+  });
+  if (uncategorizedSpent > 0) {
+    monthBreakdownRows.push({ key: "uncategorized", name: "Uncategorized", color: "var(--text-faint)", spent: uncategorizedSpent });
+  }
+
+  const breakdownRows = (showingBudgetBreakdown ? budgetBreakdownRows : monthBreakdownRows)
+    .filter((r) => r.spent > 0)
+    .sort((a, b) => b.spent - a.spent);
+  const breakdownTotal = showingBudgetBreakdown ? budgetBreakdownTotal : totalRollingSpent;
+  const breakdownRowsWithPct = breakdownRows.map((r) => ({ ...r, pct: breakdownTotal > 0 ? Math.round((r.spent / breakdownTotal) * 100) : 0 }));
+
   const renderCategoryRows = (list) => list.map((c) => (
     <tr key={c.id}>
       <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
@@ -97,6 +134,51 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           <button className="btn btn-ghost btn-sm" onClick={onGoPlans}><ClipboardList size={14} /> Go to Budgets</button>
         </div>
       )}
+
+      <div className="card">
+        <div className="card-title">
+          Spending breakdown
+          <div className="seg card-corner-seg" role="group" aria-label="Breakdown period">
+            <button type="button" className={`seg-btn ${showingBudgetBreakdown ? "active" : ""}`} onClick={() => setBreakdownPeriod("budget")}>Active budget</button>
+            <button type="button" className={`seg-btn ${!showingBudgetBreakdown ? "active" : ""}`} onClick={() => setBreakdownPeriod("month")}>Last 30 days</button>
+          </div>
+        </div>
+        {showingBudgetBreakdown && !activePlan ? (
+          <p className="chart-empty">No active budget. Set one active on the Budgets page to track its spending here.</p>
+        ) : breakdownRowsWithPct.length === 0 ? (
+          <p className="chart-empty">{showingBudgetBreakdown ? "No spending logged against this budget yet." : "No expenses logged in the last 30 days."}</p>
+        ) : (
+          <>
+            <div className="spend-breakdown-summary">
+              <div className="tool-highlight-label">
+                {showingBudgetBreakdown ? `Total spending for ${activePlan.name} so far` : "Total spending, last 30 days"}
+              </div>
+              <div className="tool-highlight-value">{fmt(breakdownTotal)}</div>
+            </div>
+            <div className="spend-breakdown-track">
+              {breakdownRowsWithPct.map((r) => (
+                <div key={r.key} className="spend-breakdown-segment" style={{ flex: `${r.spent} 1 0%`, background: r.color }} title={`${r.name} · ${r.pct}%`} />
+              ))}
+            </div>
+            <div className="budget-rule-rows spend-breakdown-rows">
+              {breakdownRowsWithPct.map((r) => (
+                <div key={r.key} className="budget-rule-row">
+                  <div className="budget-rule-row-top">
+                    <span className="spend-breakdown-row-name"><span className="legend-dot" style={{ background: r.color }} />{r.name}</span>
+                    <span>
+                      <strong>{fmt(r.spent)}</strong>
+                      <span className="muted" style={{ marginLeft: 8 }}>{r.pct}%</span>
+                    </span>
+                  </div>
+                  <div className="dash-budget-bar-track">
+                    <div className="dash-budget-bar-fill" style={{ width: `${r.pct}%`, background: r.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
 
       {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
         <div className="card">
