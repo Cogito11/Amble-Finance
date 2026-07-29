@@ -8,6 +8,27 @@ import { planIncomeTotal } from "../../state/plans";
 import { isWithinRolling30Days } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 
+// Combines spending-breakdown rows that share the same category name into a
+// single row (summing their spend), keeping the color from whichever one
+// appears first. Different budgets each mirror their own copy of a category
+// - e.g. two separate budgets can both have a "Groceries" category with
+// different underlying ids - so the last-30-days view (which can span several
+// budgets' worth of transactions) would otherwise show them as separate rows
+// even though they mean the same thing to the person reading it.
+function mergeBreakdownRowsByName(rows) {
+  const merged = [];
+  const indexByName = new Map();
+  rows.forEach((r) => {
+    if (indexByName.has(r.name)) {
+      merged[indexByName.get(r.name)].spent += r.spent;
+    } else {
+      indexByName.set(r.name, merged.length);
+      merged.push({ ...r });
+    }
+  });
+  return merged;
+}
+
 /* ---------------------------------- budgets view ---------------------------------- */
 export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
   const activePlan = (plans || []).find((p) => p.active);
@@ -66,7 +87,7 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
     monthBreakdownRows.push({ key: "uncategorized", name: "Uncategorized", color: "var(--text-faint)", spent: uncategorizedSpent });
   }
 
-  const breakdownRows = (showingBudgetBreakdown ? budgetBreakdownRows : monthBreakdownRows)
+  const breakdownRows = mergeBreakdownRowsByName(showingBudgetBreakdown ? budgetBreakdownRows : monthBreakdownRows)
     .filter((r) => r.spent > 0)
     .sort((a, b) => b.spent - a.spent);
   const breakdownTotal = showingBudgetBreakdown ? budgetBreakdownTotal : totalRollingSpent;
