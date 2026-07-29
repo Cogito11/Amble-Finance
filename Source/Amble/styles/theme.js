@@ -396,6 +396,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .spend-breakdown-segment { height:100%; min-width:2px; }
 .spend-breakdown-rows { margin-top:0; }
 .spend-breakdown-row-name { display:flex; align-items:center; gap:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.spend-breakdown-row-clickable { cursor:pointer; margin: -4px -6px; padding: 4px 6px; border-radius:6px; }
+.spend-breakdown-row-clickable:hover { background: var(--brass-soft); }
+.spend-breakdown-subrows { display:flex; flex-direction:column; margin-top:10px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.spend-breakdown-subrow { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; color: var(--text-muted); padding:9px 12px; }
+.spend-breakdown-subrow + .spend-breakdown-subrow { border-top:1px solid var(--border); }
+.spend-breakdown-subrow strong { font-family:'JetBrains Mono',monospace; font-size:13px; color: var(--text); }
 
 .more-view { display:flex; flex-direction:column; gap:16px; }
 .more-tabs { max-width:360px; margin-bottom:2px; }
