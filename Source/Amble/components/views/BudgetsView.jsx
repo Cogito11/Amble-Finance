@@ -37,9 +37,18 @@ function mergeBreakdownRowsByName(rows) {
 // "Groceries" row merged from two budgets shows sub-items from both). Each
 // sub-expense's percentage is of the grand total for the period, matching
 // the top-level rows, rather than of its own parent's total.
-function buildSubExpenseRows({ sourceIds, categories, mode, transactions, plans, rolling30Tx, grandTotal }) {
+//
+// A merged row's total can include money that isn't attributable to any of
+// those sub-expenses - e.g. one budget's "Eating Out" is itemized (all its
+// spend lives in sub-expenses) while another budget's "Eating Out" is a
+// plain bulk category (all its spend is logged directly against it, with no
+// sub-expenses at all). Rather than let the sub-expense rows silently add up
+// to less than the row they're nested under, that difference gets its own
+// explicit "Not in a specific expense" row.
+function buildSubExpenseRows({ sourceIds, parentSpent, categories, mode, transactions, plans, rolling30Tx, grandTotal }) {
   if (!sourceIds || !sourceIds.length) return [];
   const subCats = categories.filter((cc) => cc.parentCategoryId && sourceIds.includes(cc.parentCategoryId));
+  if (!subCats.length) return [];
   const raw = subCats.map((cc) => ({
     key: cc.id,
     name: cc.name,
@@ -48,8 +57,13 @@ function buildSubExpenseRows({ sourceIds, categories, mode, transactions, plans,
       ? categorySpend(cc, transactions, plans, categories)
       : rolling30Tx.filter((t) => t.categoryId === cc.id).reduce((s, t) => s + t.amount, 0),
   }));
-  return mergeBreakdownRowsByName(raw)
-    .filter((r) => r.spent > 0)
+  const merged = mergeBreakdownRowsByName(raw).filter((r) => r.spent > 0);
+  const subTotal = merged.reduce((s, r) => s + r.spent, 0);
+  const directSpend = Math.round((parentSpent - subTotal) * 100) / 100;
+  if (directSpend > 0.004) {
+    merged.push({ key: "direct", name: "Not in a specific expense", color: null, spent: directSpend });
+  }
+  return merged
     .sort((a, b) => b.spent - a.spent)
     .map((r) => ({ ...r, pct: grandTotal > 0 ? Math.round((r.spent / grandTotal) * 100) : 0 }));
 }
@@ -127,6 +141,7 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
     pct: breakdownTotal > 0 ? Math.round((r.spent / breakdownTotal) * 100) : 0,
     subRows: buildSubExpenseRows({
       sourceIds: r.sourceIds,
+      parentSpent: r.spent,
       categories,
       mode: showingBudgetBreakdown ? "budget" : "month",
       transactions,
