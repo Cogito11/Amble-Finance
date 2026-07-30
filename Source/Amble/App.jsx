@@ -621,6 +621,7 @@ export default function App() {
         mode: c.mode,
         bulkAmount: c.bulkAmount,
         date: c.date || null,
+        color: c.color || (c.categoryId ? state.categories.find((cc) => cc.id === c.categoryId)?.color : null) || null,
         items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount, date: i.date || null })),
       })),
     });
