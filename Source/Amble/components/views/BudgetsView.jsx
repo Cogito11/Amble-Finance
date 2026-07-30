@@ -72,6 +72,13 @@ function buildSubExpenseRows({ sourceIds, parentSpent, categories, mode, transac
 export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
   const activePlan = (plans || []).find((p) => p.active);
   const activePlanIncome = activePlan ? planIncomeTotal(activePlan, transactions, plans, categories) : 0;
+  // Same figures, thresholds, and colors as the Dashboard's "Active budget"
+  // widget, so the two agree with each other wherever a person sees them.
+  const activePlanBudgeted = activePlan ? planAllocated(activePlan) : 0;
+  const activePlanSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
+  const activePlanRemaining = activePlanBudgeted - activePlanSpent;
+  const activePlanPct = activePlanBudgeted > 0 ? activePlanSpent / activePlanBudgeted : 0;
+  const activePlanBarColor = activePlanPct > 1 ? "var(--rust)" : activePlanPct > 0.85 ? "var(--amber)" : "var(--teal)";
 
   // Only top-level categories; itemized sub-expenses roll their spend up into the parent.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
@@ -151,6 +158,23 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
     }),
   }));
 
+  // Allocated vs. spent widget: each category's own budgeted amount as a share
+  // of the whole budget (bar length, via the top segmented bar), plus how much
+  // of that specific allocation has been spent so far (each row's fill). This
+  // is scoped to the active budget only - "allocated" isn't a meaningful
+  // concept outside of one, so unlike the breakdown above there's no toggle.
+  const allocationRows = planCats
+    .map((c) => ({ key: c.id, name: c.name, color: c.color, allocated: c.limit || 0, spent: c.spent }))
+    .sort((a, b) => b.allocated - a.allocated);
+  const allocationTotal = allocationRows.reduce((s, r) => s + r.allocated, 0);
+  const allocationRowsWithPct = allocationRows.map((r) => {
+    const allocPct = allocationTotal > 0 ? Math.round((r.allocated / allocationTotal) * 100) : 0;
+    const spentPct = r.allocated > 0 ? (r.spent / r.allocated) * 100 : 0;
+    const tone = r.allocated === 0 ? "" : spentPct > 100 ? "tone-rust" : spentPct > 85 ? "tone-amber" : "tone-teal";
+    const barColor = r.allocated === 0 ? "var(--text-faint)" : spentPct > 100 ? "var(--rust)" : spentPct > 85 ? "var(--amber)" : "var(--teal)";
+    return { ...r, allocPct, spentPct, tone, barColor };
+  });
+
   const renderCategoryRows = (list) => list.map((c) => (
     <tr key={c.id}>
       <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
@@ -200,6 +224,42 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
               <div className="plan-stat-label">Remaining to allocate</div>
               <div className={`plan-stat-value ${activePlanIncome - planAllocated(activePlan) < 0 ? "tone-rust" : "tone-teal"}`}>
                 {fmt(activePlanIncome - planAllocated(activePlan))}
+              </div>
+            </div>
+          </div>
+
+          <div className="dash-budget" style={{ marginTop: 18 }}>
+            <div className="dash-budget-bar-track">
+              <div className="dash-budget-bar-fill" style={{ width: `${Math.min(activePlanPct, 1) * 100}%`, background: activePlanBarColor }} />
+              <div className="dash-budget-bar-ticks">
+                <span className="dash-budget-bar-tick" style={{ left: "25%" }} />
+                <span className="dash-budget-bar-tick" style={{ left: "50%" }} />
+                <span className="dash-budget-bar-tick" style={{ left: "75%" }} />
+              </div>
+            </div>
+            <div className="dash-budget-bar-scale">
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+            <div className="plan-summary-bar">
+              <div>
+                <span className="muted">Budgeted</span>
+                <strong>{fmt(activePlanBudgeted)}</strong>
+              </div>
+              <div>
+                <span className="muted">Spent</span>
+                <strong>{fmt(activePlanSpent)}</strong>
+              </div>
+              <div>
+                <span className="muted">Remaining</span>
+                <strong className={activePlanRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(activePlanRemaining)}</strong>
+              </div>
+              <div className="plan-summary-pct">
+                <span className="muted">% Spent</span>
+                <strong className={activePlanPct > 1 ? "tone-rust" : activePlanPct > 0.85 ? "tone-amber" : "tone-teal"}>{Math.round(activePlanPct * 100)}%</strong>
               </div>
             </div>
           </div>
@@ -281,6 +341,47 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
                   </div>
                 );
               })}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-title">Allocated vs. spent</div>
+        {!activePlan ? (
+          <p className="chart-empty">No active budget. Set one active on the Budgets page to see how it's allocated.</p>
+        ) : allocationRows.length === 0 ? (
+          <p className="chart-empty">This budget doesn't have any categories yet.</p>
+        ) : (
+          <>
+            {allocationTotal > 0 && (
+              <div className="spend-breakdown-track">
+                {allocationRowsWithPct.filter((r) => r.allocated > 0).map((r) => (
+                  <div key={r.key} className="spend-breakdown-segment" style={{ flex: `${r.allocated} 1 0%`, background: r.color }} title={`${r.name} · ${r.allocPct}% of budget`} />
+                ))}
+              </div>
+            )}
+            <div className="budget-rule-rows spend-breakdown-rows">
+              {allocationRowsWithPct.map((r) => (
+                <div key={r.key} className="budget-rule-row">
+                  <div className="budget-rule-row-top">
+                    <span className="spend-breakdown-row-name">
+                      <span className="legend-dot" style={{ background: r.color }} />
+                      {r.name}
+                    </span>
+                    {r.allocated > 0 && <span className="muted">{r.allocPct}% of budget</span>}
+                  </div>
+                  <div className="spend-breakdown-alloc-caption">
+                    <span className="muted">
+                      {r.allocated > 0 ? `${fmt(r.spent)} of ${fmt(r.allocated)} budgeted` : `${fmt(r.spent)} spent · no budget set`}
+                    </span>
+                    {r.allocated > 0 && <strong className={r.tone}>{Math.round(r.spentPct)}%</strong>}
+                  </div>
+                  <div className="dash-budget-bar-track">
+                    <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.barColor }} />
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )}

@@ -402,6 +402,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .spend-breakdown-subrow { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; color: var(--text-muted); padding:9px 12px; }
 .spend-breakdown-subrow + .spend-breakdown-subrow { border-top:1px solid var(--border); }
 .spend-breakdown-subrow strong { font-family:'JetBrains Mono',monospace; font-size:13px; color: var(--text); }
+.spend-breakdown-alloc-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; margin:4px 0 6px; }
+.spend-breakdown-alloc-caption strong { font-family:'JetBrains Mono',monospace; font-size:13px; }
 
 .more-view { display:flex; flex-direction:column; gap:16px; }
 .more-tabs { max-width:360px; margin-bottom:2px; }
