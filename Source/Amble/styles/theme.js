@@ -450,6 +450,16 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .form-group label { font-size:12px; color:var(--text-muted); }
 .form-group .input, .form-group .select { width:100%; }
 
+.input-with-swatch { display:flex; align-items:center; gap:9px; }
+.input-with-swatch .input { flex:1; }
+.color-swatch-wrap { position:relative; flex-shrink:0; }
+.color-swatch-btn { width:24px; height:24px; border-radius:50%; border:1px solid var(--border); box-shadow: inset 0 0 0 1px var(--surface); cursor:pointer; padding:0; flex-shrink:0; }
+.color-swatch-btn:hover { filter:brightness(1.08); }
+.color-swatch-menu { position:fixed; z-index:80; width:212px; box-sizing:border-box; padding:12px; border:1px solid var(--border); border-radius:10px; background:var(--surface); box-shadow:0 12px 24px rgba(0,0,0,0.18); }
+.color-swatch-grid { display:grid; grid-template-columns: repeat(6, 1fr); gap:7px; justify-items:center; }
+.color-swatch-option { width:24px; height:24px; border-radius:50%; border:1px solid rgba(0,0,0,0.08); cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; color:#fff; box-sizing:border-box; }
+.color-swatch-option:hover { filter:brightness(1.1); }
+
 .seg { display:flex; background: var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:3px; }
 .seg-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; background:transparent; border:none; color:var(--text-muted); padding:7px; font-size:13px; font-weight:500; text-transform:capitalize; cursor:pointer; border-radius:6px; }
 .seg-btn.active { background: var(--brass); color: var(--on-brass); }

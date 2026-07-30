@@ -3,7 +3,8 @@ import {
   Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info
 } from "lucide-react";
 import { Modal } from "../common/Modal";
-import { categoryIncome, planCategoryTotal } from "../../state/categories";
+import { ColorSwatchButton } from "../common/ColorSwatchButton";
+import { categoryIncome, nextCategoryColor, planCategoryTotal } from "../../state/categories";
 import { REPEAT_DUE_PHRASES, nextPlanDates, planDueDate, planMatchDurationDays } from "../../state/plans";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
@@ -26,7 +27,12 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
       : [{ id: uid(), name: "Income", mode: "manual", amount: initial.income ?? "" }]
   );
   const [cats, setCats] = useState(
-    initial.categories && initial.categories.length ? initial.categories : []
+    (initial.categories && initial.categories.length ? initial.categories : []).map((c) => ({
+      ...c,
+      color: c.color
+        || (c.categoryId ? (categories || []).find((cc) => cc.id === c.categoryId)?.color : null)
+        || nextCategoryColor(categories, c.name),
+    }))
   );
   const [repeatOn, setRepeatOn] = useState(!!(initial.repeat && initial.repeat.enabled));
   const [repeatFreq, setRepeatFreq] = useState((initial.repeat && initial.repeat.frequency) || "monthly");
@@ -83,7 +89,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
   };
 
   const addCategory = () => {
-    setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [] }]);
+    setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [], color: nextCategoryColor([...(categories || []), ...cs], "") }]);
   };
   // Moves a category up/down by one slot for reordering.
   const moveCategory = (id, direction) => {
@@ -140,6 +146,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
         mode: c.mode === "items" ? "items" : "bulk",
         bulkAmount: Number(c.bulkAmount) || 0,
         date: c.date || null,
+        color: c.color,
         items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
       })),
     });
@@ -312,6 +319,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                     <ChevronDown size={14} />
                   </button>
                 </div>
+                <ColorSwatchButton color={c.color} onChange={(color) => updateCategory(c.id, { color })} label="Category color" />
                 <input className="input" placeholder="Category name (e.g. Streaming services)" value={c.name} onChange={(e) => updateCategory(c.id, { name: e.target.value })} />
                 <div className="seg plan-cat-seg">
                   <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
