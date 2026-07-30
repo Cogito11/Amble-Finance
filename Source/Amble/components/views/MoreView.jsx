@@ -93,7 +93,7 @@ export function MoreView({
       {tab === "settings" && (
         <div className="card">
           <div className="card-title">Dashboard</div>
-          <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data — nothing is deleted.</p>
+          <p className="settings-desc">Choose which widgets appear on your dashboard. Hidden widgets keep their data so nothing is deleted.</p>
           <div className="widget-toggle-list">
             {DASHBOARD_WIDGETS.map((item) => (
               <label key={item.id} className="widget-toggle-row">
@@ -123,7 +123,7 @@ export function MoreView({
             <div className="card-title">Backup &amp; restore</div>
             <p className="settings-desc">
               Export a full backup of your accounts, categories, transactions, and plans as a
-              JSON file. Use it to move your data to another computer or restore it later — your
+              JSON file. Use it to move your data to another computer or restore it later. Your
               data never leaves this device on its own.
             </p>
             <div className="about-details">
@@ -149,7 +149,7 @@ export function MoreView({
             <div className="card-title">Spreadsheet export</div>
             <p className="settings-desc">
               Export your {transactionCount} transaction{transactionCount === 1 ? "" : "s"} as a
-              CSV file to open in Excel, Numbers, or Google Sheets. This is one-way — it's meant
+              CSV file to open in Excel, Numbers, or Google Sheets. This is one-way. It's meant
               for analysis, not as a backup you'd import back in.
             </p>
             <div className="settings-actions">

@@ -451,7 +451,7 @@ export function StatusPlanCategoryRow({ category, categories, transactions, plan
   if (!isItemized) {
     return (
       <tr>
-        <td>{category.name}</td>
+        <td><span className="legend-dot" style={{ background: category.color, marginRight: 8 }} />{category.name}</td>
         <td className="amount col-center">{fmt(category.spent)}</td>
         <td className="amount col-center">{category.limit > 0 ? fmt(category.limit) : <span className="muted">Not set</span>}</td>
         <td className={`amount col-center ${category.limit > 0 && category.limit - category.spent < 0 ? "tone-rust" : ""}`}>
@@ -467,6 +467,7 @@ export function StatusPlanCategoryRow({ category, categories, transactions, plan
         <td>
           <span className="plan-cat-expand-cell">
             <ChevronRight size={13} className={`plan-cat-chevron${expanded ? " expanded" : ""}`} />
+            <span className="legend-dot" style={{ background: category.color }} />
             {category.name}
           </span>
         </td>
@@ -482,7 +483,7 @@ export function StatusPlanCategoryRow({ category, categories, transactions, plan
         const itOver = itRemaining < 0;
         return (
           <tr key={it.id} className="plan-cat-item-subrow">
-            <td className="plan-cat-item-name-cell">{it.name}</td>
+            <td className="plan-cat-item-name-cell"><span className="legend-dot" style={{ background: it.color || category.color, marginRight: 8 }} />{it.name}</td>
             <td className="amount col-center">{fmt(itSpent)}</td>
             <td className="amount col-center">{it.limit > 0 ? fmt(it.limit) : <span className="muted">Not set</span>}</td>
             <td className={`amount col-center ${itOver ? "tone-rust" : ""}`}>{it.limit > 0 ? fmt(itRemaining) : "—"}</td>
