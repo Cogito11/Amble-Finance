@@ -429,22 +429,9 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
         <table className="table full">
           <thead><tr><th>Name</th><th>Type</th><th className="col-center">Spent</th><th className="col-center">Budgeted</th><th className="col-center">Remaining</th><th></th></tr></thead>
           <tbody>
-            {renderCategoryRows(generalExpenseCats)}
-            {incomeCats.map((c) => (
-              <tr key={c.id}>
-                <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
-                <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
-                <td className="amount col-center">—</td>
-                <td className="amount col-center">—</td>
-                <td className="amount col-center">—</td>
-                <td className="row-actions-cell">
-                  <div className="row-actions">
-                    <button className="icon-btn" onClick={() => onEdit(c)} aria-label="Edit category"><Pencil size={14} /></button>
-                    <button className="icon-btn" onClick={() => onDelete(c.id)} aria-label="Delete category"><Trash2 size={14} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {generalExpenseCats.length + incomeCats.length === 0 ? (
+              <tr><td colSpan="6"><p className="settings-desc plan-cats-empty">No general categories yet. Add one above, or from a budget's category list.</p></td></tr>
+            ) : renderCategoryRows([...generalExpenseCats, ...incomeCats])}
           </tbody>
         </table>
       </div>

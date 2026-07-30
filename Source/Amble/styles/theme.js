@@ -179,7 +179,7 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .pie-chart-wrap { flex: 1 1 180px; min-width:150px; max-width:220px; }
 .pie-legend { flex:1 1 160px; display:flex; flex-direction:column; gap:7px; min-width:140px; }
 .legend-row { display:flex; align-items:center; gap:8px; font-size:12.5px; }
-.legend-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+.legend-dot { display:inline-block; vertical-align:middle; width:9px; height:9px; border-radius:50%; flex-shrink:0; }
 .legend-name { flex:1; color:var(--text-muted); }
 .legend-val { font-family:'JetBrains Mono',monospace; color:var(--text); }
 
