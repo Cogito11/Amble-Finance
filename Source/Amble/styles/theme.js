@@ -188,6 +188,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .table.full thead th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); font-weight:500; padding:14px 20px; border-bottom:1px solid var(--border); }
 .table.full tbody td { padding:12px 20px; border-bottom:1px solid var(--border); }
 .table.full tbody tr:last-child td { border-bottom:none; }
+.tx-row { cursor:pointer; }
+.tx-row:hover { background: var(--brass-soft); }
+.tx-row:focus-visible { outline: 2px solid var(--brass); outline-offset:-2px; }
 .table:not(.full) td { padding:8px 0; border-bottom:1px solid var(--border); }
 .table:not(.full) tr:last-child td { border-bottom:none; }
 .muted { color: var(--text-muted); }
