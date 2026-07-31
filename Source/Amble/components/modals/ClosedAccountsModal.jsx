@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCcw, Pencil, Archive } from "lucide-react";
+import { RotateCcw, Archive } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
 import { isDebtAccount } from "../../state/accounts";
@@ -19,7 +19,7 @@ export function ClosedAccountsModal({ accounts, balances, onReopen, onEdit, onCl
           <>
             <p className="settings-desc">
               Closed accounts are hidden from new transactions but keep their full history. Reopen
-              one to start using it again, or edit it to change its details or delete it.
+              one to start using it again, or click it to edit its details or delete it.
             </p>
             <div className="closed-acc-list">
               {accounts.map((a) => {
@@ -28,7 +28,14 @@ export function ClosedAccountsModal({ accounts, balances, onReopen, onEdit, onCl
                 const isDebt = isDebtAccount(a);
                 const displayBal = isDebt ? Math.max(0, -bal) : bal;
                 return (
-                  <div key={a.id} className="closed-acc-card">
+                  <div
+                    key={a.id}
+                    className="closed-acc-card"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { if (window.getSelection().toString()) return; onEdit(a); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(a); } }}
+                  >
                     <div className="closed-acc-top">
                       <div className="closed-acc-identity">
                         <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}>
@@ -39,13 +46,10 @@ export function ClosedAccountsModal({ accounts, balances, onReopen, onEdit, onCl
                           <div className="closed-acc-type">{ACCOUNT_LABELS[a.type]}{a.institution ? ` · ${a.institution}` : ""}</div>
                         </div>
                       </div>
-                      <button className="icon-btn" title="Edit account" aria-label="Edit account" onClick={() => onEdit(a)}>
-                        <Pencil size={14} />
-                      </button>
                     </div>
                     <div className="closed-acc-bottom">
                       <span className={`closed-acc-balance ${isDebt || bal < 0 ? "tone-rust" : "tone-brass"}`}>{fmt(displayBal)}</span>
-                      <button className="btn btn-primary btn-sm" onClick={() => onReopen(a.id)}>
+                      <button className="btn btn-primary btn-sm" onClick={(e) => { e.stopPropagation(); onReopen(a.id); }}>
                         <RotateCcw size={14} /> Reopen Account
                       </button>
                     </div>

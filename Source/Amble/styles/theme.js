@@ -255,7 +255,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .acc-action-btn { width:100%; justify-content:center; }
 
 .closed-acc-list { display:flex; flex-direction:column; gap:10px; }
-.closed-acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:12px; }
+.closed-acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:12px; cursor:pointer; transition: border-color .15s; }
+.closed-acc-card:hover { border-color: var(--brass); }
+.closed-acc-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .closed-acc-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .closed-acc-identity { display:flex; align-items:center; gap:10px; min-width:0; }
 .closed-acc-text { min-width:0; }
