@@ -11,6 +11,7 @@ import { PlanModal } from "./components/modals/PlanModal";
 import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
 import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
+import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
 import { BudgetsView } from "./components/views/BudgetsView";
@@ -18,7 +19,7 @@ import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
 import { PlansView } from "./components/views/PlansView";
 import { TransactionsView } from "./components/views/TransactionsView";
-import { NAV_ITEMS, SIDEBAR_KEY, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultWidgetPrefs } from "./constants";
+import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncPlanCategories } from "./state/categories";
 import { defaultState, migratePlanOrder, nextTopPlanOrder, rolloverDuePlans, sortedPlansList } from "./state/plans";
@@ -180,6 +181,19 @@ export default function App() {
     }
   });
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusPrefs, setStatusPrefs] = useState(() => {
+    const defaults = defaultStatusPrefs();
+    try {
+      const raw = localStorage.getItem(STATUS_KEY);
+      if (!raw) return defaults;
+      const saved = JSON.parse(raw);
+      const order = [...(saved.order || []).filter((id) => defaults.order.includes(id)), ...defaults.order.filter((id) => !(saved.order || []).includes(id))];
+      return { order, visible: { ...defaults.visible, ...(saved.visible || {}) } };
+    } catch (e) {
+      return defaults;
+    }
+  });
   // Lets the global shortcut handler focus the transactions search box even
   // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) - the
   // handler flips this flag and switches views, and the effect below focuses
@@ -216,12 +230,29 @@ export default function App() {
     })();
   }, [sidebarPrefs]);
 
+  useEffect(() => {
+    (async () => {
+      try { await window.storage.set(STATUS_KEY, JSON.stringify(statusPrefs), false); }
+      catch (e) { /* silent */ }
+    })();
+  }, [statusPrefs]);
+
   const toggleWidget = (id) => {
     setDashboardWidgets((w) => ({ ...w, [id]: !w[id] }));
   };
 
   const toggleSidebarSection = (id) => setSidebarPrefs((prefs) => ({ ...prefs, visible: { ...prefs.visible, [id]: !prefs.visible[id] } }));
   const reorderSidebarSection = (draggedId, targetId) => setSidebarPrefs((prefs) => {
+    const order = [...prefs.order];
+    const from = order.indexOf(draggedId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return prefs;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    return { ...prefs, order };
+  });
+
+  const toggleStatusSection = (id) => setStatusPrefs((prefs) => ({ ...prefs, visible: { ...prefs.visible, [id]: !prefs.visible[id] } }));
+  const reorderStatusSection = (draggedId, targetId) => setStatusPrefs((prefs) => {
     const order = [...prefs.order];
     const from = order.indexOf(draggedId);
     const to = order.indexOf(targetId);
@@ -333,6 +364,7 @@ export default function App() {
         if (confirmDialog) { setConfirmDialog(null); return; }
         if (widgetModalOpen) { setWidgetModalOpen(false); return; }
         if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
+        if (statusModalOpen) { setStatusModalOpen(false); return; }
         if (closedAccountsOpen) { setClosedAccountsOpen(false); return; }
         if (txModal !== null) { setTxModal(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
@@ -829,6 +861,7 @@ export default function App() {
   };
   const footerMetric = footerMetrics[sidebarPrefs.footerMetric] || footerMetrics.netWorth;
   const orderedSidebarSections = sidebarPrefs.order.map((id) => sidebarSections.find((section) => section.id === id)).filter(Boolean);
+  const orderedStatusSections = statusPrefs.order.map((id) => STATUS_SECTIONS.find((section) => section.id === id)).filter(Boolean);
 
   return (
     <div className={`app-root${darkMode ? " dark" : ""}`}>
@@ -869,6 +902,9 @@ export default function App() {
             <div className="topbar-actions">
               {effectiveView === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
+              )}
+              {effectiveView === "budgets" && (
+                <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
               {effectiveView !== "more" && effectiveView !== "plans" && effectiveView !== "tools" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
@@ -920,6 +956,9 @@ export default function App() {
                 plans={state.plans}
                 onEditPlan={setPlanModal}
                 onGoPlans={() => setView("plans")}
+                sectionOrder={statusPrefs.order}
+                sectionVisible={statusPrefs.visible}
+                onCustomize={() => setStatusModalOpen(true)}
               />
             )}
             {effectiveView === "plans" && (
@@ -1022,6 +1061,15 @@ export default function App() {
           onReorder={reorderSidebarSection}
           onChangeMetric={(footerMetric) => setSidebarPrefs((prefs) => ({ ...prefs, footerMetric }))}
           onClose={() => setSidebarModalOpen(false)}
+        />
+      )}
+      {statusModalOpen && (
+        <StatusSettingsModal
+          sections={orderedStatusSections}
+          visible={statusPrefs.visible}
+          onToggle={toggleStatusSection}
+          onReorder={reorderStatusSection}
+          onClose={() => setStatusModalOpen(false)}
         />
       )}
       {shortcutsOpen && (

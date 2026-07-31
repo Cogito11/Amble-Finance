@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import {
-  Plus, Pencil, Trash2, ClipboardList, ChevronRight
+  Plus, Pencil, Trash2, ClipboardList, ChevronRight, Sliders
 } from "lucide-react";
+import { EmptyState } from "../common/EmptyState";
 import { Gauge } from "../common/Gauge";
+import { STATUS_SECTIONS, defaultStatusPrefs } from "../../constants";
 import { categorySpend, isSpendTx, planAllocated, planCategoryTotal } from "../../state/categories";
 import { planIncomeTotal } from "../../state/plans";
 import { isWithinRolling30Days } from "../../utils/dates";
@@ -69,7 +71,22 @@ function buildSubExpenseRows({ sourceIds, parentSpent, categories, mode, transac
 }
 
 /* ---------------------------------- budgets view ---------------------------------- */
-export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans }) {
+export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete, plans, onEditPlan, onGoPlans, sectionOrder, sectionVisible, onCustomize }) {
+  const order = sectionOrder || STATUS_SECTIONS.map((s) => s.id);
+  const visible = sectionVisible || defaultStatusPrefs().visible;
+  const anySectionOn = order.some((id) => visible[id]);
+  if (!anySectionOn) {
+    return (
+      <EmptyState
+        icon={Sliders}
+        title="Your status page is empty"
+        message="Every section is currently hidden. Turn some back on to see your budgets at a glance."
+        actionLabel="Customize status page"
+        onAction={onCustomize}
+      />
+    );
+  }
+
   const activePlan = (plans || []).find((p) => p.active);
   const activePlanIncome = activePlan ? planIncomeTotal(activePlan, transactions, plans, categories) : 0;
   // Same figures, thresholds, and colors as the Dashboard's "Active budget"
@@ -197,10 +214,9 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
     <StatusPlanCategoryRow key={c.id} category={c} categories={categories} transactions={transactions} plans={plans} />
   ));
 
-  return (
-    <div className="budget-view">
-      {activePlan ? (
-        <div className="card plan-active-card">
+  const sectionEls = {
+    activeBudget: activePlan ? (
+        <div className="card plan-active-card" key="activeBudget">
           <div className="card-title">
             Active budget
             <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit budget</button>
@@ -265,16 +281,17 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           </div>
         </div>
       ) : (
-        <div className="card plan-active-card plan-active-empty">
+        <div className="card plan-active-card plan-active-empty" key="activeBudget">
           <div className="plan-empty-text">
             <div className="plan-empty-title">No active budget</div>
             <p className="settings-desc">Create a budget each payday to break your income down into spending categories, then mark it active to see it here.</p>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={onGoPlans}><ClipboardList size={14} /> Go to Budgets</button>
         </div>
-      )}
+      ),
 
-      <div className="card">
+    spendingBreakdown: (
+      <div className="card" key="spendingBreakdown">
         <div className="card-title">
           Spending breakdown
           <div className="seg card-corner-seg" role="group" aria-label="Breakdown period">
@@ -345,8 +362,10 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           </>
         )}
       </div>
+    ),
 
-      <div className="card">
+    allocatedVsSpent: (
+      <div className="card" key="allocatedVsSpent">
         <div className="card-title">Allocated vs. spent</div>
         {!activePlan ? (
           <p className="chart-empty">No active budget. Set one active on the Budgets page to see how it's allocated.</p>
@@ -386,9 +405,10 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           </>
         )}
       </div>
+    ),
 
-      {(gaugeCats.length > 0 || uncategorizedSpent > 0) && (
-        <div className="card">
+    categoryGauges: (gaugeCats.length > 0 || uncategorizedSpent > 0) ? (
+        <div className="card" key="categoryGauges">
           <div className="card-title">Category gauges</div>
           <div className="gauge-row">
             {gaugeCats.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
@@ -402,9 +422,10 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
             )}
           </div>
         </div>
-      )}
+      ) : null,
 
-      <div className="card no-pad">
+    budgetCategories: (
+      <div className="card no-pad" key="budgetCategories">
         <div className="card-title padded">
           Budget categories
           {activePlan && <button className="btn btn-ghost btn-sm" onClick={() => onEditPlan(activePlan)}><Pencil size={14} /> Edit budget</button>}
@@ -420,8 +441,10 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           </p>
         )}
       </div>
+    ),
 
-      <div className="card no-pad">
+    generalCategories: (
+      <div className="card no-pad" key="generalCategories">
         <div className="card-title padded">
           General categories
           <button className="btn btn-ghost btn-sm" onClick={onAdd}><Plus size={14} /> Add category</button>
@@ -435,6 +458,12 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
           </tbody>
         </table>
       </div>
+    ),
+  };
+
+  return (
+    <div className="budget-view">
+      {order.filter((id) => visible[id]).map((id) => sectionEls[id])}
     </div>
   );
 }

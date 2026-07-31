@@ -321,6 +321,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .widget-toggle-desc { font-size:12px; color:var(--text-muted); line-height:1.45; }
 .sidebar-settings-list { display:flex; flex-direction:column; border-top:1px solid var(--border); }
 .sidebar-settings-row { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:46px; border-bottom:1px solid var(--border); padding:7px 2px; cursor:grab; }
+.status-settings-checkbox-row { align-items:flex-start; }
+.status-settings-checkbox-row input[type="checkbox"] { margin-top:2px; }
 .sidebar-settings-row-dragging { opacity:0.45; }
 .sidebar-settings-row-drop-target { border-color:var(--brass); box-shadow:0 -2px 0 var(--brass); }
 .sidebar-settings-grip { color:var(--text-faint); flex-shrink:0; }

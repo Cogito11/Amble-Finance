@@ -108,6 +108,26 @@ export function defaultWidgetPrefs() {
   return DASHBOARD_WIDGETS.reduce((acc, w) => { acc[w.id] = true; return acc; }, {});
 }
 
+// Catalog of Status page sections the user can show/hide and reorder. Unlike
+// the dashboard widgets above (show/hide only - their render order is fixed),
+// these sections read fine in more than one order, so this follows the same
+// { order, visible } shape as the sidebar's customize prefs instead.
+export const STATUS_SECTIONS = [
+  { id: "activeBudget", label: "Active budget", description: "Name, dates, and a spent-vs-budgeted progress bar for your active budget" },
+  { id: "spendingBreakdown", label: "Spending breakdown", description: "Share of spending per category, for the active budget or the last 30 days" },
+  { id: "allocatedVsSpent", label: "Allocated vs. spent", description: "How much of the active budget's allocation each category has used" },
+  { id: "categoryGauges", label: "Category gauges", description: "Progress gauges for categories with a budget limit set" },
+  { id: "budgetCategories", label: "Budget categories", description: "Table of the active budget's categories, spent, budgeted, and remaining" },
+  { id: "generalCategories", label: "General categories", description: "Table of categories not tied to any budget" },
+];
+
+export function defaultStatusPrefs() {
+  return {
+    order: STATUS_SECTIONS.map((s) => s.id),
+    visible: STATUS_SECTIONS.reduce((acc, s) => { acc[s.id] = true; return acc; }, {}),
+  };
+}
+
 export const MORE_TABS = [
   { id: "settings", label: "Settings", icon: Sliders },
   { id: "data", label: "Data", icon: Database },
@@ -231,3 +251,5 @@ export const THEME_KEY = "amble-theme-pref-v1";
 export const WIDGETS_KEY = "amble-dashboard-widgets-v1";
 
 export const SIDEBAR_KEY = "amble-sidebar-prefs-v1";
+
+export const STATUS_KEY = "amble-status-prefs-v1";
