@@ -1024,6 +1024,8 @@ export default function App() {
           onDelete={requestDeleteAccount}
           onCloseAccount={requestCloseAccount}
           onReopenAccount={reopenAccount}
+          transactions={state.transactions}
+          currentBalance={accModal.id ? balances[accModal.id] : null}
         />
       )}
       {closedAccountsOpen && (

@@ -234,8 +234,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
 .acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
-.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; transition: opacity .15s, border-color .15s, transform .1s; }
-.acc-card[draggable="true"] { cursor:grab; }
+.acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; cursor:pointer; transition: opacity .15s, border-color .15s, transform .1s; }
+.acc-card:hover { border-color: var(--brass); }
+.acc-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .acc-card[draggable="true"]:active { cursor:grabbing; }
 .acc-card-dragging { opacity:0.4; }
 .acc-card-drop-target { border-color: var(--brass); border-style: dashed; }
@@ -446,6 +447,14 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .modal-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-top:1px solid var(--border); }
 .modal-status-card { display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap; text-align:center; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 14px; font-size:12.5px; color:var(--text-muted); }
 .modal-status-card strong { color:var(--text); font-weight:600; }
+.acc-modal-recent { margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
+.acc-modal-recent-title { font-size:12.5px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:10px; }
+.acc-modal-recent-list { display:flex; flex-direction:column; gap:11px; }
+.acc-modal-recent-row { display:flex; align-items:center; gap:10px; }
+.acc-modal-recent-desc { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; font-size:13px; }
+.acc-modal-recent-desc > div:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.acc-modal-recent-desc .muted { font-size:11.5px; }
+.acc-modal-recent-row .amount { font-size:13px; flex-shrink:0; }
 .modal-status-amount { font-family:'JetBrains Mono',monospace; font-weight:600; color:var(--text); }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .form-group { display:flex; flex-direction:column; gap:6px; }
