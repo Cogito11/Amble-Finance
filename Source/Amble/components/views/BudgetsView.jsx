@@ -593,7 +593,7 @@ export function PlanCategoryRows({ category, transactions }) {
 
   return (
     <>
-      <tr className="plan-cat-parent-row" onClick={() => setExpanded((e) => !e)}>
+      <tr className="plan-cat-parent-row" onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}>
         <td>
           <span className="plan-cat-expand-cell">
             <ChevronRight size={13} className={`plan-cat-chevron${expanded ? " expanded" : ""}`} />
