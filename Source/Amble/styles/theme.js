@@ -268,7 +268,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .empty-message { font-size:13.5px; max-width:340px; margin-bottom:8px; }
 
 .modal-overlay { position:fixed; inset:0; background: rgba(10,10,7,0.6); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
-.modal { background: var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:440px; max-height:90vh; overflow-y:auto; }
+.modal { background: var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:440px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
 .modal.modal-sm { max-width: 380px; }
 .modal.modal-lg { max-width: 640px; }
 .confirm-message { font-size:13.5px; color:var(--text-muted); line-height:1.55; margin:0; }
@@ -441,10 +441,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .shortcut-row:last-child { border-bottom:none; }
 .shortcut-label { font-size:13px; }
 .shortcut-keys { display:flex; align-items:center; gap:4px; flex-shrink:0; }
-.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); flex-shrink:0; }
 .modal-header h2 { font-family:'Fraunces',serif; font-size:17px; font-weight:600; margin:0; }
-.modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; }
-.modal-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-top:1px solid var(--border); }
+.modal-body { padding:20px 22px; display:flex; flex-direction:column; gap:14px; overflow-y:auto; min-height:0; }
+.modal-footer { display:flex; align-items:center; justify-content:space-between; padding:16px 22px; border-top:1px solid var(--border); flex-shrink:0; }
 .modal-status-card { display:flex; align-items:center; justify-content:center; gap:5px; flex-wrap:wrap; text-align:center; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:11px 14px; font-size:12.5px; color:var(--text-muted); }
 .modal-status-card strong { color:var(--text); font-weight:600; }
 .acc-modal-recent { margin-top:18px; padding-top:14px; border-top:1px solid var(--border); }
