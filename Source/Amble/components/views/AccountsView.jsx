@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import {
-  Wallet, Plus, Pencil, Trash2, AlertCircle
+  Wallet, Plus, Pencil, Trash2, AlertCircle, Archive
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
 import { isDebtAccount, sortedAccountsList } from "../../state/accounts";
 import { fmt } from "../../utils/format";
 
-export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, error }) {
+export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onReorder, onViewClosed, error }) {
   // Tracks the id of the account currently being dragged, so the card under the
   // cursor can be highlighted as a drop target.
   const [dragId, setDragId] = useState(null);
@@ -17,11 +17,20 @@ export function AccountsView({ accounts, balances, onAdd, onEdit, onDelete, onRe
     return <EmptyState icon={Wallet} title="No accounts yet" message="Add a cash, bank, asset, credit card, or loan account to begin tracking balances." actionLabel="Add account" onAction={onAdd} />;
   }
 
-  const sorted = sortedAccountsList(accounts);
+  // Closed accounts stay in state (so transactions tied to them still resolve
+  // a name and balance) but are hidden from the active grid and can't be
+  // picked for new transactions - see ClosedAccountsModal for reopening them.
+  const openAccounts = accounts.filter((a) => !a.closed);
+  const sorted = sortedAccountsList(openAccounts);
 
   return (
     <div className="acc-view">
       {error && <div className="inline-error"><AlertCircle size={14} /> {error}</div>}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <button className="btn btn-ghost btn-sm" onClick={onViewClosed}>
+          <Archive size={14} /> Closed Accounts
+        </button>
+      </div>
       <div className="acc-grid">
         {sorted.map((a) => {
           const Icon = ACCOUNT_ICONS[a.type];

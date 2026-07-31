@@ -173,12 +173,12 @@ export function syncPlanCategories(plan, categories) {
     let parentId, parentColor;
     if (existingIdx >= 0) {
       parentId = pc.categoryId;
-      parentColor = cats[existingIdx].color;
-      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null, date: pc.date || null };
+      parentColor = pc.color || cats[existingIdx].color;
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null, date: pc.date || null, color: parentColor };
       keepIds.add(parentId);
     } else {
       parentId = uid();
-      parentColor = nextCategoryColor(cats, pc.name);
+      parentColor = pc.color || nextCategoryColor(cats, pc.name);
       cats.push({
         id: parentId, name: pc.name, type: "expense", limit: total,
         color: parentColor, planId: plan.id, parentCategoryId: null, date: pc.date || null,

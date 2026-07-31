@@ -3,6 +3,7 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { ColorSwatchButton } from "../common/ColorSwatchButton";
 import { nextCategoryColor } from "../../state/categories";
 import { blurOnWheel, uid } from "../../utils/misc";
 
@@ -11,6 +12,7 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
   const [name, setName] = useState(initial.name || "");
   const [type, setType] = useState(initial.type || "expense");
   const [limit, setLimit] = useState(initial.limit ?? "");
+  const [color, setColor] = useState(initial.color || nextCategoryColor(categories, initial.name || ""));
 
   const canSave = name.trim().length > 0;
 
@@ -21,7 +23,7 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
       name: name.trim(),
       type,
       limit: type === "expense" ? (parseFloat(limit) || 0) : 0,
-      color: initial.color || nextCategoryColor(categories, name.trim()),
+      color,
       planId: initial.planId ?? null,
     });
   };
@@ -31,7 +33,10 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
       <div className="modal-body">
         <div className="form-group">
           <label>Category name</label>
-          <input className="input" placeholder="e.g. Pet Care" value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="input-with-swatch">
+            <ColorSwatchButton color={color} onChange={setColor} label="Category color" />
+            <input className="input" placeholder="e.g. Pet Care" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
         </div>
         <div className="form-group">
           <label>Type</label>

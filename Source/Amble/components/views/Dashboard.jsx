@@ -195,7 +195,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
                 <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("accounts")}>View all <ChevronRight size={14} /></button>
               </div>
               <div className="dash-acc-list">
-                {sortedAccountsList(accounts).slice(0, 3).map((a) => {
+                {sortedAccountsList(accounts.filter((a) => !a.closed)).slice(0, 3).map((a) => {
                   const Icon = ACCOUNT_ICONS[a.type];
                   const bal = balances[a.id];
                   const isDebt = isDebtAccount(a);
@@ -269,7 +269,10 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
 
       {w.budgetGauges && (budgeted.length > 0 || uncategorizedSpentRolling > 0) && (
         <div className="card">
-          <div className="card-title">Budget progress</div>
+          <div className="card-title">
+            Budget progress
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("budgets")}>View status <ChevronRight size={14} /></button>
+          </div>
           <div className="gauge-row">
             {catSpend.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
             {uncategorizedSpentRolling > 0 && (

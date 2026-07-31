@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import {
-  Trash2
+  Trash2, Archive, RotateCcw
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { blurOnWheel, uid } from "../../utils/misc";
 import { isDebtAccount } from "../../state/accounts";
 
-export function AccountModal({ initial, onSave, onClose, onDelete }) {
+export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccount, onReopenAccount }) {
   const isEdit = !!initial.id;
+  const isClosed = !!initial.closed;
   const [name, setName] = useState(initial.name || "");
   const [institution, setInstitution] = useState(initial.institution || "");
   const [type, setType] = useState(initial.type || "checking");
@@ -30,12 +31,18 @@ export function AccountModal({ initial, onSave, onClose, onDelete }) {
       startingBalance: isDebt ? -Math.abs(val) : val,
       interestRate: rateVal,
       order: typeof initial.order === "number" ? initial.order : undefined,
+      closed: isClosed,
     });
   };
 
   return (
-    <Modal title={isEdit ? "Edit account" : "Add account"} onClose={onClose}>
+    <Modal title={isEdit ? (isClosed ? "Closed account" : "Edit account") : "Add account"} onClose={onClose}>
       <div className="modal-body">
+        {isClosed && (
+          <div className="tool-note">
+            This account is closed and can't be selected for new transactions. Reopen it below to start using it again.
+          </div>
+        )}
         <div className="form-group">
           <label>Account name</label>
           <input className="input" placeholder="e.g. Everyday Checking" value={name} onChange={(e) => setName(e.target.value)} />
@@ -64,6 +71,13 @@ export function AccountModal({ initial, onSave, onClose, onDelete }) {
           <input type="number" step="0.01" min="0" className="input mono" placeholder="e.g. 4.5" value={interestRateInput} onChange={(e) => setInterestRateInput(e.target.value)} onWheel={blurOnWheel} />
           <div className="tool-note">If set, compatible growth and payoff tools will use this automatically when you select this account.</div>
         </div>
+        {isEdit && (
+          isClosed ? (
+            <button className="btn btn-ghost acc-action-btn" onClick={() => onReopenAccount(initial.id)}><RotateCcw size={14} /> Reopen account</button>
+          ) : (
+            <button className="btn btn-ghost acc-action-btn" onClick={() => onCloseAccount(initial.id)}><Archive size={14} /> Close account</button>
+          )
+        )}
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

@@ -5,11 +5,13 @@ import {
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
 import { AccountModal } from "./components/modals/AccountModal";
+import { ClosedAccountsModal } from "./components/modals/ClosedAccountsModal";
 import { CategoryModal } from "./components/modals/CategoryModal";
 import { PlanModal } from "./components/modals/PlanModal";
 import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
 import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
+import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
 import { BudgetsView } from "./components/views/BudgetsView";
@@ -17,7 +19,7 @@ import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
 import { PlansView } from "./components/views/PlansView";
 import { TransactionsView } from "./components/views/TransactionsView";
-import { NAV_ITEMS, SIDEBAR_KEY, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultWidgetPrefs } from "./constants";
+import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncPlanCategories } from "./state/categories";
 import { defaultState, migratePlanOrder, nextTopPlanOrder, rolloverDuePlans, sortedPlansList } from "./state/plans";
@@ -152,6 +154,7 @@ export default function App() {
   const [catModal, setCatModal] = useState(null);
   const [planModal, setPlanModal] = useState(null);
   const [accError, setAccError] = useState("");
+  const [closedAccountsOpen, setClosedAccountsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
   // Same synchronous-read pattern as darkMode above, so returning users don't see
   // every widget flash on before their saved preference (some hidden) applies.
@@ -178,6 +181,19 @@ export default function App() {
     }
   });
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusPrefs, setStatusPrefs] = useState(() => {
+    const defaults = defaultStatusPrefs();
+    try {
+      const raw = localStorage.getItem(STATUS_KEY);
+      if (!raw) return defaults;
+      const saved = JSON.parse(raw);
+      const order = [...(saved.order || []).filter((id) => defaults.order.includes(id)), ...defaults.order.filter((id) => !(saved.order || []).includes(id))];
+      return { order, visible: { ...defaults.visible, ...(saved.visible || {}) } };
+    } catch (e) {
+      return defaults;
+    }
+  });
   // Lets the global shortcut handler focus the transactions search box even
   // when it isn't mounted yet (e.g. Cmd+F pressed from the Dashboard) - the
   // handler flips this flag and switches views, and the effect below focuses
@@ -214,12 +230,29 @@ export default function App() {
     })();
   }, [sidebarPrefs]);
 
+  useEffect(() => {
+    (async () => {
+      try { await window.storage.set(STATUS_KEY, JSON.stringify(statusPrefs), false); }
+      catch (e) { /* silent */ }
+    })();
+  }, [statusPrefs]);
+
   const toggleWidget = (id) => {
     setDashboardWidgets((w) => ({ ...w, [id]: !w[id] }));
   };
 
   const toggleSidebarSection = (id) => setSidebarPrefs((prefs) => ({ ...prefs, visible: { ...prefs.visible, [id]: !prefs.visible[id] } }));
   const reorderSidebarSection = (draggedId, targetId) => setSidebarPrefs((prefs) => {
+    const order = [...prefs.order];
+    const from = order.indexOf(draggedId);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return prefs;
+    order.splice(to, 0, order.splice(from, 1)[0]);
+    return { ...prefs, order };
+  });
+
+  const toggleStatusSection = (id) => setStatusPrefs((prefs) => ({ ...prefs, visible: { ...prefs.visible, [id]: !prefs.visible[id] } }));
+  const reorderStatusSection = (draggedId, targetId) => setStatusPrefs((prefs) => {
     const order = [...prefs.order];
     const from = order.indexOf(draggedId);
     const to = order.indexOf(targetId);
@@ -312,7 +345,7 @@ export default function App() {
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
     txModal !== null || accModal !== null || catModal !== null || planModal !== null ||
-    widgetModalOpen || sidebarModalOpen || !!confirmDialog || shortcutsOpen;
+    widgetModalOpen || sidebarModalOpen || closedAccountsOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
   // above the loading-state early return below. It bails out immediately while
@@ -331,6 +364,8 @@ export default function App() {
         if (confirmDialog) { setConfirmDialog(null); return; }
         if (widgetModalOpen) { setWidgetModalOpen(false); return; }
         if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
+        if (statusModalOpen) { setStatusModalOpen(false); return; }
+        if (closedAccountsOpen) { setClosedAccountsOpen(false); return; }
         if (txModal !== null) { setTxModal(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
@@ -391,7 +426,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -458,6 +493,27 @@ export default function App() {
     setState((s) => ({ ...s, accounts: s.accounts.filter((a) => a.id !== id) }));
     setAccModal(null);
     setAccError("");
+  };
+  // Closing an account leaves it (and its transactions) in place - it just gets
+  // hidden from the active account grid and from the account pickers used when
+  // adding/editing transactions, so people can phase out an account without
+  // losing its history or breaking anything it's tied to.
+  const closeAccount = (id) => {
+    setState((s) => ({ ...s, accounts: s.accounts.map((a) => (a.id === id ? { ...a, closed: true } : a)) }));
+    setAccModal(null);
+  };
+  const requestCloseAccount = (id) => {
+    const a = state.accounts.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Close account?",
+      message: `Are you sure you want to close “${a?.name || "this account"}”? It will no longer be selectable for new transactions, but you can reopen it anytime from the Closed Accounts menu. We recommend making sure it has a $0 balance before closing.`,
+      confirmLabel: "Close account",
+      onConfirm: () => { closeAccount(id); setConfirmDialog(null); },
+    });
+  };
+  const reopenAccount = (id) => {
+    setState((s) => ({ ...s, accounts: s.accounts.map((a) => (a.id === id ? { ...a, closed: false } : a)) }));
+    setAccModal(null);
   };
   const requestDeleteAccount = (id) => {
     const a = state.accounts.find((x) => x.id === id);
@@ -597,6 +653,7 @@ export default function App() {
         mode: c.mode,
         bulkAmount: c.bulkAmount,
         date: c.date || null,
+        color: c.color || (c.categoryId ? state.categories.find((cc) => cc.id === c.categoryId)?.color : null) || null,
         items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount, date: i.date || null })),
       })),
     });
@@ -804,6 +861,7 @@ export default function App() {
   };
   const footerMetric = footerMetrics[sidebarPrefs.footerMetric] || footerMetrics.netWorth;
   const orderedSidebarSections = sidebarPrefs.order.map((id) => sidebarSections.find((section) => section.id === id)).filter(Boolean);
+  const orderedStatusSections = statusPrefs.order.map((id) => STATUS_SECTIONS.find((section) => section.id === id)).filter(Boolean);
 
   return (
     <div className={`app-root${darkMode ? " dark" : ""}`}>
@@ -845,6 +903,9 @@ export default function App() {
               {effectiveView === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
+              {effectiveView === "budgets" && (
+                <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
+              )}
               {effectiveView !== "more" && effectiveView !== "plans" && effectiveView !== "tools" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
@@ -883,7 +944,7 @@ export default function App() {
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {effectiveView === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onDelete={requestDeleteAccount} onReorder={reorderAccount} onViewClosed={() => setClosedAccountsOpen(true)} error={accError} />
             )}
             {effectiveView === "budgets" && (
               <BudgetsView
@@ -895,6 +956,9 @@ export default function App() {
                 plans={state.plans}
                 onEditPlan={setPlanModal}
                 onGoPlans={() => setView("plans")}
+                sectionOrder={statusPrefs.order}
+                sectionVisible={statusPrefs.visible}
+                onCustomize={() => setStatusModalOpen(true)}
               />
             )}
             {effectiveView === "plans" && (
@@ -953,7 +1017,23 @@ export default function App() {
         />
       )}
       {accModal !== null && (
-        <AccountModal initial={accModal} onSave={saveAccount} onClose={() => { setAccModal(null); setAccError(""); }} onDelete={requestDeleteAccount} />
+        <AccountModal
+          initial={accModal}
+          onSave={saveAccount}
+          onClose={() => { setAccModal(null); setAccError(""); }}
+          onDelete={requestDeleteAccount}
+          onCloseAccount={requestCloseAccount}
+          onReopenAccount={reopenAccount}
+        />
+      )}
+      {closedAccountsOpen && (
+        <ClosedAccountsModal
+          accounts={state.accounts.filter((a) => a.closed)}
+          balances={balances}
+          onReopen={reopenAccount}
+          onEdit={(a) => { setClosedAccountsOpen(false); setAccModal(a); }}
+          onClose={() => setClosedAccountsOpen(false)}
+        />
       )}
       {catModal !== null && (
         <CategoryModal initial={catModal} categories={state.categories} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
@@ -981,6 +1061,15 @@ export default function App() {
           onReorder={reorderSidebarSection}
           onChangeMetric={(footerMetric) => setSidebarPrefs((prefs) => ({ ...prefs, footerMetric }))}
           onClose={() => setSidebarModalOpen(false)}
+        />
+      )}
+      {statusModalOpen && (
+        <StatusSettingsModal
+          sections={orderedStatusSections}
+          visible={statusPrefs.visible}
+          onToggle={toggleStatusSection}
+          onReorder={reorderStatusSection}
+          onClose={() => setStatusModalOpen(false)}
         />
       )}
       {shortcutsOpen && (
