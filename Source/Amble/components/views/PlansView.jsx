@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Plus, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown, ChevronRight
+  Plus, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { PlanCategoryTable } from "./BudgetsView";
@@ -49,7 +49,6 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
                   {p.repeat && p.repeat.enabled && (
                     <span className="pill"><Repeat size={11} /> {REPEAT_LABELS[p.repeat.frequency] || "Repeats"}</span>
                   )}
-                  <ChevronRight size={15} className="card-chevron" aria-hidden="true" />
                 </div>
                 <div className="row-actions">
                   <div className="plan-move-btns">

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Wallet, Plus, AlertCircle, Archive, ChevronRight
+  Wallet, Plus, AlertCircle, Archive
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
@@ -57,7 +57,6 @@ export function AccountsView({ accounts, balances, onAdd, onEdit, onReorder, onV
             >
               <div className="acc-top">
                 <div className="acc-icon" style={{ color: `var(--${isDebt ? "rust" : a.type === "savings" ? "brass" : "teal"})` }}><Icon size={20} /></div>
-                <ChevronRight size={16} className="card-chevron" aria-hidden="true" />
               </div>
               <div className="acc-name">{a.name}</div>
               <div className="acc-type">{ACCOUNT_LABELS[a.type]}{a.institution ? ` · ${a.institution}` : ""}</div>
