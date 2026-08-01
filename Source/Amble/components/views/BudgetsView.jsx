@@ -193,7 +193,13 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
   });
 
   const renderCategoryRows = (list) => list.map((c) => (
-    <tr key={c.id}>
+    <tr
+      key={c.id}
+      className="cat-row"
+      tabIndex={0}
+      onClick={() => { if (window.getSelection().toString()) return; onEdit(c); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(c); } }}
+    >
       <td><span className="legend-dot" style={{ background: c.color, marginRight: 8 }} />{c.name}</td>
       <td className="muted" style={{ textTransform: "capitalize" }}>{c.type}</td>
       <td className="amount col-center">{c.type === "expense" ? fmt(c.spent) : "—"}</td>
@@ -203,8 +209,7 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
       </td>
       <td className="row-actions-cell">
         <div className="row-actions">
-          <button className="icon-btn" onClick={() => onEdit(c)} aria-label="Edit category"><Pencil size={14} /></button>
-          <button className="icon-btn" onClick={() => onDelete(c.id)} aria-label="Delete category"><Trash2 size={14} /></button>
+          <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} aria-label="Delete category"><Trash2 size={14} /></button>
         </div>
       </td>
     </tr>

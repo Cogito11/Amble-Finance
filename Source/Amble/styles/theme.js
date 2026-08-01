@@ -191,6 +191,9 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .tx-row { cursor:pointer; }
 .tx-row:hover { background: var(--brass-soft); }
 .tx-row:focus-visible { outline: 2px solid var(--brass); outline-offset:-2px; }
+.cat-row { cursor:pointer; }
+.cat-row:hover { background: var(--brass-soft); }
+.cat-row:focus-visible { outline: 2px solid var(--brass); outline-offset:-2px; }
 .table:not(.full) td { padding:8px 0; border-bottom:1px solid var(--border); }
 .table:not(.full) tr:last-child td { border-bottom:none; }
 .muted { color: var(--text-muted); }
