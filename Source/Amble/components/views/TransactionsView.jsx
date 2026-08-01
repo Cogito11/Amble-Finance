@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
-  Receipt, Pencil, Trash2, ArrowRightLeft, Search, ListFilter, X
+  Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { fmt, fmtDate } from "../../utils/format";
@@ -170,7 +170,13 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                   </td>
                 </tr>
               ) : filtered.map((t) => (
-                <tr key={t.id}>
+                <tr
+                  key={t.id}
+                  className="tx-row"
+                  tabIndex={0}
+                  onClick={() => { if (window.getSelection().toString()) return; onEdit(t); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(t); } }}
+                >
                   <td className="muted">{fmtDate(t.date)}</td>
                   <td>{t.description || "—"}</td>
                   <td>
@@ -183,7 +189,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                   </td>
                   <td className="muted">{accName(t.accountId)}</td>
                   <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>{t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}</td>
-                  <td className="row-actions-cell"><div className="row-actions"><button className="icon-btn" onClick={() => onEdit(t)} aria-label="Edit transaction"><Pencil size={14} /></button><button className="icon-btn" onClick={() => onDelete(t.id)} aria-label="Delete transaction"><Trash2 size={14} /></button></div></td>
+                  <td className="row-actions-cell"><div className="row-actions"><button className="icon-btn" onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} aria-label="Delete transaction"><Trash2 size={14} /></button></div></td>
                 </tr>
               ))}
             </tbody>

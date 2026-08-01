@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import {
-  Trash2, Archive, RotateCcw
+  Trash2, Archive, RotateCcw, Receipt
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { blurOnWheel, uid } from "../../utils/misc";
 import { isDebtAccount } from "../../state/accounts";
+import { fmt, fmtDate } from "../../utils/format";
 
-export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccount, onReopenAccount }) {
+export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccount, onReopenAccount, transactions, currentBalance }) {
   const isEdit = !!initial.id;
   const isClosed = !!initial.closed;
   const [name, setName] = useState(initial.name || "");
@@ -18,6 +19,17 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
   const [interestRateInput, setInterestRateInput] = useState(initial.interestRate ?? "");
 
   const canSave = name.trim().length > 0 && balanceInput !== "";
+
+  // Most recent activity touching this account, either as the primary account
+  // or the destination side of a transfer - newest first, capped at 5 so the
+  // modal stays a quick glance rather than a second transactions table.
+  const recentTx = isEdit
+    ? (transactions || [])
+        .filter((t) => t.accountId === initial.id || t.toAccountId === initial.id)
+        .slice()
+        .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+        .slice(0, 5)
+    : [];
 
   const submit = () => {
     if (!canSave) return;
@@ -41,6 +53,14 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
         {isClosed && (
           <div className="tool-note">
             This account is closed and can't be selected for new transactions. Reopen it below to start using it again.
+          </div>
+        )}
+        {isEdit && currentBalance != null && (
+          <div className="modal-status-card">
+            <span className={`modal-status-amount ${isDebt ? "tone-rust" : currentBalance < 0 ? "tone-rust" : "tone-brass"}`}>
+              {isDebt ? fmt(Math.max(0, -currentBalance)) : fmt(currentBalance)}
+            </span>
+            <span>{isDebt ? "currently owed" : "current balance"}</span>
           </div>
         )}
         <div className="form-group">
@@ -77,6 +97,29 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
           ) : (
             <button className="btn btn-ghost acc-action-btn" onClick={() => onCloseAccount(initial.id)}><Archive size={14} /> Close account</button>
           )
+        )}
+        {isEdit && (
+          <div className="acc-modal-recent">
+            <div className="acc-modal-recent-title">Recent activity</div>
+            {recentTx.length === 0 ? (
+              <p className="settings-desc" style={{ margin: 0 }}>No transactions on this account yet.</p>
+            ) : (
+              <div className="acc-modal-recent-list">
+                {recentTx.map((t) => (
+                  <div key={t.id} className="acc-modal-recent-row">
+                    <Receipt size={13} className="muted" />
+                    <div className="acc-modal-recent-desc">
+                      <div>{t.description || (t.type === "transfer" ? "Transfer" : "—")}</div>
+                      <div className="muted">{fmtDate(t.date)}</div>
+                    </div>
+                    <div className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>
+                      {t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <div className="modal-footer">

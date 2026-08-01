@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Plus, Pencil, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown
+  Plus, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { PlanCategoryTable } from "./BudgetsView";
@@ -34,7 +34,14 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
           const income = planIncomeTotal(p, transactions, plans, categories);
           const remaining = income - allocated;
           return (
-            <div key={p.id} className={`plan-card ${p.active ? "plan-active" : ""}`}>
+            <div
+              key={p.id}
+              className={`plan-card ${p.active ? "plan-active" : ""}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => { if (window.getSelection().toString()) return; onEdit(p); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(p); } }}
+            >
               <div className="plan-card-top">
                 <div className="plan-card-name">
                   {p.name}
@@ -51,7 +58,7 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
                       title="Move budget up"
                       aria-label="Move budget up"
                       disabled={pi === 0}
-                      onClick={() => onReorder(p.id, -1)}
+                      onClick={(e) => { e.stopPropagation(); onReorder(p.id, -1); }}
                     >
                       <ChevronUp size={14} />
                     </button>
@@ -61,14 +68,13 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
                       title="Move budget down"
                       aria-label="Move budget down"
                       disabled={pi === sorted.length - 1}
-                      onClick={() => onReorder(p.id, 1)}
+                      onClick={(e) => { e.stopPropagation(); onReorder(p.id, 1); }}
                     >
                       <ChevronDown size={14} />
                     </button>
                   </div>
-                  <button className="icon-btn" title="Duplicate budget" onClick={() => onDuplicate(p.id)}><Copy size={14} /></button>
-                  <button className="icon-btn" title="Edit budget" onClick={() => onEdit(p)}><Pencil size={14} /></button>
-                  <button className="icon-btn" title="Delete budget" onClick={() => onDelete(p.id)}><Trash2 size={14} /></button>
+                  <button className="icon-btn" title="Duplicate budget" onClick={(e) => { e.stopPropagation(); onDuplicate(p.id); }}><Copy size={14} /></button>
+                  <button className="icon-btn" title="Delete budget" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }}><Trash2 size={14} /></button>
                 </div>
               </div>
               <div className="plan-card-dates muted">
@@ -97,7 +103,7 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
                 </div>
               )}
               <div className="plan-card-footer">
-                <button className={`btn btn-sm ${p.active ? "btn-ghost" : "btn-primary"}`} onClick={() => onSetActive(p.id)}>
+                <button className={`btn btn-sm ${p.active ? "btn-ghost" : "btn-primary"}`} onClick={(e) => { e.stopPropagation(); onSetActive(p.id); }}>
                   {p.active ? "Unset active" : "Set active"}
                 </button>
               </div>

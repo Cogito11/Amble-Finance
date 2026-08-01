@@ -388,7 +388,10 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
 
       {w.recent && (
         <div className="card">
-          <div className="card-title">Recent transactions</div>
+          <div className="card-title">
+            Recent transactions
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("transactions")}>View all <ChevronRight size={14} /></button>
+          </div>
           {recent.length === 0 ? (
             <div className="chart-empty">No transactions yet.</div>
           ) : (
