@@ -243,6 +243,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .acc-card[draggable="true"]:active { cursor:grabbing; }
 .acc-card-dragging { opacity:0.4; }
 .acc-card-drop-target { border-color: var(--brass); border-style: dashed; }
+.card-chevron { color: var(--text-faint); flex-shrink:0; }
 .acc-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
 .acc-icon { background: var(--surface-2); border-radius:8px; width:34px; height:34px; display:flex; align-items:center; justify-content:center; }
 .acc-name { font-weight:600; font-size:14.5px; }
@@ -281,11 +282,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plans-view { display:flex; flex-direction:column; gap:16px; }
 .plans-header { display:flex; justify-content:flex-end; }
 .plans-list { display:flex; flex-direction:column; gap:14px; }
-.plan-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; cursor:pointer; transition: box-shadow .15s; }
-.plan-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
+.plan-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; cursor:pointer; transition: border-color .15s; }
+.plan-card:hover { border-color: var(--brass); }
 .plan-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .plan-card.plan-active { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
-.plan-card.plan-active:hover { box-shadow: 0 0 0 1px var(--brass), 0 4px 14px rgba(0,0,0,0.10); }
 .plan-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .plan-card-name { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; display:flex; align-items:center; gap:8px; }
 .plan-active-pill { border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }

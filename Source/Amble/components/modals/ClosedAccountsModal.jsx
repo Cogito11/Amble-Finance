@@ -1,5 +1,5 @@
 import React from "react";
-import { RotateCcw, Archive } from "lucide-react";
+import { RotateCcw, Archive, ChevronRight } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
 import { isDebtAccount } from "../../state/accounts";
@@ -46,6 +46,7 @@ export function ClosedAccountsModal({ accounts, balances, onReopen, onEdit, onCl
                           <div className="closed-acc-type">{ACCOUNT_LABELS[a.type]}{a.institution ? ` · ${a.institution}` : ""}</div>
                         </div>
                       </div>
+                      <ChevronRight size={16} className="card-chevron" aria-hidden="true" />
                     </div>
                     <div className="closed-acc-bottom">
                       <span className={`closed-acc-balance ${isDebt || bal < 0 ? "tone-rust" : "tone-brass"}`}>{fmt(displayBal)}</span>
