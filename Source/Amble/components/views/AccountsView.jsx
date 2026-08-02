@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import {
-  Wallet, Plus, AlertCircle, Archive
+  Wallet, Plus, Archive
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS } from "../../constants";
 import { isDebtAccount, sortedAccountsList } from "../../state/accounts";
 import { fmt } from "../../utils/format";
 
-export function AccountsView({ accounts, balances, onAdd, onEdit, onReorder, onViewClosed, error }) {
+export function AccountsView({ accounts, balances, onAdd, onEdit, onReorder, onViewClosed }) {
   // Tracks the id of the account currently being dragged, so the card under the
   // cursor can be highlighted as a drop target.
   const [dragId, setDragId] = useState(null);
@@ -25,7 +25,6 @@ export function AccountsView({ accounts, balances, onAdd, onEdit, onReorder, onV
 
   return (
     <div className="acc-view">
-      {error && <div className="inline-error"><AlertCircle size={14} /> {error}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
         <button className="btn btn-ghost btn-sm" onClick={onViewClosed}>
           <Archive size={14} /> Closed Accounts

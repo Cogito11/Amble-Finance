@@ -146,7 +146,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
   const nwTicks = [nwDomain[0], (nwDomain[0] + nwDomain[1]) / 2, nwDomain[1]];
 
   const planBudgeted = activePlan ? planAllocated(activePlan) : 0;
-  const planSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
+  const planSpent = activePlan ? planTotalSpent(activePlan, transactions, plans, categories) : 0;
   const planRemaining = planBudgeted - planSpent;
   const planPct = planBudgeted > 0 ? planSpent / planBudgeted : 0;
   const planBarColor = planPct > 1 ? "var(--rust)" : planPct > 0.85 ? "var(--amber)" : "var(--teal)";

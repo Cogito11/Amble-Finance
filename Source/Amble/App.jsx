@@ -944,7 +944,7 @@ export default function App() {
               <TransactionsView accounts={state.accounts} categories={state.categories} transactions={state.transactions} onEdit={setTxModal} onAdd={() => setTxModal({})} onDelete={requestDeleteTransaction} searchInputRef={searchInputRef} />
             )}
             {effectiveView === "accounts" && (
-              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onReorder={reorderAccount} onViewClosed={() => setClosedAccountsOpen(true)} error={accError} />
+              <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onReorder={reorderAccount} onViewClosed={() => setClosedAccountsOpen(true)} />
             )}
             {effectiveView === "budgets" && (
               <BudgetsView
@@ -1026,6 +1026,8 @@ export default function App() {
           onReopenAccount={reopenAccount}
           transactions={state.transactions}
           currentBalance={accModal.id ? balances[accModal.id] : null}
+          error={accError}
+          onDismissError={() => setAccError("")}
         />
       )}
       {closedAccountsOpen && (
