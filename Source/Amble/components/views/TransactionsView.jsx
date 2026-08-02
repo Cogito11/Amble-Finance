@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
 } from "lucide-react";
@@ -12,7 +12,7 @@ function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
         <ListFilter size={14} />
       </button>
       {open && (
-        <div className="tx-filter-menu" onClick={(event) => event.stopPropagation()}>
+        <div className="tx-filter-menu">
           <div className="tx-filter-menu-title">
             <span>{label}</span>
             {active && <button type="button" className="icon-btn" onClick={onClear} title="Clear filter" aria-label={`Clear ${label} filter`}><X size={13} /></button>}
@@ -112,12 +112,26 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";
 
+  // A click anywhere outside the open filter's own trigger/menu closes it - a
+  // document-level listener is used (rather than a click handler on this view's
+  // own container) because the container only covers the transactions view
+  // itself, so a click on the sidebar, header, or anywhere else outside it never
+  // reached the old handler at all.
+  useEffect(() => {
+    if (!openFilter) return;
+    const handlePointerDown = (event) => {
+      if (!event.target.closest(".tx-column-filter")) setOpenFilter(null);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openFilter]);
+
   if (accounts.length === 0) {
     return <EmptyState icon={Receipt} title="No accounts yet" message="Add an account first, then you can start logging transactions against it." />;
   }
 
   return (
-    <div className="tx-view" onClick={() => openFilter && setOpenFilter(null)}>
+    <div className="tx-view">
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />
