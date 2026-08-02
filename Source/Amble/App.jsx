@@ -663,10 +663,38 @@ export default function App() {
     setState((s) => ({ ...s, currency: code }));
   };
 
-  const exportJSON = () => {
+  const exportJSON = async () => {
     const backedUpAt = new Date().toISOString();
     const payload = { app: "amble-finance", version: 1, exportedAt: backedUpAt, data: { ...state, lastBackupAt: backedUpAt } };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const json = JSON.stringify(payload, null, 2);
+
+    // Prefer the File System Access API's save picker when it's available (Electron's
+    // Chromium renderer supports it). Unlike a synthetic <a download> click, this
+    // promise only resolves once the user actually confirms a save location, and
+    // rejects with AbortError if they cancel - so lastBackupAt only updates on a
+    // real, confirmed backup instead of unconditionally the instant the button's clicked.
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `amble-backup-${todayStr()}.json`,
+          types: [{ description: "Amble backup", accept: { "application/json": [".json"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(json);
+        await writable.close();
+        setState((s) => ({ ...s, lastBackupAt: backedUpAt }));
+      } catch (err) {
+        // User canceled the picker, or the write itself failed - either way, this
+        // isn't a completed backup, so lastBackupAt is deliberately left untouched.
+        if (err && err.name !== "AbortError") console.error("Backup failed:", err);
+      }
+      return;
+    }
+
+    // Fallback for environments without the File System Access API. This can't tell
+    // whether the user actually kept the downloaded file, so - same as before - it
+    // marks the backup as done the moment the download is triggered.
+    const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
