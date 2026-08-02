@@ -99,7 +99,7 @@ export function PlansView({ plans, transactions, categories, onAdd, onEdit, onDe
               </div>
               {p.categories && p.categories.length > 0 && (
                 <div className="plan-card-catlist">
-                  <PlanCategoryTable categories={p.categories} transactions={transactions} />
+                  <PlanCategoryTable categories={p.categories} transactions={transactions} plans={plans} allCategories={categories} />
                 </div>
               )}
               <div className="plan-card-footer">

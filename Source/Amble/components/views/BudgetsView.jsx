@@ -5,7 +5,7 @@ import {
 import { EmptyState } from "../common/EmptyState";
 import { Gauge } from "../common/Gauge";
 import { STATUS_SECTIONS, defaultStatusPrefs } from "../../constants";
-import { categorySpend, isSpendTx, planAllocated, planCategoryTotal } from "../../state/categories";
+import { categorySpend, planAllocated, planCategoryTotal } from "../../state/categories";
 import { planIncomeTotal } from "../../state/plans";
 import { isWithinRolling30Days } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
@@ -92,7 +92,7 @@ export function BudgetsView({ categories, transactions, onAdd, onEdit, onDelete,
   // Same figures, thresholds, and colors as the Dashboard's "Active budget"
   // widget, so the two agree with each other wherever a person sees them.
   const activePlanBudgeted = activePlan ? planAllocated(activePlan) : 0;
-  const activePlanSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
+  const activePlanSpent = activePlan ? planTotalSpent(activePlan, transactions, plans, categories) : 0;
   const activePlanRemaining = activePlanBudgeted - activePlanSpent;
   const activePlanPct = activePlanBudgeted > 0 ? activePlanSpent / activePlanBudgeted : 0;
   const activePlanBarColor = activePlanPct > 1 ? "var(--rust)" : activePlanPct > 0.85 ? "var(--amber)" : "var(--teal)";
@@ -533,7 +533,12 @@ export function StatusPlanCategoryRow({ category, categories, transactions, plan
 // Remaining columns. Bulk categories are a single row; itemized categories get a
 // summary row (click to expand) plus one row per sub-expense, each with its own
 // optional renewal date, spent, budgeted amount, and remaining balance.
-export function PlanCategoryTable({ categories, transactions }) {
+// `categories` here is the plan's own category descriptors (bulkAmount/items/date),
+// not the app-wide category list - `allCategories` and `plans` are the app-wide
+// lists, needed so each row can resolve real spend via categorySpend, which is
+// what applies the all-time-vs-rolling-30-days rule based on whether the plan
+// this category belongs to has a time frame set.
+export function PlanCategoryTable({ categories: planCategories, transactions, plans, allCategories }) {
   return (
     <table className="table plan-cat-table">
       <thead>
@@ -546,41 +551,52 @@ export function PlanCategoryTable({ categories, transactions }) {
         </tr>
       </thead>
       <tbody>
-        {categories.map((c) => <PlanCategoryRows key={c.id} category={c} transactions={transactions} />)}
+        {planCategories.map((c) => (
+          <PlanCategoryRows key={c.id} category={c} transactions={transactions} plans={plans} allCategories={allCategories} />
+        ))}
       </tbody>
     </table>
   );
 }
 
-export function spendForCategoryId(transactions, categoryId) {
+// Resolves a mirrored category by id and defers to categorySpend for the actual
+// total, so a plan-category-table row always agrees with every other place that
+// category's spend is shown (TransactionModal preview, Status page gauges, etc.)
+export function spendForCategoryId(transactions, categoryId, plans, categories) {
   if (!categoryId) return 0;
-  return transactions.filter((t) => isSpendTx(t) && t.categoryId === categoryId).reduce((s, t) => s + t.amount, 0);
+  const catObj = (categories || []).find((c) => c.id === categoryId);
+  if (!catObj) return 0;
+  return categorySpend(catObj, transactions, plans, categories);
 }
 
 // Total actual spend logged against a plan, across all its categories (and, for
-// itemized categories, their line-item sub-categories). Mirrors the per-row logic
-// in PlanCategoryRows so the dashboard's "spent" figure always matches the Budgets tab.
-export function planTotalSpent(plan, transactions) {
+// itemized categories, their line-item sub-categories, via categorySpend's own
+// child-category rollup). Mirrors the per-row logic in PlanCategoryRows so the
+// dashboard's "spent" figure always matches the Budgets tab, and now goes through
+// categorySpend so a dateless budget's total is scoped to a rolling 30 days here
+// too, the same as everywhere else that budget's categories get shown.
+export function planTotalSpent(plan, transactions, plans, categories) {
   return (plan.categories || []).reduce((total, c) => {
-    const items = c.items || [];
-    const relevantIds = [c.categoryId, ...items.map((i) => i.categoryId)].filter(Boolean);
-    if (!relevantIds.length) return total;
-    return total + transactions.filter((t) => isSpendTx(t) && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0);
+    if (!c.categoryId) return total;
+    const catObj = (categories || []).find((cc) => cc.id === c.categoryId);
+    if (!catObj) return total;
+    return total + categorySpend(catObj, transactions, plans, categories);
   }, 0);
 }
 
-export function PlanCategoryRows({ category, transactions }) {
+export function PlanCategoryRows({ category, transactions, plans, allCategories }) {
   const [expanded, setExpanded] = useState(false);
   const budgeted = planCategoryTotal(category);
   const items = category.items || [];
   const isItemized = category.mode === "items" && items.length > 0;
 
   // Now that itemized expenses are their own selectable sub-categories, the parent's
-  // spend rolls up from both direct transactions and any of its item sub-categories.
-  const relevantIds = [category.categoryId, ...items.map((i) => i.categoryId)].filter(Boolean);
-  const spent = relevantIds.length
-    ? transactions.filter((t) => isSpendTx(t) && relevantIds.includes(t.categoryId)).reduce((s, t) => s + t.amount, 0)
-    : null;
+  // spend rolls up from both direct transactions and any of its item sub-categories
+  // (categorySpend's own childIds lookup handles that rollup) - and, via categorySpend,
+  // this also now respects the all-time-vs-rolling-30-days rule based on whether the
+  // owning plan has a time frame, matching every other place spend is shown.
+  const catObj = category.categoryId ? (allCategories || []).find((cc) => cc.id === category.categoryId) : null;
+  const spent = catObj ? categorySpend(catObj, transactions, plans, allCategories) : null;
   const remaining = spent !== null ? budgeted - spent : null;
   const over = remaining !== null && remaining < 0;
 
@@ -612,7 +628,7 @@ export function PlanCategoryRows({ category, transactions }) {
       </tr>
       {expanded && items.map((it) => {
         const itBudget = Number(it.amount) || 0;
-        const itSpent = spendForCategoryId(transactions, it.categoryId);
+        const itSpent = spendForCategoryId(transactions, it.categoryId, plans, allCategories);
         const itRemaining = itBudget - itSpent;
         const itOver = itRemaining < 0;
         return (

@@ -169,6 +169,11 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
             <input type="date" className="input mono" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           </div>
         </div>
+        {!startDate && !endDate && (
+          <div className="tool-note">
+            No dates set - this budget will track spending on a rolling 30-day basis instead of a fixed period, and won't be eligible to repeat automatically. Add a start and/or end date if you want it scoped to a specific period instead.
+          </div>
+        )}
 
         <div className="plan-repeat-block">
           <label className="checkbox-row">

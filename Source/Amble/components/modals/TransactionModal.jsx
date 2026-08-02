@@ -90,19 +90,31 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
     if (cat) setDescription(cat.name);
   };
 
+  const isIncomeCategory = selectedCategory && selectedCategory.type === "income";
+
+  // A live preview of the full transactions list with this transaction's current
+  // (possibly unsaved) type/date/amount/category swapped in - used below so
+  // categorySpend/categoryIncome apply their real date-window rules to it exactly
+  // like they would to any other transaction. Previously the preview always forced
+  // this transaction's amount into the total regardless of its own date, which for
+  // a rolling-30-day category (no time frame on the owning budget, or a general
+  // category) made an old transaction look like the only entry in the category -
+  // its amount got force-counted even though its own date would normally have
+  // excluded it from that same rolling window.
+  const previewTransactions = (() => {
+    const typedAmount = parseFloat(amount);
+    if (!(typedAmount > 0)) return transactions.filter((t) => t.id !== initial.id);
+    const draft = { id: initial.id || "__draft__", type, date, amount: typedAmount, categoryId: categoryId || null };
+    return [...transactions.filter((t) => t.id !== initial.id), draft];
+  })();
+
   // Status line shown above the footer: the remaining balance for whichever category
   // (or, if picked, its specific sub-expense) is currently selected - not just its
-  // saved-so-far spend, but a live preview that swaps out this transaction's old
-  // amount (if editing) for whatever's currently typed in the amount field, so the
-  // number updates as the user adjusts it instead of only reflecting what's already saved.
-  const isIncomeCategory = selectedCategory && selectedCategory.type === "income";
-  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId && !isIncomeCategory);
+  // saved-so-far spend, but a live preview that reflects whatever's currently typed
+  // in the form, so the number updates as the user adjusts date/amount/type.
   const categoryStatus = (() => {
     if (!selectedCategory || type === "income" || isIncomeCategory) return null;
-    const typedAmount = parseFloat(amount);
-    const otherTxs = transactions.filter((t) => t.id !== initial.id);
-    const baseSpend = categorySpend(selectedCategory, otherTxs, plans, categories);
-    const spent = baseSpend + (isCurrentSpend && typedAmount > 0 ? typedAmount : 0);
+    const spent = categorySpend(selectedCategory, previewTransactions, plans, categories);
     const hasLimit = (selectedCategory.limit || 0) > 0;
     return {
       name: selectedCategory.name,
@@ -116,13 +128,9 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   // Same idea as categoryStatus above, but for a category tracked on the income
   // side (see PlanModal's "Category" income mode) - just a running total, since
   // income entries don't carry a limit the way expense categories can.
-  const isCurrentIncomeContribution = type === "income" || (type === "transfer" && !!categoryId && isIncomeCategory);
   const incomeCategoryStatus = (() => {
     if (!selectedCategory || !isIncomeCategory) return null;
-    const typedAmount = parseFloat(amount);
-    const otherTxs = transactions.filter((t) => t.id !== initial.id);
-    const baseIncome = categoryIncome(selectedCategory, otherTxs, plans, categories);
-    const tracked = baseIncome + (isCurrentIncomeContribution && typedAmount > 0 ? typedAmount : 0);
+    const tracked = categoryIncome(selectedCategory, previewTransactions, plans, categories);
     return { name: selectedCategory.name, tracked };
   })();
 
