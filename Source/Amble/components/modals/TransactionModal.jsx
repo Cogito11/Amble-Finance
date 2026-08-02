@@ -34,14 +34,21 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   const activePlanId = (plans || []).find((p) => p.active)?.id;
   const isSelectable = (c) => !c.planId || c.planId === activePlanId;
 
-  // Top-level categories selectable for this transaction type. Transfers aren't
-  // inherently income or expense, so any top-level category can be used to tag them.
-  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId && isSelectable(c));
   // The currently selected category might itself be a specific expense (a sub-category);
   // resolve which parent it belongs to so both dropdowns stay in sync.
   const selectedCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
   const selectedParentId = selectedCategory ? (selectedCategory.parentCategoryId || selectedCategory.id) : "";
   const subCategories = selectedParentId ? categories.filter((c) => c.parentCategoryId === selectedParentId) : [];
+
+  // Top-level categories selectable for this transaction type. Transfers aren't
+  // inherently income or expense, so any top-level category can be used to tag them.
+  // A category from an inactive budget is kept in the list if it's the one already
+  // assigned to this transaction (same as closed accounts, below) - so editing an
+  // older transaction still shows its real category name instead of falling back
+  // to "Uncategorized" just because that budget isn't active anymore. It still
+  // can't be newly picked for anything else, since it's excluded by isSelectable
+  // once it's no longer the current selection.
+  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId && (isSelectable(c) || c.id === selectedParentId));
 
   // "General <parent>" isn't a selectable specific expense - if the chosen category has
   // sub-items, the transaction must point at one of them, so default to the first as soon
