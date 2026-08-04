@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import {
-  Plus, Pencil, Trash2, ClipboardList, ChevronRight, Sliders
+  Plus, Pencil, Trash2, ClipboardList, ChevronRight, Sliders, Receipt
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { Gauge } from "../common/Gauge";
 import { STATUS_SECTIONS, defaultStatusPrefs } from "../../constants";
-import { categorySpend, budgetAllocated, budgetCategoryTotal } from "../../state/categories";
+import { categorySpend, categorySpendTransactions, budgetAllocated, budgetCategoryTotal } from "../../state/categories";
 import { budgetIncomeTotal } from "../../state/budgets";
 import { isWithinRolling30Days } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
@@ -34,40 +34,42 @@ function mergeBreakdownRowsByName(rows) {
   return merged;
 }
 
-// Builds the expanded sub-expense rows for a breakdown row, pooling sub-items
-// across every underlying category id that got merged into it (so a
-// "Groceries" row merged from two budgets shows sub-items from both). Each
-// sub-expense's percentage is of the grand total for the period, matching
-// the top-level rows, rather than of its own parent's total.
-//
-// A merged row's total can include money that isn't attributable to any of
-// those sub-expenses - e.g. one budget's "Eating Out" is itemized (all its
-// spend lives in sub-expenses) while another budget's "Eating Out" is a
-// plain bulk category (all its spend is logged directly against it, with no
-// sub-expenses at all). Rather than let the sub-expense rows silently add up
-// to less than the row they're nested under, that difference gets its own
-// explicit "Not in a specific expense" row.
-function buildSubExpenseRows({ sourceIds, parentSpent, categories, mode, transactions, budgets, rolling30Tx, grandTotal }) {
-  if (!sourceIds || !sourceIds.length) return [];
-  const subCats = categories.filter((cc) => cc.parentCategoryId && sourceIds.includes(cc.parentCategoryId));
-  if (!subCats.length) return [];
-  const raw = subCats.map((cc) => ({
-    key: cc.id,
-    name: cc.name,
-    color: cc.color || null,
-    spent: mode === "budget"
-      ? categorySpend(cc, transactions, budgets, categories)
-      : rolling30Tx.filter((t) => t.categoryId === cc.id).reduce((s, t) => s + t.amount, 0),
-  }));
-  const merged = mergeBreakdownRowsByName(raw).filter((r) => r.spent > 0);
-  const subTotal = merged.reduce((s, r) => s + r.spent, 0);
-  const directSpend = Math.round((parentSpent - subTotal) * 100) / 100;
-  if (directSpend > 0.004) {
-    merged.push({ key: "direct", name: "Not in a specific expense", color: null, spent: directSpend });
+// Gathers the actual transactions behind a spending-breakdown row, pooling across
+// every underlying category id that got merged into it (so a "Groceries" row
+// merged from two budgets shows transactions from both budgets' Groceries
+// categories, and an itemized category's transactions are included alongside
+// its parent's direct transactions - categorySpendTransactions' own childIds
+// rollup handles that). Newest first, like everywhere else transactions list.
+function transactionsForBreakdownRow({ row, categories, mode, transactions, budgets, rolling30Tx }) {
+  let txs;
+  if (row.key === "uncategorized") {
+    // Uncategorized isn't a real category, so there's no categorySpendTransactions
+    // to call - just every rolling-30-day expense with no category at all.
+    txs = rolling30Tx.filter((t) => !t.categoryId);
+  } else if (!row.sourceIds || !row.sourceIds.length) {
+    txs = [];
+  } else if (mode === "budget") {
+    const seen = new Set();
+    txs = [];
+    row.sourceIds.forEach((id) => {
+      const cat = categories.find((cc) => cc.id === id);
+      if (!cat) return;
+      categorySpendTransactions(cat, transactions, budgets, categories).forEach((t) => {
+        if (!seen.has(t.id)) { seen.add(t.id); txs.push(t); }
+      });
+    });
+  } else {
+    // Month mode: every rolling-30-day expense whose top-level category (an
+    // itemized sub-expense resolves up to its parent) is one of this row's ids.
+    const idSet = new Set(row.sourceIds);
+    txs = rolling30Tx.filter((t) => {
+      if (!t.categoryId) return false;
+      const cat = categories.find((cc) => cc.id === t.categoryId);
+      const topId = cat ? (cat.parentCategoryId || cat.id) : null;
+      return topId && idSet.has(topId);
+    });
   }
-  return merged
-    .sort((a, b) => b.spent - a.spent)
-    .map((r) => ({ ...r, pct: grandTotal > 0 ? Math.round((r.spent / grandTotal) * 100) : 0 }));
+  return [...txs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
 /* ---------------------------------- status view ---------------------------------- */
@@ -150,9 +152,9 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
     monthBreakdownRows.push({ key: "uncategorized", name: "Uncategorized", color: "var(--text-faint)", spent: uncategorizedSpent });
   }
 
-  // Spending breakdown rows can be expanded to reveal their sub-expenses
-  // (e.g. "Groceries" -> "Trader Joe's", "Costco"); only rows with at least
-  // one sub-expense end up clickable.
+  // Spending breakdown rows can be expanded to reveal the individual transactions
+  // behind that total; only rows with at least one transaction end up clickable
+  // (in practice every visible row has one, since it's what produced the total).
   const [expandedBreakdownKey, setExpandedBreakdownKey] = useState(null);
   const selectBreakdownPeriod = (period) => { setBreakdownPeriod(period); setExpandedBreakdownKey(null); };
 
@@ -163,15 +165,13 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   const breakdownRowsWithPct = breakdownRows.map((r) => ({
     ...r,
     pct: breakdownTotal > 0 ? Math.round((r.spent / breakdownTotal) * 100) : 0,
-    subRows: buildSubExpenseRows({
-      sourceIds: r.sourceIds,
-      parentSpent: r.spent,
+    transactions: transactionsForBreakdownRow({
+      row: r,
       categories,
       mode: showingBudgetBreakdown ? "budget" : "month",
       transactions,
       budgets,
       rolling30Tx,
-      grandTotal: breakdownTotal,
     }),
   }));
 
@@ -180,6 +180,14 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   // of that specific allocation has been spent so far (each row's fill). This
   // is scoped to the active budget only - "allocated" isn't a meaningful
   // concept outside of one, so unlike the breakdown above there's no toggle.
+  // Rows show the dollar amount left (or over) rather than a percentage next to
+  // the bar - the bar's own fill already communicates percentage-of-allocation
+  // visually, so the text is more useful saying something the bar can't: the
+  // actual dollar gap.
+  const remainingLabel = (allocated, spent) => {
+    const remaining = allocated - spent;
+    return remaining < 0 ? `+${fmt(Math.abs(remaining))} over` : `${fmt(remaining)} remaining`;
+  };
   const allocationRows = budgetCats
     .map((c) => ({ key: c.id, name: c.name, color: c.color, allocated: c.limit || 0, spent: c.spent }))
     .sort((a, b) => b.allocated - a.allocated);
@@ -191,6 +199,26 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
     const barColor = r.allocated === 0 ? "var(--text-faint)" : spentPct > 100 ? "var(--rust)" : spentPct > 85 ? "var(--amber)" : "var(--teal)";
     return { ...r, allocPct, spentPct, tone, barColor };
   });
+  // Sub-expense rows for itemized categories - moved here from the Spending
+  // Breakdown card, since "how much of each sub-expense's own budgeted amount
+  // has been spent" is an allocated-vs-spent question, not a share-of-total-
+  // spending one. Only categories with mirrored sub-expense categories (see
+  // syncBudgetCategories) get an entry here.
+  const allocationItemRows = {};
+  budgetCats.forEach((c) => {
+    const items = categories.filter((cc) => cc.parentCategoryId === c.id);
+    if (!items.length) return;
+    allocationItemRows[c.id] = items.map((it) => {
+      const itSpent = categorySpend(it, transactions, budgets, categories);
+      const itAllocated = it.limit || 0;
+      const itSpentPct = itAllocated > 0 ? (itSpent / itAllocated) * 100 : 0;
+      const itTone = itAllocated === 0 ? "" : itSpentPct > 100 ? "tone-rust" : itSpentPct > 85 ? "tone-amber" : "tone-teal";
+      return { key: it.id, name: it.name, allocated: itAllocated, spent: itSpent, spentPct: itSpentPct, tone: itTone };
+    });
+  });
+  const [expandedAllocKey, setExpandedAllocKey] = useState(null);
+
+
 
   const renderCategoryRows = (list) => list.map((c) => (
     <tr
@@ -323,16 +351,16 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
             </div>
             <div className="budget-rule-rows spend-breakdown-rows">
               {breakdownRowsWithPct.map((r) => {
-                const hasSub = r.subRows.length > 0;
+                const hasTx = r.transactions.length > 0;
                 const isOpen = expandedBreakdownKey === r.key;
                 return (
                   <div key={r.key} className="budget-rule-row">
                     <div
-                      className={`budget-rule-row-top ${hasSub ? "spend-breakdown-row-clickable" : ""}`}
-                      onClick={hasSub ? () => setExpandedBreakdownKey(isOpen ? null : r.key) : undefined}
+                      className={`budget-rule-row-top ${hasTx ? "spend-breakdown-row-clickable" : ""}`}
+                      onClick={hasTx ? () => setExpandedBreakdownKey(isOpen ? null : r.key) : undefined}
                     >
                       <span className="spend-breakdown-row-name">
-                        {hasSub && <ChevronRight size={13} className={`budget-cat-chevron${isOpen ? " expanded" : ""}`} />}
+                        {hasTx && <ChevronRight size={13} className={`budget-cat-chevron${isOpen ? " expanded" : ""}`} />}
                         <span className="legend-dot" style={{ background: r.color }} />
                         {r.name}
                       </span>
@@ -344,17 +372,17 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
                     <div className="dash-budget-bar-track">
                       <div className="dash-budget-bar-fill" style={{ width: `${r.pct}%`, background: r.color }} />
                     </div>
-                    {hasSub && isOpen && (
+                    {hasTx && isOpen && (
                       <div className="spend-breakdown-subrows">
-                        {r.subRows.map((sr) => (
-                          <div key={sr.key} className="spend-breakdown-subrow">
+                        {r.transactions.map((t) => (
+                          <div key={t.id} className="spend-breakdown-subrow">
                             <span className="spend-breakdown-row-name">
-                              <span className="legend-dot" style={{ background: sr.color || r.color }} />
-                              {sr.name}
+                              <Receipt size={12} className="muted" />
+                              {t.description || "—"}
                             </span>
                             <span>
-                              <strong>{fmt(sr.spent)}</strong>
-                              <span className="muted" style={{ marginLeft: 8 }}>{sr.pct}%</span>
+                              <strong>{fmt(t.amount)}</strong>
+                              <span className="muted" style={{ marginLeft: 8 }}>{fmtDate(t.date)}</span>
                             </span>
                           </div>
                         ))}
@@ -386,26 +414,50 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
               </div>
             )}
             <div className="budget-rule-rows spend-breakdown-rows">
-              {allocationRowsWithPct.map((r) => (
-                <div key={r.key} className="budget-rule-row">
-                  <div className="budget-rule-row-top">
-                    <span className="spend-breakdown-row-name">
-                      <span className="legend-dot" style={{ background: r.color }} />
-                      {r.name}
-                    </span>
-                    {r.allocated > 0 && <span className="muted">{r.allocPct}% of budget</span>}
+              {allocationRowsWithPct.map((r) => {
+                const items = allocationItemRows[r.key] || [];
+                const hasItems = items.length > 0;
+                const isOpen = expandedAllocKey === r.key;
+                return (
+                  <div key={r.key} className="budget-rule-row">
+                    <div
+                      className={`budget-rule-row-top ${hasItems ? "spend-breakdown-row-clickable" : ""}`}
+                      onClick={hasItems ? () => setExpandedAllocKey(isOpen ? null : r.key) : undefined}
+                    >
+                      <span className="spend-breakdown-row-name">
+                        {hasItems && <ChevronRight size={13} className={`budget-cat-chevron${isOpen ? " expanded" : ""}`} />}
+                        <span className="legend-dot" style={{ background: r.color }} />
+                        {r.name}
+                      </span>
+                      {r.allocated > 0 && <span className="muted">{r.allocPct}% of budget</span>}
+                    </div>
+                    <div className="spend-breakdown-alloc-caption">
+                      <span className="muted">
+                        {r.allocated > 0 ? `${fmt(r.spent)} of ${fmt(r.allocated)} budgeted` : `${fmt(r.spent)} spent · no budget set`}
+                      </span>
+                      {r.allocated > 0 && <strong className={r.tone}>{remainingLabel(r.allocated, r.spent)}</strong>}
+                    </div>
+                    <div className="dash-budget-bar-track">
+                      <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.barColor }} />
+                    </div>
+                    {hasItems && isOpen && (
+                      <div className="spend-breakdown-subrows">
+                        {items.map((it) => (
+                          <div key={it.key} className="spend-breakdown-subrow">
+                            <span className="spend-breakdown-row-name">{it.name}</span>
+                            <span>
+                              <span className="muted">
+                                {it.allocated > 0 ? `${fmt(it.spent)} of ${fmt(it.allocated)}` : `${fmt(it.spent)} spent · no budget set`}
+                              </span>
+                              {it.allocated > 0 && <strong className={it.tone} style={{ marginLeft: 8 }}>{remainingLabel(it.allocated, it.spent)}</strong>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="spend-breakdown-alloc-caption">
-                    <span className="muted">
-                      {r.allocated > 0 ? `${fmt(r.spent)} of ${fmt(r.allocated)} budgeted` : `${fmt(r.spent)} spent · no budget set`}
-                    </span>
-                    {r.allocated > 0 && <strong className={r.tone}>{Math.round(r.spentPct)}%</strong>}
-                  </div>
-                  <div className="dash-budget-bar-track">
-                    <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.barColor }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}

@@ -118,6 +118,21 @@ export function isSpendTx(t) {
   return t.type === "expense" || (t.type === "transfer" && !!t.categoryId);
 }
 
+// The actual transactions that count toward a category's spend - same rule as
+// categorySpend (all-time for a category owned by a budget with a start/end date,
+// otherwise a rolling 30 days), just returning the matching transactions instead
+// of summing them, so callers that need to list them (not just total them) have
+// a single source of truth to share with categorySpend below.
+export function categorySpendTransactions(category, transactions, budgets, categories) {
+  const ownerBudget = category.planId ? (budgets || []).find((b) => b.id === category.planId) : null;
+  const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
+  const idSet = new Set([category.id, ...childIds]);
+  let txs = transactions.filter((t) => isSpendTx(t) && idSet.has(t.categoryId));
+  const hasTimeFrame = !!(ownerBudget && (ownerBudget.startDate || ownerBudget.endDate));
+  if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
+  return txs;
+}
+
 // Spend for a category: if it belongs to a budget that has a time frame (a start
 // and/or end date set), track every transaction ever assigned to it, all-time -
 // gauges for a dated budget shouldn't reset just because the calendar month rolled
@@ -130,13 +145,7 @@ export function isSpendTx(t) {
 // data itself (not renamed, to avoid a data-migration for saved files/backups) -
 // only the code-facing names below (`budgets`, `ownerBudget`, etc.) use "budget".
 export function categorySpend(category, transactions, budgets, categories) {
-  const ownerBudget = category.planId ? (budgets || []).find((b) => b.id === category.planId) : null;
-  const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
-  const idSet = new Set([category.id, ...childIds]);
-  let txs = transactions.filter((t) => isSpendTx(t) && idSet.has(t.categoryId));
-  const hasTimeFrame = !!(ownerBudget && (ownerBudget.startDate || ownerBudget.endDate));
-  if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
-  return txs.reduce((s, t) => s + t.amount, 0);
+  return categorySpendTransactions(category, transactions, budgets, categories).reduce((s, t) => s + t.amount, 0);
 }
 
 // A transaction counts toward income-category tracking if it's a normal income

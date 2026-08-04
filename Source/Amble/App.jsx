@@ -170,16 +170,23 @@ export default function App() {
   const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
     const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth" };
-    // The Status and Budgets nav ids used to be swapped ("budgets" was the Status
-    // page, "plans" was the Budgets page) - remap anything saved under the old ids
-    // so a returning user's sidebar order/visibility isn't silently dropped.
-    const LEGACY_NAV_ID_MAP = { budgets: "status", plans: "budgets" };
-    const remapNavId = (id) => LEGACY_NAV_ID_MAP[id] || id;
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
       if (!raw) return defaultPrefs;
       const saved = JSON.parse(raw);
-      const savedOrder = (saved.order || []).map(remapNavId);
+      const savedOrderRaw = saved.order || [];
+      // The Status and Budgets nav ids used to be swapped ("budgets" was the Status
+      // page, "plans" was the Budgets page) - remap anything saved under the old ids
+      // so a returning user's sidebar order/visibility isn't silently dropped. Only
+      // do this if the legacy "plans" id is actually present - it's never a current
+      // id, so its presence is what tells us this data hasn't been migrated yet.
+      // Once migrated, this state gets persisted back with the new ids (see the
+      // save effect below), so re-running the remap unconditionally on every load
+      // would eventually re-map the now-correct "budgets" id into "status" again.
+      const needsLegacyRemap = savedOrderRaw.includes("plans");
+      const LEGACY_NAV_ID_MAP = { budgets: "status", plans: "budgets" };
+      const remapNavId = (id) => (needsLegacyRemap ? (LEGACY_NAV_ID_MAP[id] || id) : id);
+      const savedOrder = savedOrderRaw.map(remapNavId);
       const savedVisible = Object.fromEntries(Object.entries(saved.visible || {}).map(([id, v]) => [remapNavId(id), v]));
       const order = [...savedOrder.filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !savedOrder.includes(id))];
       return { order, visible: { ...defaultPrefs.visible, ...savedVisible }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
