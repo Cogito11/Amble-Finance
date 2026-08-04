@@ -7,22 +7,22 @@ import { ShortcutsModal } from "./components/common/Shortcuts";
 import { AccountModal } from "./components/modals/AccountModal";
 import { ClosedAccountsModal } from "./components/modals/ClosedAccountsModal";
 import { CategoryModal } from "./components/modals/CategoryModal";
-import { PlanModal } from "./components/modals/PlanModal";
+import { BudgetModal } from "./components/modals/BudgetModal";
 import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
 import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
 import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
-import { BudgetsView } from "./components/views/BudgetsView";
+import { StatusView } from "./components/views/StatusView";
 import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
-import { PlansView } from "./components/views/PlansView";
+import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
-import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncPlanCategories } from "./state/categories";
-import { defaultState, migratePlanOrder, nextTopPlanOrder, rolloverDuePlans, sortedPlansList } from "./state/plans";
+import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
+import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
@@ -152,7 +152,7 @@ export default function App() {
   const [txModal, setTxModal] = useState(null);
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
-  const [planModal, setPlanModal] = useState(null);
+  const [budgetModal, setBudgetModal] = useState(null);
   const [accError, setAccError] = useState("");
   const [closedAccountsOpen, setClosedAccountsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -170,12 +170,19 @@ export default function App() {
   const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
     const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth" };
+    // The Status and Budgets nav ids used to be swapped ("budgets" was the Status
+    // page, "plans" was the Budgets page) - remap anything saved under the old ids
+    // so a returning user's sidebar order/visibility isn't silently dropped.
+    const LEGACY_NAV_ID_MAP = { budgets: "status", plans: "budgets" };
+    const remapNavId = (id) => LEGACY_NAV_ID_MAP[id] || id;
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
       if (!raw) return defaultPrefs;
       const saved = JSON.parse(raw);
-      const order = [...(saved.order || []).filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !(saved.order || []).includes(id))];
-      return { order, visible: { ...defaultPrefs.visible, ...(saved.visible || {}) }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
+      const savedOrder = (saved.order || []).map(remapNavId);
+      const savedVisible = Object.fromEntries(Object.entries(saved.visible || {}).map(([id, v]) => [remapNavId(id), v]));
+      const order = [...savedOrder.filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !savedOrder.includes(id))];
+      return { order, visible: { ...defaultPrefs.visible, ...savedVisible }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
     } catch (e) {
       return defaultPrefs;
     }
@@ -269,7 +276,7 @@ export default function App() {
         setState(raw ? {
           ...defaultState(),
           ...raw,
-          plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []),
+          plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
         } : defaultState());
       } catch (e) {
@@ -293,7 +300,7 @@ export default function App() {
         setState({
           ...defaultState(),
           ...raw,
-          plans: migratePlanOrder(Array.isArray(raw.plans) ? raw.plans : []),
+          plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
         });
       } catch (err) { /* ignore malformed/partial writes */ }
@@ -304,28 +311,28 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded) return;
-    setState((s) => (s ? rolloverDuePlans(s) : s));
+    setState((s) => (s ? rolloverDueBudgets(s) : s));
   }, [loaded]);
 
-  // Re-mirror the active plan's categories on load. This is what creates the
+  // Re-mirror the active budget's categories on load. This is what creates the
   // per-item sub-categories (e.g. "Netflix" under "Subscriptions") that power the
   // "specific expense" submenu on transactions. It's idempotent (reuses existing
-  // links, never duplicates), so it also backfills plans that were set active
+  // links, never duplicates), so it also backfills budgets that were set active
   // before that feature existed, without requiring the user to manually re-save.
   useEffect(() => {
     if (!loaded) return;
     setState((s) => {
       if (!s) return s;
-      const active = s.plans.find((p) => p.active);
+      const active = s.plans.find((b) => b.active);
       if (!active) return s;
-      const synced = syncPlanCategories(active, s.categories);
+      const synced = syncBudgetCategories(active, s.categories);
       const unchanged =
-        JSON.stringify(synced.plan) === JSON.stringify(active) &&
+        JSON.stringify(synced.budget) === JSON.stringify(active) &&
         JSON.stringify(synced.categories) === JSON.stringify(s.categories);
       if (unchanged) return s;
       return {
         ...s,
-        plans: s.plans.map((p) => (p.id === active.id ? synced.plan : p)),
+        plans: s.plans.map((b) => (b.id === active.id ? synced.budget : b)),
         categories: synced.categories,
         transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds),
       };
@@ -344,7 +351,7 @@ export default function App() {
   // than Escape stay quiet in that case so they can't stack a second dialog on
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
-    txModal !== null || accModal !== null || catModal !== null || planModal !== null ||
+    txModal !== null || accModal !== null || catModal !== null || budgetModal !== null ||
     widgetModalOpen || sidebarModalOpen || closedAccountsOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
@@ -369,7 +376,7 @@ export default function App() {
         if (txModal !== null) { setTxModal(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
-        if (planModal !== null) { setPlanModal(null); return; }
+        if (budgetModal !== null) { setBudgetModal(null); return; }
         return;
       }
 
@@ -402,7 +409,7 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "budgets", "5": "plans", "6": "tools", "7": "more" };
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more" };
         if (navByKey[key]) {
           setView(navByKey[key]);
           return;
@@ -426,7 +433,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, planModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, budgetModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -474,7 +481,7 @@ export default function App() {
     setAccModal(null);
   };
   // Drag-and-drop reorder: moves the dragged account to the dropped-on account's
-  // slot, then renumbers everyone sequentially - same pattern as reorderPlan.
+  // slot, then renumbers everyone sequentially - same pattern as reorderBudget.
   const reorderAccount = (draggedId, targetId) => {
     setState((s) => {
       const displayList = sortedAccountsList(s.accounts);
@@ -553,27 +560,27 @@ export default function App() {
     });
   };
 
-  const savePlan = (p) => {
+  const saveBudget = (b) => {
     setState((s) => {
-      // Always sync, not just when this plan happens to be the active one.
+      // Always sync, not just when this budget happens to be the active one.
       // Otherwise, removing an item from an itemized category on a budget
       // that isn't currently active leaves its mirrored category (and any
       // transaction still linked to it) stale until the budget is reactivated.
-      const synced = syncPlanCategories(p, s.categories);
+      const synced = syncBudgetCategories(b, s.categories);
       const categories = synced.categories;
-      const exists = s.plans.some((x) => x.id === synced.plan.id);
-      // New plans always land at the top; edits keep whatever order they already had.
-      const planToSave = typeof synced.plan.order === "number" ? synced.plan : { ...synced.plan, order: nextTopPlanOrder(s.plans) };
+      const exists = s.plans.some((x) => x.id === synced.budget.id);
+      // New budgets always land at the top; edits keep whatever order they already had.
+      const budgetToSave = typeof synced.budget.order === "number" ? synced.budget : { ...synced.budget, order: nextTopBudgetOrder(s.plans) };
       const transactions = clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds);
-      let plans = exists ? s.plans.map((x) => (x.id === planToSave.id ? planToSave : x)) : [planToSave, ...s.plans];
-      if (planToSave.active) plans = plans.map((x) => (x.id === planToSave.id ? x : { ...x, active: false }));
+      let plans = exists ? s.plans.map((x) => (x.id === budgetToSave.id ? budgetToSave : x)) : [budgetToSave, ...s.plans];
+      if (budgetToSave.active) plans = plans.map((x) => (x.id === budgetToSave.id ? x : { ...x, active: false }));
       return { ...s, plans, categories, transactions };
     });
-    setPlanModal(null);
+    setBudgetModal(null);
   };
-  const deletePlan = (id) => {
+  const deleteBudget = (id) => {
     setState((s) => {
-      // IDs of categories owned by this plan
+      // IDs of categories owned by this budget
       const deletedCategoryIds = s.categories
         .filter((c) => c.planId === id)
         .map((c) => c.id);
@@ -581,8 +588,8 @@ export default function App() {
       return {
         ...s,
 
-        // Remove the plan
-        plans: s.plans.filter((p) => p.id !== id),
+        // Remove the budget
+        plans: s.plans.filter((b) => b.id !== id),
 
         // Remove all categories that belong to it
         categories: s.categories.filter((c) => c.planId !== id),
@@ -596,58 +603,58 @@ export default function App() {
       };
     });
 
-    setPlanModal(null);
+    setBudgetModal(null);
   };
-  const requestDeletePlan = (id) => {
-    const p = state.plans.find((x) => x.id === id);
+  const requestDeleteBudget = (id) => {
+    const b = state.plans.find((x) => x.id === id);
     setConfirmDialog({
       title: "Delete budget?",
-      message: `This will permanently delete “${p?.name || "this budget"}” and all of its categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
-      onConfirm: () => { deletePlan(id); setConfirmDialog(null); },
+      message: `This will permanently delete “${b?.name || "this budget"}” and all of its categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
+      onConfirm: () => { deleteBudget(id); setConfirmDialog(null); },
     });
   };
-  const setActivePlan = (id) => {
+  const setActiveBudget = (id) => {
     setState((s) => {
-      const target = s.plans.find((p) => p.id === id);
+      const target = s.plans.find((b) => b.id === id);
       if (!target || target.active) {
-        // toggling off, or plan not found - just clear active flags
-        return { ...s, plans: s.plans.map((p) => ({ ...p, active: p.id === id ? false : p.active })) };
+        // toggling off, or budget not found - just clear active flags
+        return { ...s, plans: s.plans.map((b) => ({ ...b, active: b.id === id ? false : b.active })) };
       }
-      const synced = syncPlanCategories(target, s.categories);
-      const plans = s.plans.map((p) => (p.id === id ? { ...synced.plan, active: true } : { ...p, active: false }));
+      const synced = syncBudgetCategories(target, s.categories);
+      const plans = s.plans.map((b) => (b.id === id ? { ...synced.budget, active: true } : { ...b, active: false }));
       return { ...s, plans, categories: synced.categories, transactions: clearRemovedCategoryRefs(s.transactions, synced.removedCategoryIds) };
     });
   };
-  // Moves a budget up/down one slot in the Plans list. Recomputes sequential
-  // order values for every plan based on the *current* display order (from
-  // sortedPlansList) so this also normalizes any plans that never had an
+  // Moves a budget up/down one slot in the Budgets list. Recomputes sequential
+  // order values for every budget based on the *current* display order (from
+  // sortedBudgetsList) so this also normalizes any budgets that never had an
   // explicit order yet - safe to call regardless of prior manual reordering.
-  const reorderPlan = (id, direction) => {
+  const reorderBudget = (id, direction) => {
     setState((s) => {
-      const displayList = sortedPlansList(s.plans);
-      const index = displayList.findIndex((p) => p.id === id);
+      const displayList = sortedBudgetsList(s.plans);
+      const index = displayList.findIndex((b) => b.id === id);
       const target = index + direction;
       if (index < 0 || target < 0 || target >= displayList.length) return s;
       const reordered = [...displayList];
       const [moved] = reordered.splice(index, 1);
       reordered.splice(target, 0, moved);
-      const orderById = new Map(reordered.map((p, i) => [p.id, i]));
-      const plans = s.plans.map((p) => ({ ...p, order: orderById.get(p.id) }));
+      const orderById = new Map(reordered.map((b, i) => [b.id, i]));
+      const plans = s.plans.map((b) => ({ ...b, order: orderById.get(b.id) }));
       return { ...s, plans };
     });
   };
-  const duplicatePlan = (id) => {
-    const p = state.plans.find((x) => x.id === id);
-    if (!p) return;
-    setPlanModal({
-      name: `${p.name} (Duplicate)`,
-      startDate: p.startDate || "",
-      endDate: p.endDate || "",
-      income: p.income,
-      incomeItems: (p.incomeItems || []).map((it) => ({ id: uid(), name: it.name, mode: it.mode === "category" ? "category" : "manual", amount: it.amount })),
+  const duplicateBudget = (id) => {
+    const b = state.plans.find((x) => x.id === id);
+    if (!b) return;
+    setBudgetModal({
+      name: `${b.name} (Duplicate)`,
+      startDate: b.startDate || "",
+      endDate: b.endDate || "",
+      income: b.income,
+      incomeItems: (b.incomeItems || []).map((it) => ({ id: uid(), name: it.name, mode: it.mode === "category" ? "category" : "manual", amount: it.amount })),
       active: false,
-      repeat: p.repeat ? { ...p.repeat } : { enabled: false, frequency: "monthly" },
-      categories: (p.categories || []).map((c) => ({
+      repeat: b.repeat ? { ...b.repeat } : { enabled: false, frequency: "monthly" },
+      categories: (b.categories || []).map((c) => ({
         id: uid(),
         name: c.name,
         mode: c.mode,
@@ -714,7 +721,7 @@ export default function App() {
         if (!valid) throw new Error("bad shape");
         setConfirmDialog({
           title: "Import backup?",
-          message: `This will replace all current accounts, categories, transactions, and plans with the contents of “${file.name}”. This can't be undone.`,
+          message: `This will replace all current accounts, categories, transactions, and budgets with the contents of “${file.name}”. This can't be undone.`,
           confirmLabel: "Import & replace",
           onConfirm: () => {
             setState({
@@ -722,7 +729,7 @@ export default function App() {
               accounts: migrateAccountOrder(data.accounts),
               categories: data.categories,
               transactions: data.transactions,
-              plans: migratePlanOrder(Array.isArray(data.plans) ? data.plans : []),
+              plans: migrateBudgetOrder(Array.isArray(data.plans) ? data.plans : []),
               ...(data.currency ? { currency: data.currency } : {}),
               ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
             });
@@ -811,25 +818,25 @@ export default function App() {
       onConfirm: () => {
         setState((s) => {
           const transactions = s.transactions.map((t) => (t.categoryId ? { ...t, categoryId: null } : t));
-          // Strip the links from every plan's categories/items so they're treated as
+          // Strip the links from every budget's categories/items so they're treated as
           // brand-new the next time they're synced, instead of pointing at nothing.
-          let plans = s.plans.map((p) => ({
-            ...p,
-            categories: (p.categories || []).map((c) => ({
+          let plans = s.plans.map((b) => ({
+            ...b,
+            categories: (b.categories || []).map((c) => ({
               ...c,
               categoryId: undefined,
               items: (c.items || []).map((it) => ({ ...it, categoryId: undefined })),
             })),
-            incomeItems: (p.incomeItems || []).map((it) => ({ ...it, categoryId: undefined })),
+            incomeItems: (b.incomeItems || []).map((it) => ({ ...it, categoryId: undefined })),
           }));
           let categories = [];
           // Re-mirror the active budget right away so its category badges don't
           // disappear until the next reload.
-          const active = plans.find((p) => p.active);
+          const active = plans.find((b) => b.active);
           if (active) {
-            const synced = syncPlanCategories(active, categories);
+            const synced = syncBudgetCategories(active, categories);
             categories = synced.categories;
-            plans = plans.map((p) => (p.id === active.id ? synced.plan : p));
+            plans = plans.map((b) => (b.id === active.id ? synced.budget : b));
           }
           return { ...s, categories, transactions, plans };
         });
@@ -931,10 +938,10 @@ export default function App() {
               {effectiveView === "dashboard" && (
                 <button className="btn btn-ghost" onClick={() => setWidgetModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView === "budgets" && (
+              {effectiveView === "status" && (
                 <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView !== "more" && effectiveView !== "plans" && effectiveView !== "tools" && (
+              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
               {!popoutView && (
@@ -961,7 +968,7 @@ export default function App() {
                 categories={state.categories}
                 transactions={state.transactions}
                 balances={balances}
-                plans={state.plans}
+                budgets={state.plans}
                 onGoTx={() => { setView("accounts"); setAccModal({}); }}
                 onNavigate={setView}
                 widgets={dashboardWidgets}
@@ -974,32 +981,32 @@ export default function App() {
             {effectiveView === "accounts" && (
               <AccountsView accounts={state.accounts} balances={balances} onAdd={() => setAccModal({})} onEdit={setAccModal} onReorder={reorderAccount} onViewClosed={() => setClosedAccountsOpen(true)} />
             )}
-            {effectiveView === "budgets" && (
-              <BudgetsView
+            {effectiveView === "status" && (
+              <StatusView
                 categories={state.categories}
                 transactions={state.transactions}
                 onAdd={() => setCatModal({})}
                 onEdit={setCatModal}
                 onDelete={requestDeleteCategory}
-                plans={state.plans}
-                onEditPlan={setPlanModal}
-                onGoPlans={() => setView("plans")}
+                budgets={state.plans}
+                onEditBudget={setBudgetModal}
+                onGoBudgets={() => setView("budgets")}
                 sectionOrder={statusPrefs.order}
                 sectionVisible={statusPrefs.visible}
                 onCustomize={() => setStatusModalOpen(true)}
               />
             )}
-            {effectiveView === "plans" && (
-              <PlansView
-                plans={state.plans}
+            {effectiveView === "budgets" && (
+              <BudgetsView
+                budgets={state.plans}
                 transactions={state.transactions}
                 categories={state.categories}
-                onAdd={() => setPlanModal({})}
-                onEdit={setPlanModal}
-                onDelete={requestDeletePlan}
-                onSetActive={setActivePlan}
-                onDuplicate={duplicatePlan}
-                onReorder={reorderPlan}
+                onAdd={() => setBudgetModal({})}
+                onEdit={setBudgetModal}
+                onDelete={requestDeleteBudget}
+                onSetActive={setActiveBudget}
+                onDuplicate={duplicateBudget}
+                onReorder={reorderBudget}
               />
             )}
             {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
@@ -1037,7 +1044,7 @@ export default function App() {
           initial={txModal}
           accounts={state.accounts}
           categories={state.categories}
-          plans={state.plans}
+          budgets={state.plans}
           transactions={state.transactions}
           onSave={saveTransaction}
           onClose={() => setTxModal(null)}
@@ -1070,15 +1077,15 @@ export default function App() {
       {catModal !== null && (
         <CategoryModal initial={catModal} categories={state.categories} onSave={saveCategory} onClose={() => setCatModal(null)} onDelete={requestDeleteCategory} />
       )}
-      {planModal !== null && (
-        <PlanModal
-          initial={planModal}
+      {budgetModal !== null && (
+        <BudgetModal
+          initial={budgetModal}
           transactions={state.transactions}
-          plans={state.plans}
+          budgets={state.plans}
           categories={state.categories}
-          onSave={savePlan}
-          onClose={() => setPlanModal(null)}
-          onDelete={requestDeletePlan}
+          onSave={saveBudget}
+          onClose={() => setBudgetModal(null)}
+          onDelete={requestDeleteBudget}
         />
       )}
       {widgetModalOpen && (

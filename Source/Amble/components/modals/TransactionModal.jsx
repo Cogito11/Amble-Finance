@@ -9,7 +9,7 @@ import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 /* ---------------------------------- modals ---------------------------------- */
-export function TransactionModal({ initial, accounts, categories, plans, transactions, onSave, onClose, onDelete }) {
+export function TransactionModal({ initial, accounts, categories, budgets, transactions, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
   const [date, setDate] = useState(initial.date || todayStr());
@@ -31,8 +31,8 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   // while that budget is the active one - once a budget is deactivated its
   // categories stay in state (so existing transactions still resolve their name),
   // but they shouldn't keep showing up as choices for new/edited transactions.
-  const activePlanId = (plans || []).find((p) => p.active)?.id;
-  const isSelectable = (c) => !c.planId || c.planId === activePlanId;
+  const activeBudgetId = (budgets || []).find((b) => b.active)?.id;
+  const isSelectable = (c) => !c.planId || c.planId === activeBudgetId;
 
   // The currently selected category might itself be a specific expense (a sub-category);
   // resolve which parent it belongs to so both dropdowns stay in sync.
@@ -114,7 +114,7 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   // in the form, so the number updates as the user adjusts date/amount/type.
   const categoryStatus = (() => {
     if (!selectedCategory || type === "income" || isIncomeCategory) return null;
-    const spent = categorySpend(selectedCategory, previewTransactions, plans, categories);
+    const spent = categorySpend(selectedCategory, previewTransactions, budgets, categories);
     const hasLimit = (selectedCategory.limit || 0) > 0;
     return {
       name: selectedCategory.name,
@@ -126,11 +126,11 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   })();
 
   // Same idea as categoryStatus above, but for a category tracked on the income
-  // side (see PlanModal's "Category" income mode) - just a running total, since
+  // side (see BudgetModal's "Category" income mode) - just a running total, since
   // income entries don't carry a limit the way expense categories can.
   const incomeCategoryStatus = (() => {
     if (!selectedCategory || !isIncomeCategory) return null;
-    const tracked = categoryIncome(selectedCategory, previewTransactions, plans, categories);
+    const tracked = categoryIncome(selectedCategory, previewTransactions, budgets, categories);
     return { name: selectedCategory.name, tracked };
   })();
 

@@ -4,21 +4,21 @@ import {
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
-import { categoryIncome, nextCategoryColor, planCategoryTotal } from "../../state/categories";
-import { REPEAT_DUE_PHRASES, nextPlanDates, planDueDate, planMatchDurationDays } from "../../state/plans";
+import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../state/categories";
+import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays } from "../../state/budgets";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
-/* ---------------------------------- plan modal ---------------------------------- */
-export function PlanModal({ initial, transactions, plans, categories, onSave, onClose, onDelete }) {
+/* ---------------------------------- budget modal ---------------------------------- */
+export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [startDate, setStartDate] = useState(initial.startDate || "");
   const [endDate, setEndDate] = useState(initial.endDate || "");
   // Income as a list of named lines (e.g. "Paycheck 1", "Rollover from last month")
   // instead of a single number, so multiple sources add up naturally. Falls back
-  // to one line seeded from the old single `income` field for plans saved before
+  // to one line seeded from the old single `income` field for budgets saved before
   // this existed, so it behaves exactly like the old single field until someone
   // actually adds a second line.
   const [incomeItems, setIncomeItems] = useState(
@@ -38,19 +38,19 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
   const [repeatFreq, setRepeatFreq] = useState((initial.repeat && initial.repeat.frequency) || "monthly");
 
   const canRepeat = !!(startDate && endDate);
-  const matchDays = planMatchDurationDays({ startDate, endDate });
+  const matchDays = budgetMatchDurationDays({ startDate, endDate });
   // The day-of-month a monthly repeat should keep aiming for. Preserved from the
-  // plan being edited so an already-repeating budget doesn't lose its original
+  // budget being edited so an already-repeating budget doesn't lose its original
   // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date;
-  // only defaults from the current startDate for plans that haven't repeated yet.
+  // only defaults from the current startDate for budgets that haven't repeated yet.
   const repeatAnchorDay = (initial.repeat && initial.repeat.anchorDay) || (startDate ? new Date(startDate + "T00:00:00").getDate() : null);
   // Live preview, in the Edit budget menu, of when this cycle becomes due to
-  // repeat and what dates the next cycle would have - mirrors planDueDate /
-  // nextPlanDates exactly, using the form's current (possibly unsaved) values.
+  // repeat and what dates the next cycle would have - mirrors budgetDueDate /
+  // nextBudgetDates exactly, using the form's current (possibly unsaved) values.
   const repeatPreview = canRepeat
     ? (() => {
-        const due = planDueDate({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
-        const next = nextPlanDates({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
+        const due = budgetDueDate({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
+        const next = nextBudgetDates({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
         return due && next ? { due, next } : null;
       })()
     : null;
@@ -71,10 +71,10 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
     if (it.mode !== "category") return Number(it.amount) || 0;
     if (!it.categoryId) return 0;
     const cat = (categories || []).find((c) => c.id === it.categoryId);
-    return cat ? categoryIncome(cat, transactions || [], plans || [], categories || []) : 0;
+    return cat ? categoryIncome(cat, transactions || [], budgets || [], categories || []) : 0;
   };
   const totalIncome = incomeItems.reduce((s, it) => s + itemAmount(it), 0);
-  const allocated = cats.reduce((s, c) => s + planCategoryTotal(c), 0);
+  const allocated = cats.reduce((s, c) => s + budgetCategoryTotal(c), 0);
   const remaining = totalIncome - allocated;
 
   const addIncomeItem = () => {
@@ -175,7 +175,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
           </div>
         )}
 
-        <div className="plan-repeat-block">
+        <div className="budget-repeat-block">
           <label className="checkbox-row">
             <input
               type="checkbox"
@@ -183,11 +183,11 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
               disabled={!canRepeat}
               onChange={(e) => setRepeatOn(e.target.checked)}
             />
-            Repeat this plan
+            Repeat this budget
           </label>
           {!canRepeat && <p className="settings-desc">Set both a start and end date to enable repeating.</p>}
           {canRepeat && repeatOn && (
-            <div className="seg plan-repeat-seg">
+            <div className="seg budget-repeat-seg">
               <button type="button" className={`seg-btn ${repeatFreq === "weekly" ? "active" : ""}`} onClick={() => setRepeatFreq("weekly")}>Weekly</button>
               <button type="button" className={`seg-btn ${repeatFreq === "biweekly" ? "active" : ""}`} onClick={() => setRepeatFreq("biweekly")}>Every 2 weeks</button>
               <button type="button" className={`seg-btn ${repeatFreq === "monthly" ? "active" : ""}`} onClick={() => setRepeatFreq("monthly")}>Monthly</button>
@@ -199,7 +199,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
               {repeatFreq === "match"
                 ? `The budget will repeat once it's set to end, on ${fmtDate(endDate)}. `
                 : `The budget will repeat ${REPEAT_DUE_PHRASES[repeatFreq]} its start date, on ${fmtDate(repeatPreview.due)}. `}
-              When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new plan.
+              When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new budget.
             </p>
           )}
           {repeatCutoffWarning && (
@@ -209,14 +209,14 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
           )}
         </div>
 
-        <div className="plan-categories">
-          <div className="plan-categories-header">
+        <div className="budget-categories">
+          <div className="budget-categories-header">
             <div className="card-title" style={{ marginBottom: 0 }}>
-              <span className="plan-section-title-text">
+              <span className="budget-section-title-text">
                 Income
                 <button
                   type="button"
-                  className="icon-btn plan-info-icon"
+                  className="icon-btn budget-info-icon"
                   aria-label="How income modes work"
                   title={"Income entries have 2 different modes.\n\nManual: Type in a fixed amount yourself.\n\nCategory: Create this income field as a category that you can assign income and transfer transactions to. The total value of transactions assigned to that category will be the value used."}
                 >
@@ -225,19 +225,19 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
               </span>
             </div>
           </div>
-          <div className="plan-items">
+          <div className="budget-items">
             {incomeItems.map((it) => {
               const isCategory = it.mode === "category";
               return (
-                <div key={it.id} className="plan-income-block">
-                  <div className="plan-cat-row">
+                <div key={it.id} className="budget-income-block">
+                  <div className="budget-cat-row">
                     <input
                       className="input"
                       placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
                       value={it.name}
                       onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })}
                     />
-                    <div className="seg plan-income-mode-seg">
+                    <div className="seg budget-income-mode-seg">
                       <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
                       <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
                     </div>
@@ -246,14 +246,14 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                     )}
                   </div>
                   {isCategory ? (
-                    <div className="form-group plan-cat-bulk">
+                    <div className="form-group budget-cat-bulk">
                       <label>Tracked total</label>
-                      <div className="input mono plan-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
+                      <div className="input mono budget-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
                         {fmt(itemAmount(it))}
                       </div>
                     </div>
                   ) : (
-                    <div className="form-group plan-cat-bulk">
+                    <div className="form-group budget-cat-bulk">
                       <label>Amount</label>
                       <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                     </div>
@@ -261,14 +261,14 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                 </div>
               );
             })}
-            <div className="plan-items-footer">
+            <div className="budget-items-footer">
               <button type="button" className="btn btn-ghost btn-sm" onClick={addIncomeItem}><Plus size={13} /> Add income source</button>
-              {incomeItems.length > 1 && <div className="plan-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
+              {incomeItems.length > 1 && <div className="budget-cat-subtotal muted">Total income: {fmt(totalIncome)}</div>}
             </div>
           </div>
         </div>
 
-        <div className="plan-summary-bar">
+        <div className="budget-summary-bar">
           <div><span className="muted">Income</span><strong>{fmt(totalIncome)}</strong></div>
           <div><span className="muted">Allocated</span><strong>{fmt(allocated)}</strong></div>
           <div>
@@ -277,14 +277,14 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
           </div>
         </div>
 
-        <div className="plan-categories">
-          <div className="plan-categories-header">
+        <div className="budget-categories">
+          <div className="budget-categories-header">
             <div className="card-title" style={{ marginBottom: 0 }}>
-              <span className="plan-section-title-text">
+              <span className="budget-section-title-text">
                 Budget categories
                 <button
                   type="button"
-                  className="icon-btn plan-info-icon"
+                  className="icon-btn budget-info-icon"
                   aria-label="How budget category modes work"
                   title={"Budget categories have 2 different modes.\n\nBulk: Set one fixed budgeted amount for the whole category.\n\nItemized: Break the category down into individual expenses, each with their own budgeted amount and optional date, which roll up into the category's total."}
                 >
@@ -299,13 +299,13 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
           {cats.map((c, ci) => (
             <div
               key={c.id}
-              className="plan-cat-block"
+              className="budget-cat-block"
             >
-              <div className="plan-cat-row">
-                <div className="plan-cat-move-btns">
+              <div className="budget-cat-row">
+                <div className="budget-cat-move-btns">
                   <button
                     type="button"
-                    className="icon-btn plan-cat-move-btn"
+                    className="icon-btn budget-cat-move-btn"
                     title="Move category up"
                     aria-label="Move category up"
                     disabled={ci === 0}
@@ -315,7 +315,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                   </button>
                   <button
                     type="button"
-                    className="icon-btn plan-cat-move-btn"
+                    className="icon-btn budget-cat-move-btn"
                     title="Move category down"
                     aria-label="Move category down"
                     disabled={ci === cats.length - 1}
@@ -326,34 +326,34 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
                 </div>
                 <ColorSwatchButton color={c.color} onChange={(color) => updateCategory(c.id, { color })} label="Category color" />
                 <input className="input" placeholder="Category name (e.g. Streaming services)" value={c.name} onChange={(e) => updateCategory(c.id, { name: e.target.value })} />
-                <div className="seg plan-cat-seg">
+                <div className="seg budget-cat-seg">
                   <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
                   <button type="button" className={`seg-btn ${c.mode === "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "items" })}>Itemized</button>
                 </div>
                 <button type="button" className="icon-btn" onClick={() => removeCategory(c.id)} aria-label="Remove category"><Trash2 size={14} /></button>
               </div>
               {c.mode === "items" ? (
-                <div className="plan-items">
+                <div className="budget-items">
                   {(c.items || []).map((it) => (
-                    <div key={it.id} className="plan-item-row">
+                    <div key={it.id} className="budget-item-row">
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
-                      <input type="date" className="input mono plan-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
-                      <input type="number" min="0" step="0.01" className="input mono plan-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
+                      <input type="date" className="input mono budget-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
+                      <input type="number" min="0" step="0.01" className="input mono budget-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                       <button type="button" className="icon-btn" onClick={() => removeItem(c.id, it.id)} aria-label="Remove expense item"><X size={14} /></button>
                     </div>
                   ))}
-                  <div className="plan-items-footer">
+                  <div className="budget-items-footer">
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => addItem(c.id)}><Plus size={13} /> Add expense</button>
-                    <div className="plan-cat-subtotal muted">Subtotal: {fmt(planCategoryTotal(c))}</div>
+                    <div className="budget-cat-subtotal muted">Subtotal: {fmt(budgetCategoryTotal(c))}</div>
                   </div>
                 </div>
               ) : (
                 <div className="form-row">
-                  <div className="form-group plan-cat-bulk">
+                  <div className="form-group budget-cat-bulk">
                     <label>Budget amount</label>
                     <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={c.bulkAmount} onChange={(e) => updateCategory(c.id, { bulkAmount: e.target.value })} onWheel={blurOnWheel} />
                   </div>
-                  <div className="form-group plan-cat-bulk">
+                  <div className="form-group budget-cat-bulk">
                     <label>Date (optional)</label>
                     <input type="date" className="input mono" value={c.date || ""} onChange={(e) => updateCategory(c.id, { date: e.target.value })} />
                   </div>
@@ -361,7 +361,7 @@ export function PlanModal({ initial, transactions, plans, categories, onSave, on
               )}
             </div>
           ))}
-          <button type="button" className="btn btn-ghost btn-sm plan-add-category-btn" onClick={addCategory}><Plus size={14} /> Add category</button>
+          <button type="button" className="btn btn-ghost btn-sm budget-add-category-btn" onClick={addCategory}><Plus size={14} /> Add category</button>
         </div>
       </div>
       <div className="modal-footer">

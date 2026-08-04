@@ -73,8 +73,8 @@ export const NAV_ITEMS = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "transactions", label: "Transactions", icon: Receipt },
   { id: "accounts", label: "Accounts", icon: Wallet },
-  { id: "budgets", label: "Status", icon: Activity },
-  { id: "plans", label: "Budgets", icon: ClipboardList },
+  { id: "status", label: "Status", icon: Activity },
+  { id: "budgets", label: "Budgets", icon: ClipboardList },
   { id: "tools", label: "Tools", icon: Calculator },
 ];
 
@@ -82,8 +82,8 @@ export const VIEW_TITLES = {
   dashboard: "Dashboard",
   transactions: "Transactions",
   accounts: "Accounts",
-  budgets: "Status",
-  plans: "Budgets",
+  status: "Status",
+  budgets: "Budgets",
   tools: "Tools",
   more: "More",
 };

@@ -37,7 +37,7 @@ export function migrateAccountOrder(accounts) {
   return accounts.map((a, i) => (typeof a.order === "number" ? a : { ...a, order: i }));
 }
 
-// Same single-order-field approach as sortedPlansList: lower `order` = higher
+// Same single-order-field approach as sortedBudgetsList: lower `order` = higher
 // up the list, and that's the only thing that decides position.
 export function sortedAccountsList(accounts) {
   return [...accounts].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
