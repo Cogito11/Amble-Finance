@@ -438,7 +438,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
                       {r.allocated > 0 && <strong className={r.tone}>{remainingLabel(r.allocated, r.spent)}</strong>}
                     </div>
                     <div className="dash-budget-bar-track">
-                      <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.barColor }} />
+                      <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.color }} />
                     </div>
                     {hasItems && isOpen && (
                       <div className="spend-breakdown-subrows">
