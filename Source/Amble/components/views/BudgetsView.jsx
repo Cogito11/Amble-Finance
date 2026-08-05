@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Plus, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown
+  Plus, Pencil, Trash2, ClipboardList, CheckCircle2, Copy, Repeat, ChevronUp, ChevronDown
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { BudgetCategoryTable } from "./StatusView";
@@ -74,6 +74,7 @@ export function BudgetsView({ budgets, transactions, categories, onAdd, onEdit, 
                     </button>
                   </div>
                   <button className="icon-btn" title="Duplicate budget" onClick={(e) => { e.stopPropagation(); onDuplicate(b.id); }}><Copy size={14} /></button>
+                  <button className="icon-btn" title="Edit budget" aria-label="Edit budget" onClick={(e) => { e.stopPropagation(); onEdit(b); }}><Pencil size={14} /></button>
                   <button className="icon-btn" title="Delete budget" onClick={(e) => { e.stopPropagation(); onDelete(b.id); }}><Trash2 size={14} /></button>
                 </div>
               </div>
