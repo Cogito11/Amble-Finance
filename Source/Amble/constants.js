@@ -114,9 +114,9 @@ export function defaultWidgetPrefs() {
 // { order, visible } shape as the sidebar's customize prefs instead.
 export const STATUS_SECTIONS = [
   { id: "activeBudget", label: "Active budget", description: "Name, dates, and a spent-vs-budgeted progress bar for your active budget" },
+  { id: "categoryGauges", label: "Category gauges", description: "Progress gauges for categories with a budget limit set" },
   { id: "spendingBreakdown", label: "Spending breakdown", description: "Share of spending per category, for the active budget or the last 30 days" },
   { id: "allocatedVsSpent", label: "Allocated vs. spent", description: "How much of the active budget's allocation each category has used" },
-  { id: "categoryGauges", label: "Category gauges", description: "Progress gauges for categories with a budget limit set" },
   { id: "budgetCategories", label: "Budget categories", description: "Table of the active budget's categories, spent, budgeted, and remaining" },
   { id: "generalCategories", label: "General categories", description: "Table of categories not tied to any budget" },
 ];
