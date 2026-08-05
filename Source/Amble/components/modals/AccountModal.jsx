@@ -1,13 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  Trash2, Archive, RotateCcw, Receipt
+  Trash2, Archive, RotateCcw, Receipt, AlertCircle, X
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { blurOnWheel, uid } from "../../utils/misc";
 import { isDebtAccount } from "../../state/accounts";
 import { fmt, fmtDate } from "../../utils/format";
 
-export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccount, onReopenAccount, transactions, currentBalance }) {
+export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccount, onReopenAccount, transactions, currentBalance, error, onDismissError }) {
   const isEdit = !!initial.id;
   const isClosed = !!initial.closed;
   const [name, setName] = useState(initial.name || "");
@@ -17,6 +17,15 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
   const existingDisplay = initial.id ? (isDebt ? Math.max(0, -(initial.startingBalance || 0)) : (initial.startingBalance || 0)) : "";
   const [balanceInput, setBalanceInput] = useState(existingDisplay);
   const [interestRateInput, setInterestRateInput] = useState(initial.interestRate ?? "");
+  const bodyRef = useRef(null);
+
+  // A failed delete (e.g. "this account has transactions on it") lands while the
+  // modal is already open and scrolled wherever the user left it - scroll the body
+  // back to the top so the error (rendered first, below) is actually visible
+  // instead of silently landing off-screen.
+  useEffect(() => {
+    if (error && bodyRef.current) bodyRef.current.scrollTop = 0;
+  }, [error]);
 
   const canSave = name.trim().length > 0 && balanceInput !== "";
 
@@ -49,7 +58,14 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
 
   return (
     <Modal title={isEdit ? (isClosed ? "Closed account" : "Edit account") : "Add account"} onClose={onClose}>
-      <div className="modal-body">
+      <div className="modal-body" ref={bodyRef}>
+        {error && (
+          <div className="inline-error">
+            <AlertCircle size={14} />
+            <span style={{ flex: 1 }}>{error}</span>
+            <button type="button" className="icon-btn" aria-label="Dismiss error" onClick={onDismissError}><X size={14} /></button>
+          </div>
+        )}
         {isClosed && (
           <div className="tool-note">
             This account is closed and can't be selected for new transactions. Reopen it below to start using it again.

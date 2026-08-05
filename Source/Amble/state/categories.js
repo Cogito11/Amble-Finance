@@ -102,13 +102,13 @@ export function seedCategories() {
   }));
 }
 
-export function planCategoryTotal(cat) {
+export function budgetCategoryTotal(cat) {
   if (cat.mode === "items") return (cat.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
   return Number(cat.bulkAmount) || 0;
 }
 
-export function planAllocated(plan) {
-  return (plan.categories || []).reduce((s, c) => s + planCategoryTotal(c), 0);
+export function budgetAllocated(budget) {
+  return (budget.categories || []).reduce((s, c) => s + budgetCategoryTotal(c), 0);
 }
 
 // A transaction counts toward category spend if it's a normal expense, or if it's a
@@ -118,21 +118,34 @@ export function isSpendTx(t) {
   return t.type === "expense" || (t.type === "transfer" && !!t.categoryId);
 }
 
-// Spend for a category: if it belongs to a plan that has a time frame (a start
-// and/or end date set), track every transaction ever assigned to it, all-time -
-// gauges for a dated budget shouldn't reset just because the calendar month rolled
-// over. If it belongs to a plan with no time frame, or isn't tied to a plan at all
-// (a general category), scope it to a rolling 30-day window instead. Also rolls up
-// spend from any sub-expense categories (itemized plan line items) so a parent
-// category's total reflects money logged against its specific expenses too.
-export function categorySpend(category, transactions, plans, categories) {
-  const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
+// The actual transactions that count toward a category's spend - same rule as
+// categorySpend (all-time for a category owned by a budget with a start/end date,
+// otherwise a rolling 30 days), just returning the matching transactions instead
+// of summing them, so callers that need to list them (not just total them) have
+// a single source of truth to share with categorySpend below.
+export function categorySpendTransactions(category, transactions, budgets, categories) {
+  const ownerBudget = category.planId ? (budgets || []).find((b) => b.id === category.planId) : null;
   const childIds = (categories || []).filter((c) => c.parentCategoryId === category.id).map((c) => c.id);
   const idSet = new Set([category.id, ...childIds]);
   let txs = transactions.filter((t) => isSpendTx(t) && idSet.has(t.categoryId));
-  const hasTimeFrame = !!(ownerPlan && (ownerPlan.startDate || ownerPlan.endDate));
+  const hasTimeFrame = !!(ownerBudget && (ownerBudget.startDate || ownerBudget.endDate));
   if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
-  return txs.reduce((s, t) => s + t.amount, 0);
+  return txs;
+}
+
+// Spend for a category: if it belongs to a budget that has a time frame (a start
+// and/or end date set), track every transaction ever assigned to it, all-time -
+// gauges for a dated budget shouldn't reset just because the calendar month rolled
+// over. If it belongs to a budget with no time frame, or isn't tied to a budget at
+// all (a general category), scope it to a rolling 30-day window instead. Also rolls
+// up spend from any sub-expense categories (itemized budget line items) so a parent
+// category's total reflects money logged against its specific expenses too.
+//
+// Note: the field linking a category to its budget is still called `planId` on the
+// data itself (not renamed, to avoid a data-migration for saved files/backups) -
+// only the code-facing names below (`budgets`, `ownerBudget`, etc.) use "budget".
+export function categorySpend(category, transactions, budgets, categories) {
+  return categorySpendTransactions(category, transactions, budgets, categories).reduce((s, t) => s + t.amount, 0);
 }
 
 // A transaction counts toward income-category tracking if it's a normal income
@@ -144,44 +157,47 @@ export function isIncomeTx(t) {
 }
 
 // Live total tracked for an income category: same time-frame rule as
-// categorySpend (all-time for a category owned by a plan with a start/end
+// categorySpend (all-time for a category owned by a budget with a start/end
 // date, otherwise a rolling 30 days) - so a budget-scoped income entry's
 // total automatically covers its whole time frame, while a general income
 // category behaves like a rolling monthly figure.
-export function categoryIncome(category, transactions, plans, categories) {
-  const ownerPlan = category.planId ? (plans || []).find((p) => p.id === category.planId) : null;
+export function categoryIncome(category, transactions, budgets, categories) {
+  const ownerBudget = category.planId ? (budgets || []).find((b) => b.id === category.planId) : null;
   let txs = transactions.filter((t) => isIncomeTx(t) && t.categoryId === category.id);
-  const hasTimeFrame = !!(ownerPlan && (ownerPlan.startDate || ownerPlan.endDate));
+  const hasTimeFrame = !!(ownerBudget && (ownerBudget.startDate || ownerBudget.endDate));
   if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
   return txs.reduce((s, t) => s + t.amount, 0);
 }
 
-// Mirrors a plan's categories into the app-wide category list so they can be
+// Mirrors a budget's categories into the app-wide category list so they can be
 // assigned to real transactions. Keeps existing links, creates new categories
-// for new plan categories, and deletes ones removed from the plan (their ids are
-// returned in removedCategoryIds so callers can also clear that categoryId off
-// any transactions that referenced it).
+// for new budget categories, and deletes ones removed from the budget (their ids
+// are returned in removedCategoryIds so callers can also clear that categoryId
+// off any transactions that referenced it).
 // Itemized categories also mirror each line item as its own sub-category (linked via
 // parentCategoryId) so a specific expense, like "Netflix" under "Subscriptions", can be
 // selected directly on a transaction.
-export function syncPlanCategories(plan, categories) {
+//
+// `budget.id` still gets written into each mirrored category's `planId` field (not
+// renamed - see the note on categorySpend above).
+export function syncBudgetCategories(budget, categories) {
   let cats = categories.slice();
   const keepIds = new Set();
-  const newPlanCats = (plan.categories || []).map((pc) => {
-    const total = planCategoryTotal(pc);
+  const newBudgetCats = (budget.categories || []).map((pc) => {
+    const total = budgetCategoryTotal(pc);
     const existingIdx = pc.categoryId ? cats.findIndex((c) => c.id === pc.categoryId) : -1;
     let parentId, parentColor;
     if (existingIdx >= 0) {
       parentId = pc.categoryId;
       parentColor = pc.color || cats[existingIdx].color;
-      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: plan.id, type: "expense", parentCategoryId: null, date: pc.date || null, color: parentColor };
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: budget.id, type: "expense", parentCategoryId: null, date: pc.date || null, color: parentColor };
       keepIds.add(parentId);
     } else {
       parentId = uid();
       parentColor = pc.color || nextCategoryColor(cats, pc.name);
       cats.push({
         id: parentId, name: pc.name, type: "expense", limit: total,
-        color: parentColor, planId: plan.id, parentCategoryId: null, date: pc.date || null,
+        color: parentColor, planId: budget.id, parentCategoryId: null, date: pc.date || null,
       });
       keepIds.add(parentId);
     }
@@ -192,14 +208,14 @@ export function syncPlanCategories(plan, categories) {
         const itAmount = Number(it.amount) || 0;
         const existingItemIdx = it.categoryId ? cats.findIndex((c) => c.id === it.categoryId) : -1;
         if (existingItemIdx >= 0) {
-          cats[existingItemIdx] = { ...cats[existingItemIdx], name: it.name, limit: itAmount, planId: plan.id, type: "expense", parentCategoryId: parentId, date: it.date || null };
+          cats[existingItemIdx] = { ...cats[existingItemIdx], name: it.name, limit: itAmount, planId: budget.id, type: "expense", parentCategoryId: parentId, date: it.date || null };
           keepIds.add(it.categoryId);
           return it;
         }
         const newItemId = uid();
         cats.push({
           id: newItemId, name: it.name, type: "expense", limit: itAmount,
-          color: parentColor, planId: plan.id, parentCategoryId: parentId, date: it.date || null,
+          color: parentColor, planId: budget.id, parentCategoryId: parentId, date: it.date || null,
         });
         keepIds.add(newItemId);
         return { ...it, categoryId: newItemId };
@@ -213,19 +229,19 @@ export function syncPlanCategories(plan, categories) {
   // treatment as expense categories above - just simpler, since income
   // entries don't have sub-items. Sharing `keepIds` with the expense loop
   // means a single removedCategoryIds pass below cleanly covers both.
-  const newIncomeItems = (plan.incomeItems || []).map((it) => {
+  const newIncomeItems = (budget.incomeItems || []).map((it) => {
     if (it.mode !== "category") return it;
     const existingIdx = it.categoryId ? cats.findIndex((c) => c.id === it.categoryId) : -1;
     let categoryId;
     if (existingIdx >= 0) {
       categoryId = it.categoryId;
-      cats[existingIdx] = { ...cats[existingIdx], name: it.name, type: "income", planId: plan.id, parentCategoryId: null };
+      cats[existingIdx] = { ...cats[existingIdx], name: it.name, type: "income", planId: budget.id, parentCategoryId: null };
       keepIds.add(categoryId);
     } else {
       categoryId = uid();
       cats.push({
         id: categoryId, name: it.name, type: "income", limit: 0,
-        color: nextCategoryColor(cats, it.name), planId: plan.id, parentCategoryId: null,
+        color: nextCategoryColor(cats, it.name), planId: budget.id, parentCategoryId: null,
       });
       keepIds.add(categoryId);
     }
@@ -233,13 +249,13 @@ export function syncPlanCategories(plan, categories) {
   });
 
   const removedCategoryIds = cats
-    .filter((c) => c.planId === plan.id && !keepIds.has(c.id))
+    .filter((c) => c.planId === budget.id && !keepIds.has(c.id))
     .map((c) => c.id);
-  cats = cats.filter((c) => !(c.planId === plan.id && !keepIds.has(c.id)));
-  return { categories: cats, plan: { ...plan, categories: newPlanCats, incomeItems: newIncomeItems }, removedCategoryIds };
+  cats = cats.filter((c) => !(c.planId === budget.id && !keepIds.has(c.id)));
+  return { categories: cats, budget: { ...budget, categories: newBudgetCats, incomeItems: newIncomeItems }, removedCategoryIds };
 }
 
-// Applies the removedCategoryIds from syncPlanCategories to a transactions list,
+// Applies the removedCategoryIds from syncBudgetCategories to a transactions list,
 // clearing categoryId on any transaction that pointed at a category which no
 // longer exists so it falls back to "uncategorized" instead of dangling.
 export function clearRemovedCategoryRefs(transactions, removedCategoryIds) {

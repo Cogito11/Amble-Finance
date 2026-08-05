@@ -9,7 +9,7 @@ import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 /* ---------------------------------- modals ---------------------------------- */
-export function TransactionModal({ initial, accounts, categories, plans, transactions, onSave, onClose, onDelete }) {
+export function TransactionModal({ initial, accounts, categories, budgets, transactions, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
   const [date, setDate] = useState(initial.date || todayStr());
@@ -31,17 +31,24 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   // while that budget is the active one - once a budget is deactivated its
   // categories stay in state (so existing transactions still resolve their name),
   // but they shouldn't keep showing up as choices for new/edited transactions.
-  const activePlanId = (plans || []).find((p) => p.active)?.id;
-  const isSelectable = (c) => !c.planId || c.planId === activePlanId;
+  const activeBudgetId = (budgets || []).find((b) => b.active)?.id;
+  const isSelectable = (c) => !c.planId || c.planId === activeBudgetId;
 
-  // Top-level categories selectable for this transaction type. Transfers aren't
-  // inherently income or expense, so any top-level category can be used to tag them.
-  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId && isSelectable(c));
   // The currently selected category might itself be a specific expense (a sub-category);
   // resolve which parent it belongs to so both dropdowns stay in sync.
   const selectedCategory = categoryId ? categories.find((c) => c.id === categoryId) : null;
   const selectedParentId = selectedCategory ? (selectedCategory.parentCategoryId || selectedCategory.id) : "";
   const subCategories = selectedParentId ? categories.filter((c) => c.parentCategoryId === selectedParentId) : [];
+
+  // Top-level categories selectable for this transaction type. Transfers aren't
+  // inherently income or expense, so any top-level category can be used to tag them.
+  // A category from an inactive budget is kept in the list if it's the one already
+  // assigned to this transaction (same as closed accounts, below) - so editing an
+  // older transaction still shows its real category name instead of falling back
+  // to "Uncategorized" just because that budget isn't active anymore. It still
+  // can't be newly picked for anything else, since it's excluded by isSelectable
+  // once it's no longer the current selection.
+  const parentCategories = categories.filter((c) => (type === "transfer" ? true : c.type === type) && !c.parentCategoryId && (isSelectable(c) || c.id === selectedParentId));
 
   // "General <parent>" isn't a selectable specific expense - if the chosen category has
   // sub-items, the transaction must point at one of them, so default to the first as soon
@@ -83,19 +90,31 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
     if (cat) setDescription(cat.name);
   };
 
+  const isIncomeCategory = selectedCategory && selectedCategory.type === "income";
+
+  // A live preview of the full transactions list with this transaction's current
+  // (possibly unsaved) type/date/amount/category swapped in - used below so
+  // categorySpend/categoryIncome apply their real date-window rules to it exactly
+  // like they would to any other transaction. Previously the preview always forced
+  // this transaction's amount into the total regardless of its own date, which for
+  // a rolling-30-day category (no time frame on the owning budget, or a general
+  // category) made an old transaction look like the only entry in the category -
+  // its amount got force-counted even though its own date would normally have
+  // excluded it from that same rolling window.
+  const previewTransactions = (() => {
+    const typedAmount = parseFloat(amount);
+    if (!(typedAmount > 0)) return transactions.filter((t) => t.id !== initial.id);
+    const draft = { id: initial.id || "__draft__", type, date, amount: typedAmount, categoryId: categoryId || null };
+    return [...transactions.filter((t) => t.id !== initial.id), draft];
+  })();
+
   // Status line shown above the footer: the remaining balance for whichever category
   // (or, if picked, its specific sub-expense) is currently selected - not just its
-  // saved-so-far spend, but a live preview that swaps out this transaction's old
-  // amount (if editing) for whatever's currently typed in the amount field, so the
-  // number updates as the user adjusts it instead of only reflecting what's already saved.
-  const isIncomeCategory = selectedCategory && selectedCategory.type === "income";
-  const isCurrentSpend = type === "expense" || (type === "transfer" && !!categoryId && !isIncomeCategory);
+  // saved-so-far spend, but a live preview that reflects whatever's currently typed
+  // in the form, so the number updates as the user adjusts date/amount/type.
   const categoryStatus = (() => {
     if (!selectedCategory || type === "income" || isIncomeCategory) return null;
-    const typedAmount = parseFloat(amount);
-    const otherTxs = transactions.filter((t) => t.id !== initial.id);
-    const baseSpend = categorySpend(selectedCategory, otherTxs, plans, categories);
-    const spent = baseSpend + (isCurrentSpend && typedAmount > 0 ? typedAmount : 0);
+    const spent = categorySpend(selectedCategory, previewTransactions, budgets, categories);
     const hasLimit = (selectedCategory.limit || 0) > 0;
     return {
       name: selectedCategory.name,
@@ -107,15 +126,11 @@ export function TransactionModal({ initial, accounts, categories, plans, transac
   })();
 
   // Same idea as categoryStatus above, but for a category tracked on the income
-  // side (see PlanModal's "Category" income mode) - just a running total, since
+  // side (see BudgetModal's "Category" income mode) - just a running total, since
   // income entries don't carry a limit the way expense categories can.
-  const isCurrentIncomeContribution = type === "income" || (type === "transfer" && !!categoryId && isIncomeCategory);
   const incomeCategoryStatus = (() => {
     if (!selectedCategory || !isIncomeCategory) return null;
-    const typedAmount = parseFloat(amount);
-    const otherTxs = transactions.filter((t) => t.id !== initial.id);
-    const baseIncome = categoryIncome(selectedCategory, otherTxs, plans, categories);
-    const tracked = baseIncome + (isCurrentIncomeContribution && typedAmount > 0 ? typedAmount : 0);
+    const tracked = categoryIncome(selectedCategory, previewTransactions, budgets, categories);
     return { name: selectedCategory.name, tracked };
   })();
 

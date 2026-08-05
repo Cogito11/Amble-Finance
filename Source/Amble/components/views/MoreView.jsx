@@ -122,7 +122,7 @@ export function MoreView({
           <div className="card">
             <div className="card-title">Backup &amp; restore</div>
             <p className="settings-desc">
-              Export a full backup of your accounts, categories, transactions, and plans as a
+              Export a full backup of your accounts, categories, transactions, and budgets as a
               JSON file. Use it to move your data to another computer or restore it later. Your
               data never leaves this device on its own.
             </p>

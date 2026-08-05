@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
 } from "lucide-react";
@@ -12,7 +12,7 @@ function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
         <ListFilter size={14} />
       </button>
       {open && (
-        <div className="tx-filter-menu" onClick={(event) => event.stopPropagation()}>
+        <div className="tx-filter-menu">
           <div className="tx-filter-menu-title">
             <span>{label}</span>
             {active && <button type="button" className="icon-btn" onClick={onClear} title="Clear filter" aria-label={`Clear ${label} filter`}><X size={13} /></button>}
@@ -112,12 +112,26 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";
 
+  // A click anywhere outside the open filter's own trigger/menu closes it - a
+  // document-level listener is used (rather than a click handler on this view's
+  // own container) because the container only covers the transactions view
+  // itself, so a click on the sidebar, header, or anywhere else outside it never
+  // reached the old handler at all.
+  useEffect(() => {
+    if (!openFilter) return;
+    const handlePointerDown = (event) => {
+      if (!event.target.closest(".tx-column-filter")) setOpenFilter(null);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [openFilter]);
+
   if (accounts.length === 0) {
     return <EmptyState icon={Receipt} title="No accounts yet" message="Add an account first, then you can start logging transactions against it." />;
   }
 
   return (
-    <div className="tx-view" onClick={() => openFilter && setOpenFilter(null)}>
+    <div className="tx-view">
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />
@@ -150,7 +164,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                 </ColumnFilter></div></th>
                 <th><div className="tx-column-heading">Account<ColumnFilter label="Account" active={isColumnFiltered.account} open={openFilter === "account"} onToggle={() => setOpenFilter(openFilter === "account" ? null : "account")} onClear={() => clearFilter("account")}>
                   <label>Sort</label><select className="select" value={sortValue("account")} onChange={(event) => setColumnSort("account", event.target.value)}><option value="asc">A to Z</option><option value="desc">Z to A</option></select>
-                  <label>Account</label><select className="select" value={filters.accountId} onChange={(event) => updateFilter({ accountId: event.target.value })}><option value="all">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select>
+                  <label>Account</label><select className="select" value={filters.accountId} onChange={(event) => updateFilter({ accountId: event.target.value })}><option value="all">All accounts</option>{accounts.filter((account) => !account.closed || account.id === filters.accountId).map((account) => <option key={account.id} value={account.id}>{account.name}{account.closed ? " (Closed)" : ""}</option>)}</select>
                 </ColumnFilter></div></th>
                 <th className="col-right"><div className="tx-column-heading tx-column-heading-right">Amount<ColumnFilter label="Amount" active={isColumnFiltered.amount} open={openFilter === "amount"} onToggle={() => setOpenFilter(openFilter === "amount" ? null : "amount")} onClear={() => clearFilter("amount")}>
                   <label>Sort</label><select className="select" value={sortValue("amount")} onChange={(event) => setColumnSort("amount", event.target.value)}><option value="desc">High to low</option><option value="asc">Low to high</option></select>

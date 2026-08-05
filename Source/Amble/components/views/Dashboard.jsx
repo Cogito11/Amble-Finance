@@ -8,16 +8,16 @@ import {
 import { EmptyState } from "../common/EmptyState";
 import { Gauge } from "../common/Gauge";
 import { StatCard } from "../common/StatCard";
-import { planTotalSpent } from "./BudgetsView";
+import { budgetTotalSpent } from "./StatusView";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS, DASHBOARD_WIDGETS, defaultWidgetPrefs } from "../../constants";
 import { computeBalance, isAssetAccount, isDebtAccount, sortedAccountsList } from "../../state/accounts";
-import { categorySpend, planAllocated } from "../../state/categories";
+import { categorySpend, budgetAllocated } from "../../state/categories";
 import { currentMonthKey, isWithinRolling30Days, monthKeyOf, toLocalDateStr, todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import { sortTransactionsNewestFirst } from "../../utils/misc";
 
 /* ---------------------------------- dashboard ---------------------------------- */
-export function Dashboard({ accounts, categories, transactions, balances, plans, onAdd, onGoTx, onNavigate, widgets, onCustomize }) {
+export function Dashboard({ accounts, categories, transactions, balances, budgets, onAdd, onGoTx, onNavigate, widgets, onCustomize }) {
   const w = widgets || defaultWidgetPrefs();
   const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
   const totalAssets = accounts.filter(isAssetAccount).reduce((s, a) => s + balances[a.id], 0);
@@ -28,18 +28,18 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
   const monthIncome = monthTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
   const monthExpense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
 
-  const activePlan = (plans || []).find((p) => p.active) || null;
-  const activePlanId = activePlan?.id;
+  const activeBudget = (budgets || []).find((b) => b.active) || null;
+  const activeBudgetId = activeBudget?.id;
   // Only top-level categories here; itemized sub-expenses (e.g. "Netflix" under
   // "Subscriptions") roll their spend up into the parent instead of appearing separately.
   const expenseCats = categories.filter((c) => c.type === "expense" && !c.parentCategoryId);
-  // Same rule as the Status tab: general categories + the active plan's categories only.
-  const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activePlanId));
+  // Same rule as the Status tab: general categories + the active budget's categories only.
+  const budgeted = expenseCats.filter((c) => c.limit > 0 && (!c.planId || c.planId === activeBudgetId));
   // Gauges track all-time spend for dated budgets, and a rolling 30 days for
   // everything else (undated budgets and general categories) — see categorySpend.
   const catSpend = budgeted.map((c) => ({
     ...c,
-    spent: categorySpend(c, transactions, plans, categories),
+    spent: categorySpend(c, transactions, budgets, categories),
   })).sort((a, b) => (b.spent / (b.limit || 1)) - (a.spent / (a.limit || 1))).slice(0, 4);
 
   // "Uncategorized" isn't tied to any budget, so — like any category with no time
@@ -48,16 +48,16 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
   const uncategorizedSpentRolling = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const rolling30Expense = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
-  // Same rule as the budget gauges above: general categories + the active plan's
+  // Same rule as the budget gauges above: general categories + the active budget's
   // categories only, so a deactivated budget's spend doesn't linger in the pie. Each
   // slice's value follows categorySpend's time-frame rule too — all-time for a category
-  // whose plan has a start/end date, rolling 30 days for everything else — so the pie
+  // whose budget has a start/end date, rolling 30 days for everything else — so the pie
   // and the gauges always agree on what a given category's "spend" means.
   const pieData = expenseCats
-    .filter((c) => !c.planId || c.planId === activePlanId)
+    .filter((c) => !c.planId || c.planId === activeBudgetId)
     .map((c) => ({
       name: c.name, color: c.color,
-      value: categorySpend(c, transactions, plans, categories),
+      value: categorySpend(c, transactions, budgets, categories),
     })).filter((d) => d.value > 0);
 
   const trendData = [];
@@ -145,11 +145,11 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
   // a clean top/middle/bottom with nothing stray in between.
   const nwTicks = [nwDomain[0], (nwDomain[0] + nwDomain[1]) / 2, nwDomain[1]];
 
-  const planBudgeted = activePlan ? planAllocated(activePlan) : 0;
-  const planSpent = activePlan ? planTotalSpent(activePlan, transactions) : 0;
-  const planRemaining = planBudgeted - planSpent;
-  const planPct = planBudgeted > 0 ? planSpent / planBudgeted : 0;
-  const planBarColor = planPct > 1 ? "var(--rust)" : planPct > 0.85 ? "var(--amber)" : "var(--teal)";
+  const activeBudgetBudgeted = activeBudget ? budgetAllocated(activeBudget) : 0;
+  const activeBudgetSpent = activeBudget ? budgetTotalSpent(activeBudget, transactions, budgets, categories) : 0;
+  const activeBudgetRemaining = activeBudgetBudgeted - activeBudgetSpent;
+  const activeBudgetPct = activeBudgetBudgeted > 0 ? activeBudgetSpent / activeBudgetBudgeted : 0;
+  const activeBudgetBarColor = activeBudgetPct > 1 ? "var(--rust)" : activeBudgetPct > 0.85 ? "var(--amber)" : "var(--teal)";
 
   const recent = sortTransactionsNewestFirst(transactions).slice(0, 6);
   const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
@@ -220,13 +220,13 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
             <div className="card">
               <div className="card-title">
                 Active budget
-                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("plans")}>View budgets <ChevronRight size={14} /></button>
+                <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("budgets")}>View budgets <ChevronRight size={14} /></button>
               </div>
-              {activePlan ? (
+              {activeBudget ? (
                 <div className="dash-budget">
-                  <div className="dash-budget-name">{activePlan.name}</div>
+                  <div className="dash-budget-name">{activeBudget.name}</div>
                   <div className="dash-budget-bar-track">
-                    <div className="dash-budget-bar-fill" style={{ width: `${Math.min(planPct, 1) * 100}%`, background: planBarColor }} />
+                    <div className="dash-budget-bar-fill" style={{ width: `${Math.min(activeBudgetPct, 1) * 100}%`, background: activeBudgetBarColor }} />
                     <div className="dash-budget-bar-ticks">
                       <span className="dash-budget-bar-tick" style={{ left: "25%" }} />
                       <span className="dash-budget-bar-tick" style={{ left: "50%" }} />
@@ -240,22 +240,22 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
                     <span>75%</span>
                     <span>100%</span>
                   </div>
-                  <div className="plan-summary-bar">
+                  <div className="budget-summary-bar">
                     <div>
                       <span className="muted">Budgeted</span>
-                      <strong>{fmt(planBudgeted)}</strong>
+                      <strong>{fmt(activeBudgetBudgeted)}</strong>
                     </div>
                     <div>
                       <span className="muted">Spent</span>
-                      <strong>{fmt(planSpent)}</strong>
+                      <strong>{fmt(activeBudgetSpent)}</strong>
                     </div>
                     <div>
                       <span className="muted">Remaining</span>
-                      <strong className={planRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(planRemaining)}</strong>
+                      <strong className={activeBudgetRemaining < 0 ? "tone-rust" : "tone-teal"}>{fmt(activeBudgetRemaining)}</strong>
                     </div>
-                    <div className="plan-summary-pct">
+                    <div className="budget-summary-pct">
                       <span className="muted">% Spent</span>
-                      <strong className={planPct > 1 ? "tone-rust" : planPct > 0.85 ? "tone-amber" : "tone-teal"}>{Math.round(planPct * 100)}%</strong>
+                      <strong className={activeBudgetPct > 1 ? "tone-rust" : activeBudgetPct > 0.85 ? "tone-amber" : "tone-teal"}>{Math.round(activeBudgetPct * 100)}%</strong>
                     </div>
                   </div>
                 </div>
@@ -271,7 +271,7 @@ export function Dashboard({ accounts, categories, transactions, balances, plans,
         <div className="card">
           <div className="card-title">
             Budget progress
-            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("budgets")}>View status <ChevronRight size={14} /></button>
+            <button className="btn btn-ghost btn-sm" onClick={() => onNavigate?.("status")}>View status <ChevronRight size={14} /></button>
           </div>
           <div className="gauge-row">
             {catSpend.map((c) => <Gauge key={c.id} spent={c.spent} limit={c.limit} label={c.name} />)}
