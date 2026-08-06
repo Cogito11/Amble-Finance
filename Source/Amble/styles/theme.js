@@ -351,7 +351,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-row { display:flex; align-items:center; gap:8px; }
 .budget-cat-row .input { flex:1; }
 .budget-cat-seg { flex-shrink:0; width:160px; }
-.budget-income-mode-seg { flex-shrink:0; width:160px; }
+.budget-income-mode-select { flex-shrink:0; width:160px; }
 .budget-income-tracked { display:flex; align-items:center; color: var(--text-muted); cursor:default; }
 .budget-section-title-text { display:flex; align-items:center; gap:6px; }
 .budget-info-icon { padding:3px; cursor:help; }
@@ -359,6 +359,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-items { display:flex; flex-direction:column; gap:8px; }
 .budget-item-row { display:flex; align-items:center; gap:8px; }
 .budget-item-row .input { flex:1; }
+.budget-item-row-dragging { opacity:0.45; }
+.budget-item-row-drop-target { border-color:var(--brass); box-shadow:0 -2px 0 var(--brass); }
+.budget-item-grip { color:var(--text-faint); flex-shrink:0; cursor:grab; }
 .budget-item-amount { width:110px; flex-shrink:0; }
 .budget-item-date { width:150px; flex-shrink:0; }
 .budget-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
@@ -416,6 +419,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .spend-breakdown-subrow { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; color: var(--text-muted); padding:9px 12px; }
 .spend-breakdown-subrow + .spend-breakdown-subrow { border-top:1px solid var(--border); }
 .spend-breakdown-subrow strong { font-family:'JetBrains Mono',monospace; font-size:13px; color: var(--text); }
+.spend-breakdown-subrow strong.tone-rust { color: var(--rust); }
+.spend-breakdown-subrow strong.tone-amber { color: var(--amber); }
+.spend-breakdown-subrow strong.tone-teal { color: var(--teal); }
 .spend-breakdown-alloc-caption { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:12.5px; margin:4px 0 6px; }
 .spend-breakdown-alloc-caption strong { font-family:'JetBrains Mono',monospace; font-size:13px; }
 

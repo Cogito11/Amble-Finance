@@ -195,9 +195,12 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   const allocationRowsWithPct = allocationRows.map((r) => {
     const allocPct = allocationTotal > 0 ? Math.round((r.allocated / allocationTotal) * 100) : 0;
     const spentPct = r.allocated > 0 ? (r.spent / r.allocated) * 100 : 0;
-    const tone = r.allocated === 0 ? "" : spentPct > 100 ? "tone-rust" : spentPct > 85 ? "tone-amber" : "tone-teal";
-    const barColor = r.allocated === 0 ? "var(--text-faint)" : spentPct > 100 ? "var(--rust)" : spentPct > 85 ? "var(--amber)" : "var(--teal)";
-    return { ...r, allocPct, spentPct, tone, barColor };
+    // Deliberately binary rather than a teal/amber/rust gradient: only overspending
+    // should visually interrupt - anything at or under budget reads as plain text,
+    // and the bar itself always stays this category's own color (no red highlight),
+    // so the one thing that actually needs attention is the only thing that stands out.
+    const tone = spentPct > 100 ? "tone-rust" : "";
+    return { ...r, allocPct, spentPct, tone };
   });
   // Sub-expense rows for itemized categories - moved here from the Spending
   // Breakdown card, since "how much of each sub-expense's own budgeted amount
@@ -212,7 +215,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
       const itSpent = categorySpend(it, transactions, budgets, categories);
       const itAllocated = it.limit || 0;
       const itSpentPct = itAllocated > 0 ? (itSpent / itAllocated) * 100 : 0;
-      const itTone = itAllocated === 0 ? "" : itSpentPct > 100 ? "tone-rust" : itSpentPct > 85 ? "tone-amber" : "tone-teal";
+      const itTone = itSpentPct > 100 ? "tone-rust" : "";
       return { key: it.id, name: it.name, allocated: itAllocated, spent: itSpent, spentPct: itSpentPct, tone: itTone };
     });
   });
@@ -438,7 +441,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
                       {r.allocated > 0 && <strong className={r.tone}>{remainingLabel(r.allocated, r.spent)}</strong>}
                     </div>
                     <div className="dash-budget-bar-track">
-                      <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.barColor }} />
+                      <div className="dash-budget-bar-fill" style={{ width: `${Math.min(r.spentPct, 100)}%`, background: r.color }} />
                     </div>
                     {hasItems && isOpen && (
                       <div className="spend-breakdown-subrows">
