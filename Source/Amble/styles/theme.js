@@ -351,7 +351,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-row { display:flex; align-items:center; gap:8px; }
 .budget-cat-row .input { flex:1; }
 .budget-cat-seg { flex-shrink:0; width:160px; }
-.budget-income-mode-seg { flex-shrink:0; width:160px; }
+.budget-income-mode-select { flex-shrink:0; width:160px; }
 .budget-income-tracked { display:flex; align-items:center; color: var(--text-muted); cursor:default; }
 .budget-section-title-text { display:flex; align-items:center; gap:6px; }
 .budget-info-icon { padding:3px; cursor:help; }

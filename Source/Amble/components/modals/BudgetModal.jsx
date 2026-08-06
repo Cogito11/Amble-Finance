@@ -8,7 +8,7 @@ import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../st
 import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays } from "../../state/budgets";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
-import { blurOnWheel, uid } from "../../utils/misc";
+import { blurOnWheel, sortTransactionsNewestFirst, uid } from "../../utils/misc";
 
 /* ---------------------------------- budget modal ---------------------------------- */
 export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete }) {
@@ -77,6 +77,29 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
   const allocated = cats.reduce((s, c) => s + budgetCategoryTotal(c), 0);
   const remaining = totalIncome - allocated;
 
+  // Income transactions available to pull from in "Transaction" mode - newest
+  // first, same as everywhere else transactions get listed.
+  const incomeTransactionOptions = sortTransactionsNewestFirst((transactions || []).filter((t) => t.type === "income"));
+  // Picking a transaction is a one-time snapshot, not a live link - it just copies
+  // that transaction's amount in (same as the 50/30/20 tool's "pull from
+  // transaction"), rather than keeping a reference that would break if the
+  // transaction is later edited or deleted, or stop making sense once the budget
+  // repeats into a new cycle. `sourceTransactionId` only exists to drive which
+  // option this dropdown shows as selected while editing - it's never saved (see
+  // cleanedIncomeItems in submit, below), so there's nothing to keep in sync later.
+  const pickIncomeTransaction = (id, transactionId) => {
+    const tx = incomeTransactionOptions.find((t) => t.id === transactionId);
+    setIncomeItems((items) => items.map((it) => {
+      if (it.id !== id) return it;
+      if (!tx) return { ...it, sourceTransactionId: "" };
+      return {
+        ...it,
+        sourceTransactionId: tx.id,
+        amount: tx.amount,
+        name: it.name.trim() ? it.name : (tx.description || "Income"),
+      };
+    }));
+  };
   const addIncomeItem = () => {
     setIncomeItems((items) => [...items, { id: uid(), name: "", mode: "manual", amount: "" }]);
   };
@@ -250,7 +273,7 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
                   type="button"
                   className="icon-btn budget-info-icon"
                   aria-label="How income modes work"
-                  title={"Income entries have 2 different modes.\n\nManual: Type in a fixed amount yourself.\n\nCategory: Create this income field as a category that you can assign income and transfer transactions to. The total value of transactions assigned to that category will be the value used."}
+                  title={"Income entries have 3 different modes.\n\nManual: Type in a fixed amount yourself.\n\nCategory: Create this income field as a category that you can assign income and transfer transactions to. The total value of transactions assigned to that category will be the value used, updating automatically as new matching transactions come in.\n\nTransaction: Pull the amount from one of your existing income transactions. This just copies that transaction's amount in as a starting point - it won't stay in sync if that transaction is later changed, and you can still adjust the amount afterward."}
                 >
                   <Info size={13} />
                 </button>
@@ -260,6 +283,7 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
           <div className="budget-items">
             {incomeItems.map((it, ii) => {
               const isCategory = it.mode === "category";
+              const isTransaction = it.mode === "transaction";
               return (
                 <div key={it.id} className="budget-income-block">
                   <div className="budget-cat-row">
@@ -291,10 +315,15 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
                       value={it.name}
                       onChange={(e) => updateIncomeItem(it.id, { name: e.target.value })}
                     />
-                    <div className="seg budget-income-mode-seg">
-                      <button type="button" className={`seg-btn ${!isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "manual" })}>Manual</button>
-                      <button type="button" className={`seg-btn ${isCategory ? "active" : ""}`} onClick={() => updateIncomeItem(it.id, { mode: "category" })}>Category</button>
-                    </div>
+                    <select
+                      className="select budget-income-mode-select"
+                      value={it.mode}
+                      onChange={(e) => updateIncomeItem(it.id, { mode: e.target.value, ...(e.target.value !== "transaction" ? { sourceTransactionId: "" } : {}) })}
+                    >
+                      <option value="manual">Manual</option>
+                      <option value="category">Category</option>
+                      <option value="transaction">Transaction</option>
+                    </select>
                     {incomeItems.length > 1 && (
                       <button type="button" className="icon-btn" onClick={() => removeIncomeItem(it.id)} aria-label="Remove income item"><Trash2 size={14} /></button>
                     )}
@@ -304,6 +333,22 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
                       <label>Tracked total</label>
                       <div className="input mono budget-income-tracked" title="Total from income (and any transfer explicitly tagged) transactions assigned to this category">
                         {fmt(itemAmount(it))}
+                      </div>
+                    </div>
+                  ) : isTransaction ? (
+                    <div className="form-row">
+                      <div className="form-group budget-cat-bulk">
+                        <label>Pull from transaction</label>
+                        <select className="select" value={it.sourceTransactionId || ""} onChange={(e) => pickIncomeTransaction(it.id, e.target.value)}>
+                          <option value="">Select a transaction…</option>
+                          {incomeTransactionOptions.map((t) => (
+                            <option key={t.id} value={t.id}>{t.description || "Income"} · {fmtDate(t.date)} · {fmt(t.amount)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group budget-cat-bulk">
+                        <label>Amount</label>
+                        <input type="number" min="0" step="0.01" className="input mono" placeholder="0.00" value={it.amount} onChange={(e) => updateIncomeItem(it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
                       </div>
                     </div>
                   ) : (
