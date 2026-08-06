@@ -359,6 +359,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-items { display:flex; flex-direction:column; gap:8px; }
 .budget-item-row { display:flex; align-items:center; gap:8px; }
 .budget-item-row .input { flex:1; }
+.budget-item-row-dragging { opacity:0.45; }
+.budget-item-row-drop-target { border-color:var(--brass); box-shadow:0 -2px 0 var(--brass); }
+.budget-item-grip { color:var(--text-faint); flex-shrink:0; cursor:grab; }
 .budget-item-amount { width:110px; flex-shrink:0; }
 .budget-item-date { width:150px; flex-shrink:0; }
 .budget-items-footer { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }

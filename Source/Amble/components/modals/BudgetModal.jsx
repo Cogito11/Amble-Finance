@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info
+  Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info, GripVertical
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
@@ -87,6 +87,18 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
     // Always leave at least one line so there's somewhere to enter an amount.
     setIncomeItems((items) => (items.length > 1 ? items.filter((it) => it.id !== id) : items));
   };
+  // Moves an income line up/down by one slot for reordering - same approach as moveCategory.
+  const moveIncomeItem = (id, direction) => {
+    setIncomeItems((items) => {
+      const index = items.findIndex((it) => it.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= items.length) return items;
+      const next = [...items];
+      const [moved] = next.splice(index, 1);
+      next.splice(target, 0, moved);
+      return next;
+    });
+  };
 
   const addCategory = () => {
     setCats((cs) => [...cs, { id: uid(), name: "", mode: "bulk", bulkAmount: 0, date: "", items: [], color: nextCategoryColor([...(categories || []), ...cs], "") }]);
@@ -117,6 +129,26 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
   };
   const removeItem = (catId, itemId) => {
     setCats((cs) => cs.map((c) => (c.id === catId ? { ...c, items: (c.items || []).filter((i) => i.id !== itemId) } : c)));
+  };
+  // Drag-and-drop reorder for a category's sub-expenses - same drop-on-target
+  // approach as SidebarSettingsModal/StatusSettingsModal, just scoped to one
+  // category's own items array rather than a flat list. Only one drag can be in
+  // flight at a time regardless of which category it's in, so the drag state
+  // below is shared rather than per-category.
+  const [dragItemId, setDragItemId] = useState(null);
+  const [overItemId, setOverItemId] = useState(null);
+  const reorderItem = (catId, draggedId, targetId) => {
+    setCats((cs) => cs.map((c) => {
+      if (c.id !== catId) return c;
+      const items = c.items || [];
+      const draggedIndex = items.findIndex((i) => i.id === draggedId);
+      const targetIndex = items.findIndex((i) => i.id === targetId);
+      if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) return c;
+      const next = [...items];
+      const [moved] = next.splice(draggedIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return { ...c, items: next };
+    }));
   };
 
   const submit = () => {
@@ -226,11 +258,33 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
             </div>
           </div>
           <div className="budget-items">
-            {incomeItems.map((it) => {
+            {incomeItems.map((it, ii) => {
               const isCategory = it.mode === "category";
               return (
                 <div key={it.id} className="budget-income-block">
                   <div className="budget-cat-row">
+                    <div className="budget-cat-move-btns">
+                      <button
+                        type="button"
+                        className="icon-btn budget-cat-move-btn"
+                        title="Move income up"
+                        aria-label="Move income up"
+                        disabled={ii === 0}
+                        onClick={() => moveIncomeItem(it.id, -1)}
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn budget-cat-move-btn"
+                        title="Move income down"
+                        aria-label="Move income down"
+                        disabled={ii === incomeItems.length - 1}
+                        onClick={() => moveIncomeItem(it.id, 1)}
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </div>
                     <input
                       className="input"
                       placeholder={isCategory ? "Category name (e.g. Paycheck)" : "e.g. Paycheck 1, Rollover from last month"}
@@ -335,7 +389,21 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
               {c.mode === "items" ? (
                 <div className="budget-items">
                   {(c.items || []).map((it) => (
-                    <div key={it.id} className="budget-item-row">
+                    <div
+                      key={it.id}
+                      className={`budget-item-row ${dragItemId === it.id ? "budget-item-row-dragging" : ""} ${overItemId === it.id && dragItemId && dragItemId !== it.id ? "budget-item-row-drop-target" : ""}`}
+                      draggable
+                      onDragStart={() => setDragItemId(it.id)}
+                      onDragEnd={() => { setDragItemId(null); setOverItemId(null); }}
+                      onDragOver={(e) => { e.preventDefault(); if (it.id !== overItemId) setOverItemId(it.id); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragItemId && dragItemId !== it.id) reorderItem(c.id, dragItemId, it.id);
+                        setDragItemId(null);
+                        setOverItemId(null);
+                      }}
+                    >
+                      <GripVertical size={14} className="budget-item-grip" aria-hidden="true" />
                       <input className="input" placeholder="Expense (e.g. Netflix)" value={it.name} onChange={(e) => updateItem(c.id, it.id, { name: e.target.value })} />
                       <input type="date" className="input mono budget-item-date" title="Date (optional)" value={it.date || ""} onChange={(e) => updateItem(c.id, it.id, { date: e.target.value })} />
                       <input type="number" min="0" step="0.01" className="input mono budget-item-amount" placeholder="0.00" value={it.amount} onChange={(e) => updateItem(c.id, it.id, { amount: e.target.value })} onWheel={blurOnWheel} />
