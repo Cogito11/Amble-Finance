@@ -1,17 +1,22 @@
 import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
-// Hand-curated (not evenly hue-rotated) so neighbors read as distinct colors
-// rather than blending into a gradient - saturation/lightness vary per entry
-// on purpose. Weighted toward reds/oranges/greens/teals/blues; purple/pink
-// kept to a handful of calmer accents (indigo through rose below); "slate"
-// and "sand" at the end are true desaturated neutrals, not another hue family.
+// Hand-curated (not a mechanical hue-rotation) so neighbors read as distinct
+// colors even within the same hue family - saturation/lightness vary per
+// entry on purpose, same reasoning as before. This set trades the old
+// palette's warm-leaning, fairly muted spread for full, even hue-wheel
+// coverage at higher saturation: 12 hue families (red, orange, amber, lime,
+// green, teal, cyan, blue, indigo, violet, purple, pink/rose), 3 hand-picked
+// shades each, so there's real variety within a family instead of just one
+// "the blue" per hue. No desaturated neutrals this time - every entry here
+// is meant to read as vibrant.
 export const CAT_PALETTE = [
-  "#D2414D", "#DC7160", "#D07039", "#DE9E54", "#D4AB49", "#D6C066",
-  "#C0C44F", "#A0C251", "#71B045", "#5DBF4A", "#3E984A", "#42A975",
-  "#36A192", "#3DB7C2", "#3895BC", "#4A8AC9", "#587CD0", "#3E51CC",
-  "#3F36BF", "#466B9B", "#6A4AB5", "#8D5BB9", "#AF67C1", "#C760A2",
-  "#D06287", "#A84F38", "#6E9245", "#397F50", "#535C65", "#BCB19F",
+  "#E63946", "#FF3B30", "#C1121F", "#FF6B35", "#F4791F", "#FF8C42",
+  "#FFB800", "#E3B505", "#F5C518", "#A8D600", "#8BC53F", "#7CB518",
+  "#2ECC71", "#16A34A", "#06A26A", "#14B8A6", "#0D9488", "#12A594",
+  "#06B6D4", "#22B8CF", "#00A8CC", "#3B82F6", "#2D6CDF", "#1D63D1",
+  "#4C51E0", "#5B5FEF", "#6C63FF", "#7C3AED", "#8B5CF6", "#9D4EDD",
+  "#A855F7", "#C026D3", "#D633C5", "#F72585", "#E5399B", "#FB5D9E",
 ];
 
 // Small stable string hash (not cryptographic - just needs to spread names
