@@ -48,17 +48,43 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
   const uncategorizedSpentRolling = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
   const rolling30Expense = rolling30Tx.reduce((s, t) => s + t.amount, 0);
 
-  // Same rule as the budget gauges above: general categories + the active budget's
-  // categories only, so a deactivated budget's spend doesn't linger in the pie. Each
-  // slice's value follows categorySpend's time-frame rule too — all-time for a category
-  // whose budget has a start/end date, rolling 30 days for everything else — so the pie
-  // and the gauges always agree on what a given category's "spend" means.
-  const pieData = expenseCats
-    .filter((c) => !c.planId || c.planId === activeBudgetId)
-    .map((c) => ({
-      name: c.name, color: c.color,
-      value: categorySpend(c, transactions, budgets, categories),
-    })).filter((d) => d.value > 0);
+  // With a budget active: same rule as the budget gauges above - general categories
+  // + the active budget's categories only, so a deactivated budget's spend doesn't
+  // linger in the pie. Each slice's value follows categorySpend's time-frame rule
+  // too — all-time for a category whose budget has a start/end date, rolling 30
+  // days for everything else — so the pie and the gauges always agree on what a
+  // given category's "spend" means.
+  //
+  // With no budget active there's no budget to scope the pie to, so instead of
+  // falling back to just general (non-budget) categories - which is often empty -
+  // it mirrors the Status tab's "Last 30 days" breakdown: every rolling-30-day
+  // expense grouped by its top-level category (itemized sub-expenses roll up into
+  // their parent), plus a real Uncategorized slice for spend with no category.
+  const pieData = activeBudget
+    ? expenseCats
+        .filter((c) => !c.planId || c.planId === activeBudgetId)
+        .map((c) => ({
+          name: c.name, color: c.color,
+          value: categorySpend(c, transactions, budgets, categories),
+        })).filter((d) => d.value > 0)
+    : (() => {
+        const byTopCategory = {};
+        rolling30Tx.forEach((t) => {
+          if (!t.categoryId) return;
+          const cat = categories.find((c) => c.id === t.categoryId);
+          const top = cat ? (cat.parentCategoryId ? categories.find((c) => c.id === cat.parentCategoryId) : cat) : null;
+          if (!top) return;
+          byTopCategory[top.id] = (byTopCategory[top.id] || 0) + t.amount;
+        });
+        const rows = Object.entries(byTopCategory).map(([id, value]) => {
+          const cat = categories.find((c) => c.id === id);
+          return { name: cat?.name || "Unknown", color: cat?.color || "var(--text-faint)", value };
+        });
+        if (uncategorizedSpentRolling > 0) {
+          rows.push({ name: "Uncategorized", color: "var(--text-faint)", value: uncategorizedSpentRolling });
+        }
+        return rows;
+      })();
 
   const trendData = [];
   for (let i = 5; i >= 0; i--) {
@@ -339,9 +365,12 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
         <div className={`grid-2${showPie && showTrend ? "" : " grid-2-single"}`}>
           {showPie && (
             <div className="card">
-              <div className="card-title">Spending by category</div>
+              <div className="card-title">
+                Spending by category
+                {!activeBudget && <span className="muted" style={{ fontWeight: 400 }}>Last 30 days</span>}
+              </div>
               {pieData.length === 0 ? (
-                <div className="chart-empty">No expenses logged yet.</div>
+                <div className="chart-empty">{activeBudget ? "No expenses logged yet." : "No expenses logged in the last 30 days."}</div>
               ) : (
                 <div className="pie-wrap">
                   <div className="pie-chart-wrap">
