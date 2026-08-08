@@ -11,6 +11,7 @@ export const APP_INFO = {
   maintainerHandle: "@cogito11",
   githubUrl: "https://github.com/Cogito11/Amble-Finance",
   websiteUrl: "https://cogito11.github.io/Amble-Finance/",
+  downloadUrl: "https://cogito11.github.io/Amble-Finance/#download",
 };
 
 // Mac uses the ⌘ glyph in shortcut hints everywhere else on the platform, so
