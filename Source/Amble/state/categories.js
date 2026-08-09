@@ -3,20 +3,20 @@ import { uid } from "../utils/misc";
 
 // Hand-curated (not a mechanical hue-rotation) so neighbors read as distinct
 // colors even within the same hue family - saturation/lightness vary per
-// entry on purpose, same reasoning as before. This set trades the old
-// palette's warm-leaning, fairly muted spread for full, even hue-wheel
-// coverage at higher saturation: 12 hue families (red, orange, amber, lime,
-// green, teal, cyan, blue, indigo, violet, purple, pink/rose), 3 hand-picked
-// shades each, so there's real variety within a family instead of just one
-// "the blue" per hue. No desaturated neutrals this time - every entry here
-// is meant to read as vibrant.
+// entry on purpose. Same full hue-wheel coverage as before (12 families -
+// red, orange, amber, lime, green, teal, cyan, blue, indigo, violet, purple,
+// rose - 3 shades each) but tuned to a calmer register: saturation capped in
+// the ~40-62% range and lightness kept mid-range, rather than letting some
+// entries run up toward pure/neon (e.g. the old FF3B30 at full saturation).
+// D2414D and 3E984A anchor the red and green families respectively - every
+// other shade was picked to sit in that same "rich, not abrasive" territory.
 export const CAT_PALETTE = [
-  "#E63946", "#FF3B30", "#C1121F", "#FF6B35", "#F4791F", "#FF8C42",
-  "#FFB800", "#E3B505", "#F5C518", "#A8D600", "#8BC53F", "#7CB518",
-  "#2ECC71", "#16A34A", "#06A26A", "#14B8A6", "#0D9488", "#12A594",
-  "#06B6D4", "#22B8CF", "#00A8CC", "#3B82F6", "#2D6CDF", "#1D63D1",
-  "#4C51E0", "#5B5FEF", "#6C63FF", "#7C3AED", "#8B5CF6", "#9D4EDD",
-  "#A855F7", "#C026D3", "#D633C5", "#F72585", "#E5399B", "#FB5D9E",
+  "#BE2D39", "#D2414D", "#D85A64", "#AE5929", "#CF6A30", "#D68251",
+  "#A98A2D", "#C9A436", "#D0AF4E", "#748F32", "#8CAE3D", "#9CBF4A",
+  "#327B3C", "#3E984A", "#4AB558", "#308876", "#3AA691", "#4ABFA8",
+  "#338599", "#3D9FB8", "#4FADC4", "#3264AE", "#4177C8", "#5988CF",
+  "#3C38B2", "#514DC7", "#6764CE", "#6E3DAE", "#8251C2", "#9268CA",
+  "#983AA6", "#B04ABF", "#BA60C7", "#B63564", "#CA4978", "#D1618A",
 ];
 
 // Small stable string hash (not cryptographic - just needs to spread names
