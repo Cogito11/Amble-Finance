@@ -21,7 +21,7 @@ import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
-import { clearRemovedCategoryRefs, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
+import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
@@ -543,9 +543,25 @@ export default function App() {
   const saveCategory = (c) => {
     setState((s) => {
       const exists = s.categories.some((x) => x.id === c.id);
-      return { ...s, categories: exists ? s.categories.map((x) => x.id === c.id ? c : x) : [...s.categories, c] };
+      const prev = exists ? s.categories.find((x) => x.id === c.id) : null;
+      let categories = exists ? s.categories.map((x) => x.id === c.id ? c : x) : [...s.categories, c];
+      // Sub-expenses always mirror their parent's color (see nextCategoryColor
+      // in state/categories.js), so if this edit changed a top-level category's
+      // color, propagate it to any children instead of letting them go stale.
+      if (!c.parentCategoryId && prev && prev.color !== c.color) {
+        categories = recolorCategoryAndChildren(categories, c.id, c.color);
+      }
+      return { ...s, categories };
     });
     setCatModal(null);
+  };
+  // Lets BudgetModal recolor an already-linked category (one with a real
+  // Category record) when the budget is saved - color has exactly one home
+  // (the Category record itself), so a budget never gets its own copy to
+  // keep in sync or let go stale, even though the edit itself is still tied
+  // to that budget's own Save/Cancel like everything else in the form.
+  const recolorBudgetCategory = (categoryId, color) => {
+    setState((s) => ({ ...s, categories: recolorCategoryAndChildren(s.categories, categoryId, color) }));
   };
   const deleteCategory = (id) => {
     setState((s) => ({
@@ -855,7 +871,11 @@ export default function App() {
   // Redistributes every category's color from scratch, spreading them out evenly
   // across CAT_PALETTE. Purely cosmetic and non-destructive, so unlike the other
   // maintenance actions this runs immediately without a confirmation dialog, and
-  // can be run as many times as you like.
+  // can be run as many times as you like. Color lives only on the Category record
+  // itself (see recolorCategoryAndChildren / syncBudgetCategories), so unlike an
+  // earlier version of this function, there's no separate per-budget color copy
+  // that also needs sweeping here to stay in sync - updating s.categories is the
+  // whole update.
   const refreshCategoryColors = () => {
     setState((s) => {
       const { categories, changedCount } = redistributeCategoryColors(s.categories);
@@ -1093,6 +1113,7 @@ export default function App() {
           onSave={saveBudget}
           onClose={() => setBudgetModal(null)}
           onDelete={requestDeleteBudget}
+          onRecolorCategory={recolorBudgetCategory}
         />
       )}
       {widgetModalOpen && (

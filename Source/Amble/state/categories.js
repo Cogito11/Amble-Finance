@@ -28,6 +28,18 @@ function hashString(str) {
   return hash;
 }
 
+// Recolors a top-level category and mirrors the new color onto every sub-expense
+// (parentCategoryId) that belongs to it - the single place that logic lives, so
+// every caller that changes a category's color (editing it directly, editing it
+// from within a budget, or bulk-refreshing every category's color) goes through
+// the same rule instead of each re-implementing its own propagation.
+export function recolorCategoryAndChildren(categories, categoryId, color) {
+  return (categories || []).map((c) => {
+    if (c.id === categoryId || c.parentCategoryId === categoryId) return { ...c, color };
+    return c;
+  });
+}
+
 // Picks a color for a new category from CAT_PALETTE, preferring colors that
 // aren't already in use by an existing category so categories stay visually
 // distinct for as long as possible (up to the palette size). Once every color
@@ -193,9 +205,15 @@ export function syncBudgetCategories(budget, categories) {
     const existingIdx = pc.categoryId ? cats.findIndex((c) => c.id === pc.categoryId) : -1;
     let parentId, parentColor;
     if (existingIdx >= 0) {
+      // Color lives on the real category record only - never on the budget's own
+      // copy of this row. Leaving `color` out of this update (rather than pulling
+      // it from pc.color) means a live color change - from CategoryModal, from a
+      // bulk refresh, or from recoloring this same category through another
+      // budget - can never be silently overwritten by a stale value this budget
+      // happened to be holding onto.
       parentId = pc.categoryId;
-      parentColor = pc.color || cats[existingIdx].color;
-      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: budget.id, type: "expense", parentCategoryId: null, date: pc.date || null, color: parentColor };
+      parentColor = cats[existingIdx].color;
+      cats[existingIdx] = { ...cats[existingIdx], name: pc.name, limit: total, planId: budget.id, type: "expense", parentCategoryId: null, date: pc.date || null };
       keepIds.add(parentId);
     } else {
       parentId = uid();
@@ -227,7 +245,13 @@ export function syncBudgetCategories(budget, categories) {
       });
     }
 
-    return { ...pc, categoryId: parentId, items: newItems };
+    // Once a category is linked (has a categoryId), its color belongs solely to
+    // the real category record above - strip it here so it's never written back
+    // onto the budget itself as a second, driftable copy. This also self-heals
+    // budgets saved before this change: the leftover `color` field just gets
+    // dropped the next time the budget is saved.
+    const { color: _unusedColor, ...pcRest } = pc;
+    return { ...pcRest, categoryId: parentId, items: newItems };
   });
 
   // Income entries set to "track by category" get the exact same mirroring

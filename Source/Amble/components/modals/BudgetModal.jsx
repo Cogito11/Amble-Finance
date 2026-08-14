@@ -11,7 +11,7 @@ import { fmt, fmtDate } from "../../utils/format";
 import { blurOnWheel, sortTransactionsNewestFirst, uid } from "../../utils/misc";
 
 /* ---------------------------------- budget modal ---------------------------------- */
-export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete }) {
+export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete, onRecolorCategory }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [startDate, setStartDate] = useState(initial.startDate || "");
@@ -29,9 +29,16 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
   const [cats, setCats] = useState(
     (initial.categories && initial.categories.length ? initial.categories : []).map((c) => ({
       ...c,
-      color: c.color
-        || (c.categoryId ? (categories || []).find((cc) => cc.id === c.categoryId)?.color : null)
-        || nextCategoryColor(categories, c.name),
+      // A category that's already linked to a real Category record gets its
+      // color from there, always - never from a value stored on the budget
+      // itself (older saved budgets may still have a leftover `color` field;
+      // it's ignored and dropped the next time this budget is saved). A row
+      // that hasn't been linked yet (a category just added in this modal,
+      // not yet saved) has no live record to read from, so it keeps whatever
+      // color it was assigned when added below.
+      color: c.categoryId
+        ? (categories || []).find((cc) => cc.id === c.categoryId)?.color || nextCategoryColor(categories, c.name)
+        : (c.color || nextCategoryColor(categories, c.name)),
     }))
   );
   const [repeatOn, setRepeatOn] = useState(!!(initial.repeat && initial.repeat.enabled));
@@ -176,6 +183,17 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
 
   const submit = () => {
     if (!canSave) return;
+    // Any color edits made in this modal to an already-linked category are
+    // applied now, together with everything else - not the moment the swatch
+    // was clicked - so Cancel discards them like any other unsaved change,
+    // and Save applies them all at once.
+    if (onRecolorCategory) {
+      cats.forEach((c) => {
+        if (!c.categoryId) return;
+        const live = (categories || []).find((cc) => cc.id === c.categoryId);
+        if (live && live.color !== c.color) onRecolorCategory(c.categoryId, c.color);
+      });
+    }
     const cleanedIncomeItems = incomeItems.map((it) => ({
       id: it.id,
       name: it.name.trim() || (it.mode === "category" ? "Untitled category" : "Income"),
@@ -201,7 +219,11 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
         mode: c.mode === "items" ? "items" : "bulk",
         bulkAmount: Number(c.bulkAmount) || 0,
         date: c.date || null,
-        color: c.color,
+        // Only a not-yet-linked category needs a color here, to seed the real
+        // Category record syncBudgetCategories is about to create for it. An
+        // already-linked one just had its color applied above, so sending it
+        // here again would just be a second, driftable copy.
+        color: c.categoryId ? undefined : c.color,
         items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
       })),
     });
@@ -423,7 +445,11 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
                     <ChevronDown size={14} />
                   </button>
                 </div>
-                <ColorSwatchButton color={c.color} onChange={(color) => updateCategory(c.id, { color })} label="Category color" />
+                <ColorSwatchButton
+                  color={c.color}
+                  onChange={(color) => updateCategory(c.id, { color })}
+                  label="Category color"
+                />
                 <input className="input" placeholder="Category name (e.g. Streaming services)" value={c.name} onChange={(e) => updateCategory(c.id, { name: e.target.value })} />
                 <div className="seg budget-cat-seg">
                   <button type="button" className={`seg-btn ${c.mode !== "items" ? "active" : ""}`} onClick={() => updateCategory(c.id, { mode: "bulk" })}>Bulk</button>
