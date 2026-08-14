@@ -1,17 +1,22 @@
 import { isWithinRolling30Days } from "../utils/dates";
 import { uid } from "../utils/misc";
 
-// Hand-curated (not evenly hue-rotated) so neighbors read as distinct colors
-// rather than blending into a gradient - saturation/lightness vary per entry
-// on purpose. Weighted toward reds/oranges/greens/teals/blues; purple/pink
-// kept to a handful of calmer accents (indigo through rose below); "slate"
-// and "sand" at the end are true desaturated neutrals, not another hue family.
+// Hand-curated (not a mechanical hue-rotation) so neighbors read as distinct
+// colors even within the same hue family - saturation/lightness vary per
+// entry on purpose. Same full hue-wheel coverage as before (12 families -
+// red, orange, amber, lime, green, teal, cyan, blue, indigo, violet, purple,
+// rose - 3 shades each) but tuned to a calmer register: saturation capped in
+// the ~40-62% range and lightness kept mid-range, rather than letting some
+// entries run up toward pure/neon (e.g. the old FF3B30 at full saturation).
+// D2414D and 3E984A anchor the red and green families respectively - every
+// other shade was picked to sit in that same "rich, not abrasive" territory.
 export const CAT_PALETTE = [
-  "#D2414D", "#DC7160", "#D07039", "#DE9E54", "#D4AB49", "#D6C066",
-  "#C0C44F", "#A0C251", "#71B045", "#5DBF4A", "#3E984A", "#42A975",
-  "#36A192", "#3DB7C2", "#3895BC", "#4A8AC9", "#587CD0", "#3E51CC",
-  "#3F36BF", "#466B9B", "#6A4AB5", "#8D5BB9", "#AF67C1", "#C760A2",
-  "#D06287", "#A84F38", "#6E9245", "#397F50", "#535C65", "#BCB19F",
+  "#BE2D39", "#D2414D", "#D85A64", "#AE5929", "#CF6A30", "#D68251",
+  "#A98A2D", "#C9A436", "#D0AF4E", "#748F32", "#8CAE3D", "#9CBF4A",
+  "#327B3C", "#3E984A", "#4AB558", "#308876", "#3AA691", "#4ABFA8",
+  "#338599", "#3D9FB8", "#4FADC4", "#3264AE", "#4177C8", "#5988CF",
+  "#3C38B2", "#514DC7", "#6764CE", "#6E3DAE", "#8251C2", "#9268CA",
+  "#983AA6", "#B04ABF", "#BA60C7", "#B63564", "#CA4978", "#D1618A",
 ];
 
 // Small stable string hash (not cryptographic - just needs to spread names
