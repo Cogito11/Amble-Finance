@@ -1,9 +1,14 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { fmt, fmtDate } from "../../utils/format";
+
+const SEARCH_DEBOUNCE_MS = 200;
+const BATCH_SIZE = 50; // rows loaded/unloaded per scroll trigger
+const MAX_MOUNTED = 150; // once the mounted window exceeds this, the trailing batch is dropped
+const ESTIMATED_ROW_HEIGHT = 49; // px - stands in for unloaded rows' height in the spacer rows
 
 function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
   return (
@@ -29,19 +34,88 @@ const DEFAULT_FILTERS = {
   accountId: "all", amountMin: "", amountMax: "",
 };
 
+// A single transaction row, memoized so scrolling/loading/unloading doesn't
+// force a re-render of rows that aren't actually changing.
+const TransactionRow = React.memo(function TransactionRow({ t, categoryMap, accountMap, onEdit, onDelete }) {
+  const category = categoryMap.get(t.categoryId);
+  const accountName = accountMap.get(t.accountId)?.name || "—";
+  const toAccountName = accountMap.get(t.toAccountId)?.name || "—";
+  const categoryName = category?.name || "Uncategorized";
+  const categoryColor = category?.color || "var(--border)";
+
+  return (
+    <tr
+      className="tx-row"
+      tabIndex={0}
+      onClick={() => { if (window.getSelection().toString()) return; onEdit(t); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(t); } }}
+    >
+      <td className="muted">{fmtDate(t.date)}</td>
+      <td>{t.description || "—"}</td>
+      <td>
+        {t.type === "transfer" ? (
+          <div className="pill-group">
+            <span className="pill"><ArrowRightLeft size={12} /> {accountName} → {toAccountName}</span>
+            {t.categoryId && <span className="pill" style={{ borderColor: categoryColor }}>{categoryName}</span>}
+          </div>
+        ) : <span className="pill" style={{ borderColor: categoryColor }}>{categoryName}</span>}
+      </td>
+      <td className="muted">{accountName}</td>
+      <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>{t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}</td>
+      <td className="row-actions-cell"><div className="row-actions"><button className="icon-btn" onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} aria-label="Delete transaction"><Trash2 size={14} /></button></div></td>
+    </tr>
+  );
+});
+
+// A blank spacer row standing in for `count` unmounted rows above or below
+// the current window, so the table's overall height (and therefore scroll
+// position/scrollbar size) stays roughly correct even though those rows
+// aren't actually in the DOM. Height is an estimate, not a measurement - see
+// ESTIMATED_ROW_HEIGHT - so this is deliberately approximate rather than
+// pixel-exact.
+function SpacerRow({ count }) {
+  if (count <= 0) return null;
+  return (
+    <tr aria-hidden="true" style={{ border: "none" }}>
+      <td colSpan="6" style={{ height: count * ESTIMATED_ROW_HEIGHT, padding: 0, border: "none" }} />
+    </tr>
+  );
+}
+
 /* ---------------------------------- transactions view ---------------------------------- */
 export function TransactionsView({ accounts, categories, transactions, onEdit, onAdd, onDelete, searchInputRef }) {
   const [search, setSearch] = useState("");
+  // The raw `search` state updates on every keystroke so the input itself
+  // stays responsive, but the expensive filter/sort pass below only reacts to
+  // `debouncedSearch`, which settles ~200ms after typing stops.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
   const [openFilter, setOpenFilter] = useState(null);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ column: "date", direction: "desc" });
-  const catName = (id) => categories.find((c) => c.id === id)?.name || "Uncategorized";
+
+  // The mounted window into `filtered`: rows [windowStart, windowEnd) are
+  // the only ones actually rendered as <tr> elements.
+  const [windowStart, setWindowStart] = useState(0);
+  const [windowEnd, setWindowEnd] = useState(BATCH_SIZE);
+
+  // O(1) id -> record lookups, instead of catName/accName doing an
+  // Array.find() scan on every call across every transaction.
+  const categoryMap = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const accountMap = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
+  const catName = useCallback((id) => categoryMap.get(id)?.name || "Uncategorized", [categoryMap]);
+  const accName = useCallback((id) => accountMap.get(id)?.name || "—", [accountMap]);
+
   const categoryFilterOptions = useMemo(() => {
     const parentIds = new Set(categories.filter((c) => c.parentCategoryId).map((c) => c.parentCategoryId));
     const names = new Set(categories.filter((c) => !parentIds.has(c.id)).map((c) => c.name));
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [categories]);
-  const accName = (id) => accounts.find((a) => a.id === id)?.name || "—";
+
   const updateFilter = (patch) => setFilters((current) => ({ ...current, ...patch }));
   const clearFilter = (column) => {
     const reset = {
@@ -70,23 +144,40 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   }, [transactions]);
 
   const filtered = useMemo(() => {
-    const searchTerm = search.trim().toLowerCase();
-    const rows = transactions
-      .filter((transaction) => !filters.dateFrom || transaction.date >= filters.dateFrom)
-      .filter((transaction) => !filters.dateTo || transaction.date <= filters.dateTo)
-      .filter((transaction) => !filters.description || (transaction.description || "").toLowerCase().includes(filters.description.toLowerCase()))
-      .filter((transaction) => filters.type === "all" || transaction.type === filters.type)
-      .filter((transaction) => {
-        if (filters.categoryId === "all") return true;
-        if (filters.categoryId === "transfer") return transaction.type === "transfer";
-        if (filters.categoryId === "uncategorized") return !transaction.categoryId && transaction.type !== "transfer";
-        return catName(transaction.categoryId) === filters.categoryId;
-      })
-      .filter((transaction) => filters.accountId === "all" || transaction.accountId === filters.accountId || transaction.toAccountId === filters.accountId)
-      .filter((transaction) => filters.amountMin === "" || transaction.amount >= Number(filters.amountMin))
-      .filter((transaction) => filters.amountMax === "" || transaction.amount <= Number(filters.amountMax))
-      .filter((transaction) => !searchTerm || [transaction.description, catName(transaction.categoryId), accName(transaction.accountId), accName(transaction.toAccountId), transaction.type]
-        .filter(Boolean).some((value) => String(value).toLowerCase().includes(searchTerm)));
+    const searchTerm = debouncedSearch.trim().toLowerCase();
+    const hasDateFrom = !!filters.dateFrom;
+    const hasDateTo = !!filters.dateTo;
+    const hasDescription = !!filters.description;
+    const descriptionTerm = hasDescription ? filters.description.toLowerCase() : "";
+    const hasAmountMin = filters.amountMin !== "";
+    const amountMin = hasAmountMin ? Number(filters.amountMin) : 0;
+    const hasAmountMax = filters.amountMax !== "";
+    const amountMax = hasAmountMax ? Number(filters.amountMax) : 0;
+
+    // Single combined pass instead of seven chained .filter() calls - cuts
+    // the constant factor on the O(n) work that's unavoidable on every
+    // mount/tab-switch no matter how few rows end up rendered.
+    const rows = transactions.filter((transaction) => {
+      if (hasDateFrom && transaction.date < filters.dateFrom) return false;
+      if (hasDateTo && transaction.date > filters.dateTo) return false;
+      if (hasDescription && !(transaction.description || "").toLowerCase().includes(descriptionTerm)) return false;
+      if (filters.type !== "all" && transaction.type !== filters.type) return false;
+      if (filters.categoryId !== "all") {
+        if (filters.categoryId === "transfer") {
+          if (transaction.type !== "transfer") return false;
+        } else if (filters.categoryId === "uncategorized") {
+          if (transaction.categoryId || transaction.type === "transfer") return false;
+        } else if (catName(transaction.categoryId) !== filters.categoryId) return false;
+      }
+      if (filters.accountId !== "all" && transaction.accountId !== filters.accountId && transaction.toAccountId !== filters.accountId) return false;
+      if (hasAmountMin && transaction.amount < amountMin) return false;
+      if (hasAmountMax && transaction.amount > amountMax) return false;
+      if (searchTerm) {
+        const haystack = [transaction.description, catName(transaction.categoryId), accName(transaction.accountId), accName(transaction.toAccountId), transaction.type];
+        if (!haystack.filter(Boolean).some((value) => String(value).toLowerCase().includes(searchTerm))) return false;
+      }
+      return true;
+    });
 
     const valueFor = (transaction, column) => {
       if (column === "date") return transaction.date || "";
@@ -97,7 +188,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       if (column === "account") return accName(transaction.accountId).toLowerCase();
       return transaction.amount || 0;
     };
-    return [...rows].sort((a, b) => {
+    return rows.sort((a, b) => {
       const first = valueFor(a, sort.column);
       const second = valueFor(b, sort.column);
       const result = typeof first === "number" ? first - second : String(first).localeCompare(String(second));
@@ -107,16 +198,78 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       // rather than relying on sort stability (which would push it last).
       return orderById.get(b.id) - orderById.get(a.id);
     });
-  }, [transactions, filters, search, sort, accounts, categories, orderById]);
+  }, [transactions, filters, debouncedSearch, sort, catName, accName, orderById]);
+
+  // Whenever the matched set could change, snap the window back to the
+  // start rather than leaving it wherever a previous, differently-sized
+  // filtered set had scrolled to.
+  useEffect(() => {
+    setWindowStart(0);
+    setWindowEnd(BATCH_SIZE);
+  }, [filters, debouncedSearch, sort]);
+
+  const clampedEnd = Math.min(windowEnd, filtered.length);
+  const visibleRows = useMemo(() => filtered.slice(windowStart, clampedEnd), [filtered, windowStart, clampedEnd]);
+  const topSpacerCount = windowStart;
+  const bottomSpacerCount = Math.max(0, filtered.length - clampedEnd);
+  const canLoadMore = clampedEnd < filtered.length;
+  const canLoadPrevious = windowStart > 0;
+
+  // Bottom sentinel: scrolling down near it extends the window forward, and
+  // if the mounted window has grown past MAX_MOUNTED, the leading batch is
+  // dropped off the top so the mounted row count stays capped no matter how
+  // far someone scrolls in one session.
+  const bottomSentinelRef = useRef(null);
+  useEffect(() => {
+    if (!canLoadMore) return undefined;
+    const node = bottomSentinelRef.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setWindowEnd((end) => Math.min(filtered.length, end + BATCH_SIZE));
+        setWindowStart((start) => {
+          const newEnd = Math.min(filtered.length, windowEnd + BATCH_SIZE);
+          return newEnd - start > MAX_MOUNTED ? start + BATCH_SIZE : start;
+        });
+      },
+      { root: null, rootMargin: "600px 0px", threshold: 0 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canLoadMore, filtered.length, windowEnd]);
+
+  // Top sentinel: only relevant once some of the start has been unloaded.
+  // Scrolling back up near it extends the window backward, dropping the
+  // trailing batch off the bottom if the mounted window would otherwise
+  // exceed MAX_MOUNTED.
+  const topSentinelRef = useRef(null);
+  useEffect(() => {
+    if (!canLoadPrevious) return undefined;
+    const node = topSentinelRef.current;
+    if (!node) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setWindowStart((start) => Math.max(0, start - BATCH_SIZE));
+        setWindowEnd((end) => {
+          const newStart = Math.max(0, windowStart - BATCH_SIZE);
+          return end - newStart > MAX_MOUNTED ? Math.max(newStart + BATCH_SIZE, end - BATCH_SIZE) : end;
+        });
+      },
+      { root: null, rootMargin: "600px 0px", threshold: 0 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [canLoadPrevious, windowStart]);
 
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";
 
-  // A click anywhere outside the open filter's own trigger/menu closes it - a
-  // document-level listener is used (rather than a click handler on this view's
-  // own container) because the container only covers the transactions view
-  // itself, so a click on the sidebar, header, or anywhere else outside it never
-  // reached the old handler at all.
+  const handleEdit = useCallback((t) => onEdit(t), [onEdit]);
+  const handleDelete = useCallback((id) => onDelete(id), [onDelete]);
+
+  // A click anywhere outside the open filter's own trigger/menu closes it.
   useEffect(() => {
     if (!openFilter) return;
     const handlePointerDown = (event) => {
@@ -175,7 +328,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {visibleRows.length === 0 && filtered.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="tx-filter-empty">
                     <strong>{transactions.length === 0 ? "It’s quiet." : "No transactions fit that filter."}</strong>
@@ -183,29 +336,24 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                     {transactions.length === 0 && <button type="button" className="btn btn-primary btn-sm" onClick={onAdd}>Add transaction</button>}
                   </td>
                 </tr>
-              ) : filtered.map((t) => (
-                <tr
-                  key={t.id}
-                  className="tx-row"
-                  tabIndex={0}
-                  onClick={() => { if (window.getSelection().toString()) return; onEdit(t); }}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(t); } }}
-                >
-                  <td className="muted">{fmtDate(t.date)}</td>
-                  <td>{t.description || "—"}</td>
-                  <td>
-                    {t.type === "transfer" ? (
-                      <div className="pill-group">
-                        <span className="pill"><ArrowRightLeft size={12} /> {accName(t.accountId)} → {accName(t.toAccountId)}</span>
-                        {t.categoryId && <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>}
-                      </div>
-                    ) : <span className="pill" style={{ borderColor: categories.find((c) => c.id === t.categoryId)?.color || "var(--border)" }}>{catName(t.categoryId)}</span>}
-                  </td>
-                  <td className="muted">{accName(t.accountId)}</td>
-                  <td className={`amount ${t.type === "income" ? "tone-teal" : t.type === "expense" ? "tone-rust" : ""}`}>{t.type === "income" ? "+" : t.type === "expense" ? "−" : ""}{fmt(t.amount)}</td>
-                  <td className="row-actions-cell"><div className="row-actions"><button className="icon-btn" onClick={(e) => { e.stopPropagation(); onDelete(t.id); }} aria-label="Delete transaction"><Trash2 size={14} /></button></div></td>
-                </tr>
-              ))}
+              ) : (
+                <>
+                  <SpacerRow count={topSpacerCount} />
+                  {canLoadPrevious && <tr ref={topSentinelRef} aria-hidden="true"><td colSpan="6" style={{ padding: 0, border: "none" }} /></tr>}
+                  {visibleRows.map((t) => (
+                    <TransactionRow
+                      key={t.id}
+                      t={t}
+                      categoryMap={categoryMap}
+                      accountMap={accountMap}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                  {canLoadMore && <tr ref={bottomSentinelRef} aria-hidden="true"><td colSpan="6" style={{ padding: 0, border: "none" }} /></tr>}
+                  <SpacerRow count={bottomSpacerCount} />
+                </>
+              )}
             </tbody>
           </table>
       </div>
