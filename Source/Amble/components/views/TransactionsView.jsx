@@ -6,9 +6,8 @@ import { EmptyState } from "../common/EmptyState";
 import { fmt, fmtDate } from "../../utils/format";
 
 const SEARCH_DEBOUNCE_MS = 200;
-const BATCH_SIZE = 50; // rows loaded/unloaded per scroll trigger
-const MAX_MOUNTED = 150; // once the mounted window exceeds this, the trailing batch is dropped
-const ESTIMATED_ROW_HEIGHT = 49; // px - stands in for unloaded rows' height in the spacer rows
+const ESTIMATED_ROW_HEIGHT = 49; // px - used both to size the spacer rows and to convert scroll position into row indices
+const OVERSCAN_ROWS = 25; // rows kept mounted above/below the actual viewport as a scroll buffer
 
 function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
   return (
@@ -99,9 +98,13 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const [sort, setSort] = useState({ column: "date", direction: "desc" });
 
   // The mounted window into `filtered`: rows [windowStart, windowEnd) are
-  // the only ones actually rendered as <tr> elements.
+  // the only ones actually rendered as <tr> elements. Unlike the previous
+  // batch/sentinel version, this is recomputed directly from scroll
+  // position on every scroll event (see the effect below) rather than
+  // waiting for a trigger element to cross into view - so fast scrolling
+  // can't outrun it and leave a blank gap.
   const [windowStart, setWindowStart] = useState(0);
-  const [windowEnd, setWindowEnd] = useState(BATCH_SIZE);
+  const [windowEnd, setWindowEnd] = useState(OVERSCAN_ROWS * 2);
 
   // O(1) id -> record lookups, instead of catName/accName doing an
   // Array.find() scan on every call across every transaction.
@@ -200,68 +203,107 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
     });
   }, [transactions, filters, debouncedSearch, sort, catName, accName, orderById]);
 
-  // Whenever the matched set could change, snap the window back to the
-  // start rather than leaving it wherever a previous, differently-sized
-  // filtered set had scrolled to.
-  useEffect(() => {
-    setWindowStart(0);
-    setWindowEnd(BATCH_SIZE);
-  }, [filters, debouncedSearch, sort]);
-
   const clampedEnd = Math.min(windowEnd, filtered.length);
   const visibleRows = useMemo(() => filtered.slice(windowStart, clampedEnd), [filtered, windowStart, clampedEnd]);
   const topSpacerCount = windowStart;
   const bottomSpacerCount = Math.max(0, filtered.length - clampedEnd);
-  const canLoadMore = clampedEnd < filtered.length;
-  const canLoadPrevious = windowStart > 0;
 
-  // Bottom sentinel: scrolling down near it extends the window forward, and
-  // if the mounted window has grown past MAX_MOUNTED, the leading batch is
-  // dropped off the top so the mounted row count stays capped no matter how
-  // far someone scrolls in one session.
-  const bottomSentinelRef = useRef(null);
-  useEffect(() => {
-    if (!canLoadMore) return undefined;
-    const node = bottomSentinelRef.current;
-    if (!node) return undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        setWindowEnd((end) => Math.min(filtered.length, end + BATCH_SIZE));
-        setWindowStart((start) => {
-          const newEnd = Math.min(filtered.length, windowEnd + BATCH_SIZE);
-          return newEnd - start > MAX_MOUNTED ? start + BATCH_SIZE : start;
-        });
-      },
-      { root: null, rootMargin: "600px 0px", threshold: 0 }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [canLoadMore, filtered.length, windowEnd]);
+  // Recomputes exactly which rows *should* be mounted for the current
+  // scroll position, rather than waiting for a sentinel element to cross
+  // into view. This is what closes the "scrolled past too fast, landed in
+  // blank space" gap: since it's math based on scroll position (not an
+  // event that has to physically fire from crossing a trigger), a fast
+  // flick that jumps straight to some scroll position still gets the
+  // correct window computed for wherever it landed - there's no trigger to
+  // outrun.
+  const bodyRef = useRef(null);
 
-  // Top sentinel: only relevant once some of the start has been unloaded.
-  // Scrolling back up near it extends the window backward, dropping the
-  // trailing batch off the bottom if the mounted window would otherwise
-  // exceed MAX_MOUNTED.
-  const topSentinelRef = useRef(null);
+  // Finds the nearest ancestor that's actually scrollable, rather than
+  // assuming the whole page scrolls. If this table sits inside a
+  // fixed-height panel with its own overflow-y: auto (common in a sidebar
+  // layout), that panel - not window - is what the user is actually
+  // scrolling, and it's the one whose scroll events and dimensions need to
+  // drive this calculation. Falls back to the window/document when nothing
+  // scrollable is found above it, so this works either way without needing
+  // to know the app's layout in advance.
+  const getScrollParent = (el) => {
+    let node = el?.parentElement;
+    while (node && node !== document.body) {
+      const overflowY = window.getComputedStyle(node).overflowY;
+      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) return node;
+      node = node.parentElement;
+    }
+    return null; // null means "the page itself scrolls"
+  };
+
+  const recalcWindow = useCallback(() => {
+    const node = bodyRef.current;
+    if (!node) return;
+    const scrollParent = getScrollParent(node);
+
+    let tableTop, viewTop, viewBottom;
+    if (scrollParent) {
+      const nodeRect = node.getBoundingClientRect();
+      const parentRect = scrollParent.getBoundingClientRect();
+      tableTop = nodeRect.top - parentRect.top + scrollParent.scrollTop;
+      viewTop = scrollParent.scrollTop;
+      viewBottom = viewTop + scrollParent.clientHeight;
+    } else {
+      tableTop = node.getBoundingClientRect().top + window.scrollY;
+      viewTop = window.scrollY;
+      viewBottom = viewTop + window.innerHeight;
+    }
+
+    const firstVisible = Math.floor((viewTop - tableTop) / ESTIMATED_ROW_HEIGHT);
+    const lastVisible = Math.ceil((viewBottom - tableTop) / ESTIMATED_ROW_HEIGHT);
+
+    // Both bounds are clamped against filtered.length, not just the lower
+    // bound against 0 - without this, scrolling deep into a large list and
+    // then applying a filter that shrinks the result set way down (say, to
+    // 10 matches) would leave windowStart computed from the old scroll
+    // position (e.g. 265) with nothing there to slice, rendering an empty
+    // table with a spacer sized for data that no longer exists.
+    const nextStart = Math.max(0, Math.min(firstVisible - OVERSCAN_ROWS, filtered.length));
+    const nextEnd = Math.min(filtered.length, Math.max(nextStart, lastVisible + OVERSCAN_ROWS));
+
+    setWindowStart((current) => (current === nextStart ? current : nextStart));
+    setWindowEnd((current) => (current === nextEnd ? current : nextEnd));
+  }, [filtered.length]);
+
+  // Scroll/resize listeners are rAF-throttled so the (cheap, but non-zero)
+  // recalculation runs at most once per animation frame no matter how many
+  // scroll events fire in between - keeps this from becoming its own
+  // performance problem on high-frequency scroll/trackpad input.
+  //
+  // Listens on the actual scroll parent (falling back to window) rather
+  // than always binding to window - binding only to window is what caused
+  // the window to freeze at its initial mount value when this table lives
+  // inside a scrollable panel instead of the page itself.
   useEffect(() => {
-    if (!canLoadPrevious) return undefined;
-    const node = topSentinelRef.current;
-    if (!node) return undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0].isIntersecting) return;
-        setWindowStart((start) => Math.max(0, start - BATCH_SIZE));
-        setWindowEnd((end) => {
-          const newStart = Math.max(0, windowStart - BATCH_SIZE);
-          return end - newStart > MAX_MOUNTED ? Math.max(newStart + BATCH_SIZE, end - BATCH_SIZE) : end;
-        });
-      },
-      { root: null, rootMargin: "600px 0px", threshold: 0 }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [canLoadPrevious, windowStart]);
+    const scrollParent = getScrollParent(bodyRef.current) || window;
+    let ticking = false;
+    const onScrollOrResize = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        recalcWindow();
+        ticking = false;
+      });
+    };
+    scrollParent.addEventListener("scroll", onScrollOrResize, { passive: true });
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      scrollParent.removeEventListener("scroll", onScrollOrResize);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [recalcWindow]);
+
+  // Also recompute whenever the matched set itself changes (new filter,
+  // search, or sort) - the scroll position may not have moved, but the
+  // total row count and the transaction landing on any given index did.
+  useEffect(() => {
+    recalcWindow();
+  }, [recalcWindow]);
 
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";
@@ -285,6 +327,10 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
 
   return (
     <div className="tx-view">
+      {/* TEMP DEBUG - remove once you've confirmed unloading is working */}
+      <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 9999, background: "#111", color: "#0f0", fontFamily: "monospace", fontSize: 12, padding: "6px 10px", borderRadius: 6, opacity: 0.85, pointerEvents: "none" }}>
+        mounted rows: {visibleRows.length} (index {windowStart}–{clampedEnd}) / {filtered.length} matched
+      </div>
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />
@@ -327,7 +373,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                 <th></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={bodyRef}>
               {visibleRows.length === 0 && filtered.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="tx-filter-empty">
@@ -339,7 +385,6 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
               ) : (
                 <>
                   <SpacerRow count={topSpacerCount} />
-                  {canLoadPrevious && <tr ref={topSentinelRef} aria-hidden="true"><td colSpan="6" style={{ padding: 0, border: "none" }} /></tr>}
                   {visibleRows.map((t) => (
                     <TransactionRow
                       key={t.id}
@@ -350,7 +395,6 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                       onDelete={handleDelete}
                     />
                   ))}
-                  {canLoadMore && <tr ref={bottomSentinelRef} aria-hidden="true"><td colSpan="6" style={{ padding: 0, border: "none" }} /></tr>}
                   <SpacerRow count={bottomSpacerCount} />
                 </>
               )}
