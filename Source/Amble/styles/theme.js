@@ -456,6 +456,18 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .about-row:last-child { border-bottom:none; }
 .about-links { padding-top:2px; }
 
+.about-version-value { display:flex; align-items:center; gap:10px; }
+.whats-new-link { display:inline-flex; align-items:center; gap:4px; background:transparent; border:none; padding:0; margin:0; font-size:12px; font-weight:600; color:var(--brass); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.whats-new-link:hover { filter:brightness(1.1); }
+.whats-new-link:focus-visible { outline:2px solid var(--brass); outline-offset:2px; border-radius:3px; }
+
+.patch-notes-list { list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:7px; }
+.patch-notes-list li { position:relative; padding-left:16px; font-size:13px; color:var(--text-muted); line-height:1.5; }
+.patch-notes-list li::before { content:""; position:absolute; left:2px; top:8px; width:5px; height:5px; border-radius:50%; background:var(--text-faint); }
+.patch-notes-list strong { color:var(--text); font-weight:600; }
+.patch-notes-version-block + .patch-notes-version-block { margin-top:18px; padding-top:18px; border-top:1px solid var(--border); }
+.patch-notes-version-title { font-family:'Fraunces',serif; font-weight:600; font-size:14.5px; margin-bottom:8px; color:var(--text); }
+
 .kbd {
   display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px;
   padding:0 6px; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:11.5px; font-weight:600;
