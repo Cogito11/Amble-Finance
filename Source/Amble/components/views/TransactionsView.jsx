@@ -75,7 +75,7 @@ const TransactionRow = React.memo(function TransactionRow({ t, categoryMap, acco
 function SpacerRow({ count }) {
   if (count <= 0) return null;
   return (
-    <tr aria-hidden="true" style={{ border: "none" }}>
+    <tr aria-hidden="true">
       <td colSpan="6" style={{ height: count * ESTIMATED_ROW_HEIGHT, padding: 0, border: "none" }} />
     </tr>
   );
@@ -236,10 +236,18 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
     return null; // null means "the page itself scrolls"
   };
 
+  // The scroll container doesn't change mid-session, so it's detected once
+  // and cached here rather than re-walking the DOM tree on every scroll
+  // frame - recalcWindow runs on every animation frame during a fast
+  // scroll, and repeating that walk (plus a getComputedStyle call per
+  // ancestor) that often was pure waste.
+  const scrollParentRef = useRef(undefined); // undefined = not yet detected, null = page scrolls
+
   const recalcWindow = useCallback(() => {
     const node = bodyRef.current;
     if (!node) return;
-    const scrollParent = getScrollParent(node);
+    if (scrollParentRef.current === undefined) scrollParentRef.current = getScrollParent(node);
+    const scrollParent = scrollParentRef.current;
 
     let tableTop, viewTop, viewBottom;
     if (scrollParent) {
@@ -278,9 +286,13 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   // Listens on the actual scroll parent (falling back to window) rather
   // than always binding to window - binding only to window is what caused
   // the window to freeze at its initial mount value when this table lives
-  // inside a scrollable panel instead of the page itself.
+  // inside a scrollable panel instead of the page itself. A ResizeObserver
+  // on that same element covers layout changes a plain window "resize"
+  // event would miss - e.g. a sidebar collapsing/expanding changes the
+  // panel's height without the browser window itself resizing.
   useEffect(() => {
-    const scrollParent = getScrollParent(bodyRef.current) || window;
+    scrollParentRef.current = getScrollParent(bodyRef.current);
+    const scrollTarget = scrollParentRef.current || window;
     let ticking = false;
     const onScrollOrResize = () => {
       if (ticking) return;
@@ -290,11 +302,19 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
         ticking = false;
       });
     };
-    scrollParent.addEventListener("scroll", onScrollOrResize, { passive: true });
+    scrollTarget.addEventListener("scroll", onScrollOrResize, { passive: true });
     window.addEventListener("resize", onScrollOrResize);
+
+    let resizeObserver;
+    if (scrollParentRef.current) {
+      resizeObserver = new ResizeObserver(onScrollOrResize);
+      resizeObserver.observe(scrollParentRef.current);
+    }
+
     return () => {
-      scrollParent.removeEventListener("scroll", onScrollOrResize);
+      scrollTarget.removeEventListener("scroll", onScrollOrResize);
       window.removeEventListener("resize", onScrollOrResize);
+      resizeObserver?.disconnect();
     };
   }, [recalcWindow]);
 
@@ -327,10 +347,6 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
 
   return (
     <div className="tx-view">
-      {/* TEMP DEBUG - remove once you've confirmed unloading is working */}
-      <div style={{ position: "fixed", bottom: 12, right: 12, zIndex: 9999, background: "#111", color: "#0f0", fontFamily: "monospace", fontSize: 12, padding: "6px 10px", borderRadius: 6, opacity: 0.85, pointerEvents: "none" }}>
-        mounted rows: {visibleRows.length} (index {windowStart}–{clampedEnd}) / {filtered.length} matched
-      </div>
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />
