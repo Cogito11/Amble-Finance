@@ -300,6 +300,16 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-card-cats { display:flex; gap:6px; flex-wrap:wrap; }
 .budget-card-footer { display:flex; justify-content:flex-end; }
 .budget-card-catlist { border-top:1px solid var(--border); padding-top:10px; }
+.budgets-pagination { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-top:4px; }
+.budgets-pagination-info { font-size:12.5px; flex-shrink:0; }
+.budgets-pagination-nav { display:flex; align-items:center; gap:8px; }
+.budgets-pagination-select { padding:7px 10px; font-size:12.5px; }
+.budgets-pagination-size { display:flex; align-items:center; gap:8px; font-size:12.5px; flex-shrink:0; }
+.budgets-pagination-size-select { padding:7px 10px; font-size:12.5px; }
+@media (max-width: 640px) {
+  .budgets-pagination { justify-content:center; text-align:center; }
+  .budgets-pagination-nav { order:-1; width:100%; justify-content:space-between; }
+}
 .budget-cat-table th, .budget-cat-table td { font-size:12.5px; }
 .budget-cat-parent-row { cursor:pointer; }
 .budget-cat-parent-row:hover { background: var(--brass-soft); }
