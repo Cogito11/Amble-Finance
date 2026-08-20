@@ -1,11 +1,196 @@
 import React, { useState, useRef } from "react";
 import {
-  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe
+  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe, X, ScrollText
 } from "lucide-react";
 import { ShortcutsList } from "../common/Shortcuts";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
 import { checkForUpdate } from "../../utils/updates";
+
+// Full patch notes history, most recent first. Keep in sync with Patch notes.md.
+const PATCH_NOTES = [
+  {
+    version: "1.6.8",
+    items: [
+      "Transaction searching no longer attempts to query after every keystroke.",
+      "Only the transactions in view are rendered in the transactions list for better performance.",
+      "The budgets view now has a limit on how many budgets it will show per page for better performance.",
+      "The More section now contains a patch notes log",
+    ],
+  },
+  {
+    version: "1.6.7",
+    items: [
+      "Fixed category colors becoming out of sync with sub-expense colors.",
+      "Fixed category color refreshes from Settings not updating everywhere.",
+      "Category and sub-expense colors remain synchronized.",
+    ],
+  },
+  {
+    version: "1.6.6",
+    items: [
+      "Spending by Category now works without a selected budget, showing the past 30 days of spending.",
+      "Added a **Check for Updates** button to the About section.",
+      "Added more category color options.",
+    ],
+  },
+  {
+    version: "1.6.5",
+    items: [
+      "Added reordering for budget sub-expenses and income entries.",
+      "Budget income entries can be linked directly to specific income transactions.",
+      "Improved the Allocated vs. Spent widget with category-specific colors.",
+      "Improved Status page visual consistency.",
+      "Gauges widget now appears second by default.",
+      "Closed accounts no longer appear in the Accounts filter.",
+      "Restored the optional Edit button on budget cards.",
+    ],
+  },
+  {
+    version: "1.6.4",
+    items: [
+      "Spending Breakdown now shows every transaction for a selected category.",
+      "Allocated vs. Spent widget now includes sub-expense status for itemized categories.",
+      "Clicking outside an open filter menu closes it.",
+      "Account deletion errors now appear directly in the Edit Account modal.",
+      "Improved rolling budgets to use the past 30 days when no dates are specified.",
+      "Fixed categories not appearing for transactions assigned to inactive budgets.",
+      "Fixed backup timestamps being updated when an export was canceled or not saved.",
+      "Refined Status page widgets and internal Budget/Status naming.",
+    ],
+  },
+  {
+    version: "1.6.3",
+    items: [
+      "Accounts, transactions, and budgets can now be edited by clicking anywhere on their cards/rows.",
+      "Account editing now shows recent transactions.",
+      "Edit modal headers and footers now remain fixed while scrolling.",
+      "Removed dedicated Edit buttons from accounts, budgets, and transactions.",
+      "Removed unnecessary Delete buttons from accounts.",
+    ],
+  },
+  {
+    version: "1.6.2",
+    items: [
+      "Added customization to Status page.",
+      "Added Budget Progress Bar, Spending Breakdown, and Allocated vs. Spent widgets to status page.",
+      "Added custom colors for budget categories.",
+      "Category colors appear on the Status page and are preserved when budgets are duplicated.",
+      "The ability to close accounts has now been implemented.",
+      "Added a View Status shortcut to the Dashboard Gauges widget.",
+    ],
+  },
+  {
+    version: "1.6.1",
+    items: [
+      "Added UI indicators when a pop-out window is active.",
+      "Sidebar tabs with active pop-outs show a green dot.",
+      "The sidebar button changes to green and indicates when a pop-out is already open.",
+    ],
+  },
+  {
+    version: "1.6.0",
+    items: [
+      "Added **Pop Out Views**, allowing sidebar tabs to open in separate windows.",
+      "Added income categories to budgets.",
+      "Sidebar cash balance now includes Checking and Savings accounts.",
+      "Rearranged the budget edit menu.",
+      "Added tooltips to Income and Budget Categories sections.",
+    ],
+  },
+  {
+    version: "1.5.0",
+    items: [
+      "Transaction category selection now shows the amount remaining in the associated budget.",
+      "Transaction descriptions automatically use the selected category when no description is entered.",
+      "Added **Refresh Category Colors** button to Settings.",
+      "Updated the category color palette.",
+      "Restricted Amble Finance to a single application window.",
+      "Added an automated GitHub Actions release pipeline for supported platforms and architectures.",
+      "Fixed an issue that cause launching a second instance to appear as if it erased application data.",
+      "Fixed new transactions appearing in the wrong position in the transaction list.",
+    ],
+  },
+  {
+    version: "1.4.0",
+    items: [
+      "Added **Cash, Asset, and Loan** account types.",
+      "Added customizable sidebar sections, ordering, and bottom value.",
+      "Added per-column transaction filtering.",
+      "Improved tool data-source selection.",
+      "Added an initial Monthly Payment value to the Credit Card Interest Calculator.",
+      "Added a **Reset Filters** button for transactions.",
+    ],
+  },
+  {
+    version: "1.3.0",
+    items: [
+      "Added a **Tools** section with financial planning calculators.",
+      "Added Compound Interest, Savings Goal, Net Worth Projection, 50/30/20 Budget Rule, Emergency Fund, Recurring Spending Audit, Debt Payoff, Credit Card Interest, and Loan/Mortgage Payoff calculators.",
+      "Some calculators can automatically use data from existing accounts and transactions.",
+      "Added optional account interest rates for supported calculations.",
+      "Added accessibility labels to icon-only buttons.",
+      "Reorganized source code for maintainability.",
+      "Fixed outdated Last Backup timestamps in exported backups.",
+    ],
+  },
+  {
+    version: "1.2.0",
+    items: [
+      "Budgets can now be rearranged",
+      "Repeated budgets now appear at the top of the budget list",
+      "Added warnings when a budget will repeat before its end date",
+      "Budgets will now still repeat even when inactive and hand off repeat functionality to the duplicated budget",
+      "Added safeguards for repeating budgets on dates that dont appear in every month like the 31st",
+      "Repeated budgets now have repeated appended to their name",
+      "The budget widget now shows percentage values",
+      "Added account reordering with drag and drop",
+      "The accounts widget now only shows the first 3 accounts",
+      "Fixed timezone issue with defailt calendar date selector",
+      "Fixed an issue where repeat budgets showed the wrong start and end dates",
+    ],
+  },
+  {
+    version: "1.1.0",
+    items: [
+      "Added budget category reordering.",
+      "Implemented configurable intervals for repeating budgets",
+      "Added an **Account** column to the Transactions dashboard widget.",
+      "Improved transaction-table alignment.",
+      "Website and GitHub links now open in the system's default browser.",
+      "Application version information is now pulled directly from `package.json`.",
+    ],
+  },
+  {
+    version: "1.0.0",
+    items: [
+      "First official release of Amble Finance.",
+      "Added checking, savings, and credit-card account management.",
+      "Added income, expense, and transfer transactions.",
+      "Added transaction search and filtering.",
+      "Added JSON backups and CSV exports.",
+      "Added keyboard shortcuts.",
+      "Local-first architecture with no accounts or cloud sync.",
+      "Added Windows, macOS, and Linux support.",
+    ],
+  },
+];
+
+// Renders a patch note line, turning **bold** markdown spans into <strong> so
+// the exact wording from Patch notes.md is preserved without showing asterisks.
+function PatchNoteText({ text }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={i}>{part.slice(2, -2)}</strong>;
+        }
+        return <React.Fragment key={i}>{part}</React.Fragment>;
+      })}
+    </>
+  );
+}
 
 export function MoreView({
   onExportJSON, onImportJSON, onExportCSV, transactionCount, themeMode, onChangeThemeMode,
@@ -16,6 +201,7 @@ export function MoreView({
 }) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
+  const [showAllPatchNotes, setShowAllPatchNotes] = useState(false);
 
   // Brief visual feedback for the "Refresh" color button: the icon spins for a
   // moment, then flips to a checkmark + "Refreshed" before settling back to idle.
@@ -225,7 +411,15 @@ export function MoreView({
             </div>
           </div>
           <div className="about-details">
-            <div className="about-row"><span className="muted">Version</span><span>{APP_INFO.version}</span></div>
+            <div className="about-row">
+              <span className="muted">Version</span>
+              <span className="about-version-value">
+                {APP_INFO.version}
+                <button type="button" className="whats-new-link" onClick={() => setShowAllPatchNotes(true)}>
+                  <ScrollText size={12} /> What's new
+                </button>
+              </span>
+            </div>
             <div className="about-row"><span className="muted">Developed By</span><span>{APP_INFO.maintainerName} ({APP_INFO.maintainerHandle})</span></div>
             <div className="about-row">
               <span className="muted">Updates</span>
@@ -248,6 +442,40 @@ export function MoreView({
             {APP_INFO.websiteUrl && (
               <a className="btn btn-ghost" href={APP_INFO.websiteUrl} target="_blank" rel="noreferrer"><Globe size={14} /> Website</a>
             )}
+          </div>
+        </div>
+      )}
+
+      {showAllPatchNotes && (
+        <div className="modal-overlay" onClick={() => setShowAllPatchNotes(false)}>
+          <div
+            className="modal modal-lg"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Patch notes"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>Patch notes</h2>
+              <button className="icon-btn" title="Close" aria-label="Close" onClick={() => setShowAllPatchNotes(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body">
+              {PATCH_NOTES.map((entry) => (
+                <div key={entry.version} className="patch-notes-version-block">
+                  <div className="patch-notes-version-title">v{entry.version}</div>
+                  <ul className="patch-notes-list">
+                    {entry.items.map((item, i) => (
+                      <li key={i}><PatchNoteText text={item} /></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="modal-footer" style={{ justifyContent: "flex-end" }}>
+              <button className="btn btn-ghost" onClick={() => setShowAllPatchNotes(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
