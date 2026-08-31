@@ -319,6 +319,47 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-item-subrow { background: var(--surface-2); }
 .budget-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
 
+/* ---------------------------------- plan view ---------------------------------- */
+.plan-view { display:flex; flex-direction:column; gap:18px; }
+.plan-header { display:flex; justify-content:flex-end; gap:10px; }
+.plan-calendar-card { padding:16px 18px 18px; }
+.plan-calendar-nav { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.plan-calendar-month { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; min-width:150px; text-align:center; }
+.plan-cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; }
+.plan-cal-weekdays { margin-bottom:4px; }
+.plan-cal-weekday { text-align:center; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding-bottom:2px; }
+.plan-cal-cell { position:relative; aspect-ratio:1/0.85; min-height:52px; border:1px solid transparent; border-radius:8px; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:6px 4px 4px; gap:4px; font-family:'Inter',sans-serif; color:var(--text); }
+.plan-cal-cell:hover { background: var(--surface-2); }
+.plan-cal-cell-blank { cursor:default; background:transparent; pointer-events:none; }
+.plan-cal-cell-today .plan-cal-daynum { background: var(--brass); color: var(--on-brass); border-radius:50%; }
+.plan-cal-cell-selected { border-color: var(--brass); }
+.plan-cal-daynum { font-size:12.5px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; }
+.plan-cal-dots { display:flex; align-items:center; gap:3px; }
+.plan-cal-dot { width:6px; height:6px; border-radius:50%; background: currentColor; }
+.plan-day-panel { display:flex; flex-direction:column; gap:12px; }
+.plan-day-heading { font-family:'Fraunces',serif; font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
+.plan-occ-list { display:flex; flex-direction:column; gap:10px; }
+.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 0; border-bottom:1px solid var(--border); }
+.plan-occ-row:last-child { border-bottom:none; }
+.plan-occ-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; }
+.plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:13.5px; flex-wrap:wrap; }
+.plan-occ-sub { font-size:12px; }
+.plan-link-panel { flex-basis:100%; display:flex; flex-direction:column; gap:8px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-top:4px; }
+.plan-link-list { display:flex; flex-direction:column; gap:2px; }
+.plan-link-item { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:6px; background:transparent; border:none; cursor:pointer; font-size:12.5px; color:var(--text); text-align:left; }
+.plan-link-item:hover { background: var(--surface); }
+.plan-link-item span:nth-child(2) { flex:1; }
+.plan-columns { align-items:flex-start; }
+.plan-col-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin: 0 0 10px; }
+.plan-bill-list, .plan-goal-list { display:flex; flex-direction:column; gap:10px; }
+.plan-bill-card, .plan-goal-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition: border-color .15s; }
+.plan-bill-card:hover, .plan-goal-card:hover { border-color: var(--brass); }
+.plan-bill-card:focus-visible, .plan-goal-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
+.plan-bill-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.plan-bill-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12.5px; }
+@media (max-width: 900px) {
+  .plan-columns { grid-template-columns: 1fr; }
+}
 
 .budget-active-card { display:flex; flex-direction:column; gap:10px; }
 .budget-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }

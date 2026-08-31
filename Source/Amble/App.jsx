@@ -12,6 +12,8 @@ import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
 import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
 import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
+import { BillModal } from "./components/modals/BillModal";
+import { GoalModal } from "./components/modals/GoalModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
 import { StatusView } from "./components/views/StatusView";
@@ -19,10 +21,12 @@ import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
 import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
+import { PlanView } from "./components/views/PlanView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
+import { clearRemovedCategoryFromBills, clearRemovedTransactionFromBills } from "./state/planning";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
@@ -153,6 +157,12 @@ export default function App() {
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
   const [budgetModal, setBudgetModal] = useState(null);
+  const [billModal, setBillModal] = useState(null);
+  const [goalModal, setGoalModal] = useState(null);
+  // Set when a transaction is opened from a Plan bill occurrence ("Create a new
+  // transaction for this") so saveTransaction below knows to also link the
+  // resulting transaction id back onto that bill's occurrence once it's saved.
+  const [pendingBillLink, setPendingBillLink] = useState(null);
   const [accError, setAccError] = useState("");
   const [closedAccountsOpen, setClosedAccountsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -285,6 +295,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+          bills: Array.isArray(raw.bills) ? raw.bills : [],
+          goals: Array.isArray(raw.goals) ? raw.goals : [],
         } : defaultState());
       } catch (e) {
         setState(defaultState());
@@ -309,6 +321,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+          bills: Array.isArray(raw.bills) ? raw.bills : [],
+          goals: Array.isArray(raw.goals) ? raw.goals : [],
         });
       } catch (err) { /* ignore malformed/partial writes */ }
     };
@@ -359,6 +373,7 @@ export default function App() {
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
     txModal !== null || accModal !== null || catModal !== null || budgetModal !== null ||
+    billModal !== null || goalModal !== null ||
     widgetModalOpen || sidebarModalOpen || closedAccountsOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
@@ -380,10 +395,12 @@ export default function App() {
         if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
         if (statusModalOpen) { setStatusModalOpen(false); return; }
         if (closedAccountsOpen) { setClosedAccountsOpen(false); return; }
-        if (txModal !== null) { setTxModal(null); return; }
+        if (txModal !== null) { setTxModal(null); setPendingBillLink(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
         if (budgetModal !== null) { setBudgetModal(null); return; }
+        if (billModal !== null) { setBillModal(null); return; }
+        if (goalModal !== null) { setGoalModal(null); return; }
         return;
       }
 
@@ -416,7 +433,7 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more" };
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more", "8": "plan" };
         if (navByKey[key]) {
           setView(navByKey[key]);
           return;
@@ -440,7 +457,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, budgetModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, budgetModal, billModal, goalModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
   if (!loaded || !state) {
     return (
@@ -461,12 +478,23 @@ export default function App() {
   const saveTransaction = (t) => {
     setState((s) => {
       const exists = s.transactions.some((x) => x.id === t.id);
-      return { ...s, transactions: exists ? s.transactions.map((x) => x.id === t.id ? t : x) : [...s.transactions, t] };
+      const transactions = exists ? s.transactions.map((x) => x.id === t.id ? t : x) : [...s.transactions, t];
+      const bills = pendingBillLink
+        ? s.bills.map((b) => (b.id === pendingBillLink.billId
+            ? { ...b, completions: { ...(b.completions || {}), [pendingBillLink.dateKey]: t.id } }
+            : b))
+        : s.bills;
+      return { ...s, transactions, bills };
     });
     setTxModal(null);
+    setPendingBillLink(null);
   };
   const deleteTransaction = (id) => {
-    setState((s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== id) }));
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.filter((t) => t.id !== id),
+      bills: clearRemovedTransactionFromBills(s.bills, id),
+    }));
     setTxModal(null);
   };
   const requestDeleteTransaction = (id) => {
@@ -532,7 +560,9 @@ export default function App() {
   const requestDeleteAccount = (id) => {
     const a = state.accounts.find((x) => x.id === id);
     const inUse = state.transactions.some((t) => t.accountId === id || t.toAccountId === id);
+    const billInUse = state.bills.some((b) => b.accountId === id);
     if (inUse) { setAccError("This account has transactions on it. Delete those transactions first."); return; }
+    if (billInUse) { setAccError("This account has a bill assigned to it. Delete or reassign that bill first."); return; }
     setConfirmDialog({
       title: "Delete account?",
       message: `This will permanently delete “${a?.name || "this account"}”. This can't be undone.`,
@@ -568,6 +598,7 @@ export default function App() {
       ...s,
       categories: s.categories.filter((c) => c.id !== id),
       transactions: s.transactions.map((t) => t.categoryId === id ? { ...t, categoryId: null } : t),
+      bills: clearRemovedCategoryFromBills(s.bills, [id]),
     }));
     setCatModal(null);
   };
@@ -686,6 +717,72 @@ export default function App() {
         color: c.color || (c.categoryId ? state.categories.find((cc) => cc.id === c.categoryId)?.color : null) || null,
         items: (c.items || []).map((i) => ({ id: uid(), name: i.name, amount: i.amount, date: i.date || null })),
       })),
+    });
+  };
+
+  /* ---------------------------------- plan: bills ---------------------------------- */
+  const saveBill = (b) => {
+    setState((s) => {
+      const exists = s.bills.some((x) => x.id === b.id);
+      return { ...s, bills: exists ? s.bills.map((x) => (x.id === b.id ? b : x)) : [...s.bills, b] };
+    });
+    setBillModal(null);
+  };
+  const deleteBill = (id) => {
+    setState((s) => ({ ...s, bills: s.bills.filter((b) => b.id !== id) }));
+    setBillModal(null);
+  };
+  const requestDeleteBill = (id) => {
+    const b = state.bills.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Delete bill?",
+      message: `This will permanently delete “${b?.name || "this bill"}” and its payment history. Any transactions already linked to it are kept, just unlinked. This can't be undone.`,
+      onConfirm: () => { deleteBill(id); setConfirmDialog(null); },
+    });
+  };
+  const markBillPaid = (billId, dateKey) => {
+    setState((s) => ({ ...s, bills: s.bills.map((b) => (b.id === billId ? { ...b, completions: { ...(b.completions || {}), [dateKey]: true } } : b)) }));
+  };
+  const unmarkBillPaid = (billId, dateKey) => {
+    setState((s) => ({
+      ...s,
+      bills: s.bills.map((b) => {
+        if (b.id !== billId || !b.completions) return b;
+        const completions = { ...b.completions };
+        delete completions[dateKey];
+        return { ...b, completions };
+      }),
+    }));
+  };
+  const linkBillTransaction = (billId, dateKey, transactionId) => {
+    setState((s) => ({ ...s, bills: s.bills.map((b) => (b.id === billId ? { ...b, completions: { ...(b.completions || {}), [dateKey]: transactionId } } : b)) }));
+  };
+  // Opens the ordinary transaction form pre-filled from a bill occurrence.
+  // saveTransaction (below) checks pendingBillLink once the form is submitted
+  // and links the resulting transaction back onto this exact occurrence.
+  const assignTransactionToBill = (bill, dateKey) => {
+    setPendingBillLink({ billId: bill.id, dateKey });
+    setTxModal({ type: bill.type, date: dateKey, description: bill.name, amount: bill.amount, accountId: bill.accountId, categoryId: bill.categoryId });
+  };
+
+  /* ---------------------------------- plan: goals ---------------------------------- */
+  const saveGoal = (g) => {
+    setState((s) => {
+      const exists = s.goals.some((x) => x.id === g.id);
+      return { ...s, goals: exists ? s.goals.map((x) => (x.id === g.id ? g : x)) : [...s.goals, g] };
+    });
+    setGoalModal(null);
+  };
+  const deleteGoal = (id) => {
+    setState((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }));
+    setGoalModal(null);
+  };
+  const requestDeleteGoal = (id) => {
+    const g = state.goals.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Delete goal?",
+      message: `This will permanently delete “${g?.name || "this goal"}”. This can't be undone.`,
+      onConfirm: () => { deleteGoal(id); setConfirmDialog(null); },
     });
   };
 
@@ -968,7 +1065,7 @@ export default function App() {
               {effectiveView === "status" && (
                 <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && (
+              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
               {!popoutView && (
@@ -1036,6 +1133,26 @@ export default function App() {
                 onReorder={reorderBudget}
               />
             )}
+            {effectiveView === "plan" && (
+              <PlanView
+                bills={state.bills}
+                goals={state.goals}
+                accounts={state.accounts}
+                categories={state.categories}
+                transactions={state.transactions}
+                balances={balances}
+                onAddBill={() => setBillModal({})}
+                onEditBill={setBillModal}
+                onDeleteBill={requestDeleteBill}
+                onAddGoal={() => setGoalModal({})}
+                onEditGoal={setGoalModal}
+                onDeleteGoal={requestDeleteGoal}
+                onMarkPaid={markBillPaid}
+                onUnmarkPaid={unmarkBillPaid}
+                onAssignTransaction={assignTransactionToBill}
+                onLinkTransaction={linkBillTransaction}
+              />
+            )}
             {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
             {effectiveView === "more" && (
               <MoreView
@@ -1074,7 +1191,7 @@ export default function App() {
           budgets={state.plans}
           transactions={state.transactions}
           onSave={saveTransaction}
-          onClose={() => setTxModal(null)}
+          onClose={() => { setTxModal(null); setPendingBillLink(null); }}
           onDelete={requestDeleteTransaction}
         />
       )}
@@ -1114,6 +1231,25 @@ export default function App() {
           onClose={() => setBudgetModal(null)}
           onDelete={requestDeleteBudget}
           onRecolorCategory={recolorBudgetCategory}
+        />
+      )}
+      {billModal !== null && (
+        <BillModal
+          initial={billModal}
+          accounts={state.accounts}
+          categories={state.categories}
+          onSave={saveBill}
+          onClose={() => setBillModal(null)}
+          onDelete={requestDeleteBill}
+        />
+      )}
+      {goalModal !== null && (
+        <GoalModal
+          initial={goalModal}
+          accounts={state.accounts}
+          onSave={saveGoal}
+          onClose={() => setGoalModal(null)}
+          onDelete={requestDeleteGoal}
         />
       )}
       {widgetModalOpen && (
