@@ -328,15 +328,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; }
 .plan-cal-weekdays { margin-bottom:4px; }
 .plan-cal-weekday { text-align:center; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding-bottom:2px; }
-.plan-cal-cell { position:relative; aspect-ratio:1/0.85; min-height:52px; border:1px solid transparent; border-radius:8px; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:6px 4px 4px; gap:4px; font-family:'Inter',sans-serif; color:var(--text); }
+.plan-cal-cell { position:relative; aspect-ratio:1/0.75; min-height:44px; border:1px solid transparent; border-radius:8px; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:5px 4px 4px; gap:3px; font-family:'Inter',sans-serif; color:var(--text); }
 .plan-cal-cell:hover { background: var(--surface-2); }
 .plan-cal-cell-blank { cursor:default; background:transparent; pointer-events:none; }
 .plan-cal-cell-today .plan-cal-daynum { background: var(--brass); color: var(--on-brass); border-radius:50%; }
 .plan-cal-cell-selected { border-color: var(--brass); }
-.plan-cal-daynum { font-size:12.5px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; }
-.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:3px; flex-wrap:wrap; max-width:44px; }
-.plan-cal-dot { width:6px; height:6px; border-radius:50%; background: currentColor; flex-shrink:0; }
-.plan-cal-dot-more { font-size:9px; line-height:1; color: var(--text-faint); font-weight:600; }
+.plan-cal-daynum { font-size:12px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; }
+.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap; max-width:48px; }
+.plan-cal-dot { width:8px; height:8px; border-radius:50%; background: currentColor; flex-shrink:0; }
+.plan-cal-dot-more { font-size:10px; line-height:1; color: var(--text-faint); font-weight:600; }
 .plan-day-panel { display:flex; flex-direction:column; gap:12px; }
 .plan-day-heading { font-family:'Fraunces',serif; font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
 .plan-occ-list { display:flex; flex-direction:column; gap:10px; }

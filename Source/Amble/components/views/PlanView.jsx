@@ -167,6 +167,16 @@ export function PlanView({
             const entries = occurrencesByDay[dateKey];
             const isToday = dateKey === today;
             const isSelected = dateKey === selectedDay;
+            // A single combined pool of markers (bill occurrences + goal target
+            // dates) capped at MAX_CAL_DOTS total, so the "+N" overflow always
+            // trails everything actually shown instead of a bill-only count
+            // landing ahead of a goal marker that then renders after it.
+            const dayMarkers = entries
+              ? [
+                  ...entries.bills.map((b) => ({ kind: "bill", key: b.id, status: occurrenceStatus(b, dateKey, today) })),
+                  ...entries.goals.map((g) => ({ kind: "goal", key: g.id })),
+                ]
+              : [];
             return (
               <button
                 key={dateKey}
@@ -176,14 +186,14 @@ export function PlanView({
                 aria-pressed={isSelected}
               >
                 <span className="plan-cal-daynum">{Number(dateKey.slice(8))}</span>
-                {entries && (
+                {dayMarkers.length > 0 && (
                   <span className="plan-cal-dots">
-                    {entries.bills.slice(0, MAX_CAL_DOTS).map((b) => {
-                      const st = occurrenceStatus(b, dateKey, today);
-                      return <span key={b.id} className={`plan-cal-dot ${st === "overdue" ? "tone-rust" : st === "paid" ? "tone-teal" : "tone-brass"}`} />;
-                    })}
-                    {entries.bills.length > MAX_CAL_DOTS && <span className="plan-cal-dot-more">+{entries.bills.length - MAX_CAL_DOTS}</span>}
-                    {entries.goals.length > 0 && <Target size={10} className="tone-amber" />}
+                    {dayMarkers.slice(0, MAX_CAL_DOTS).map((m) => (
+                      m.kind === "bill"
+                        ? <span key={`b-${m.key}`} className={`plan-cal-dot ${m.status === "overdue" ? "tone-rust" : m.status === "paid" ? "tone-teal" : "tone-brass"}`} />
+                        : <Target key={`g-${m.key}`} size={10} className="tone-amber" />
+                    ))}
+                    {dayMarkers.length > MAX_CAL_DOTS && <span className="plan-cal-dot-more">+{dayMarkers.length - MAX_CAL_DOTS}</span>}
                   </span>
                 )}
               </button>
