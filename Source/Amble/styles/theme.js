@@ -334,8 +334,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-cal-cell-today .plan-cal-daynum { background: var(--brass); color: var(--on-brass); border-radius:50%; }
 .plan-cal-cell-selected { border-color: var(--brass); }
 .plan-cal-daynum { font-size:12.5px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; }
-.plan-cal-dots { display:flex; align-items:center; gap:3px; }
-.plan-cal-dot { width:6px; height:6px; border-radius:50%; background: currentColor; }
+.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:3px; flex-wrap:wrap; max-width:44px; }
+.plan-cal-dot { width:6px; height:6px; border-radius:50%; background: currentColor; flex-shrink:0; }
+.plan-cal-dot-more { font-size:9px; line-height:1; color: var(--text-faint); font-weight:600; }
 .plan-day-panel { display:flex; flex-direction:column; gap:12px; }
 .plan-day-heading { font-family:'Fraunces',serif; font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
 .plan-occ-list { display:flex; flex-direction:column; gap:10px; }

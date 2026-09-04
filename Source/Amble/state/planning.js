@@ -1,6 +1,6 @@
 // state/planning.js
 //
-import { toLocalDateStr } from "../utils/dates";
+import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
 
 // Data model added by the "Plan" tab:
 //
@@ -54,13 +54,24 @@ function toDate(dateStr) {
 }
 const toKey = toLocalDateStr;
 
-export function addFrequency(dateStr, frequency) {
-  const d = toDate(dateStr);
-  if (frequency === "weekly") d.setDate(d.getDate() + 7);
-  else if (frequency === "biweekly") d.setDate(d.getDate() + 14);
-  else if (frequency === "yearly") d.setFullYear(d.getFullYear() + 1);
-  else d.setMonth(d.getMonth() + 1); // monthly (default)
-  return toKey(d);
+// Steps a date forward by one cycle of `frequency`. Monthly/yearly delegate to
+// addMonthsClamped (utils/dates.js) - the same clamping budgets.js already
+// relies on for its own repeat logic - so a bill due the 31st doesn't silently
+// drift into early next month when it lands on a shorter one (Feb, Apr, etc.):
+// it clamps to that month's last day instead, then returns to the 31st as soon
+// as a 31-day month comes around again. `anchorDay` should stay fixed at the
+// bill's original due-date day-of-month across every step (see
+// generateBillOccurrences) rather than being re-derived from a
+// possibly-already-clamped cursor, which is what keeps that self-correcting
+// behavior going indefinitely instead of drifting downward permanently after
+// the first short month. Yearly reuses the same helper (12 months) so a Feb 29
+// bill clamps to Feb 28 on non-leap years and returns to the 29th on leap ones.
+export function addFrequency(dateStr, frequency, anchorDay) {
+  const anchor = anchorDay || toDate(dateStr).getDate();
+  if (frequency === "weekly") return addDays(dateStr, 7);
+  if (frequency === "biweekly") return addDays(dateStr, 14);
+  if (frequency === "yearly") return addMonthsClamped(dateStr, 12, anchor);
+  return addMonthsClamped(dateStr, 1, anchor); // monthly (default)
 }
 export function daysBetween(fromStr, toStr) {
   const ms = toDate(toStr).getTime() - toDate(fromStr).getTime();
@@ -101,6 +112,7 @@ export function daysInMonth(dateStr) {
 export function generateBillOccurrences(bill, rangeStart, rangeEnd) {
   if (!bill?.dueDate) return [];
   const occurrences = [];
+  const anchorDay = toDate(bill.dueDate).getDate();
   let cursor = bill.dueDate;
   let steps = 0;
   while (steps < 500) {
@@ -110,7 +122,7 @@ export function generateBillOccurrences(bill, rangeStart, rangeEnd) {
       occurrences.push({ billId: bill.id, dateKey: cursor });
     }
     if (!bill.recurring) break;
-    cursor = addFrequency(cursor, bill.frequency);
+    cursor = addFrequency(cursor, bill.frequency, anchorDay);
     steps += 1;
   }
   return occurrences;

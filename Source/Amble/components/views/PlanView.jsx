@@ -12,6 +12,7 @@ import { fmt, fmtDate } from "../../utils/format";
 import { todayStr } from "../../utils/dates";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MAX_CAL_DOTS = 4; // per-day cap before collapsing into a "+N" overflow badge
 
 export function PlanView({
   bills, goals, accounts, categories, transactions, balances,
@@ -166,8 +167,6 @@ export function PlanView({
             const entries = occurrencesByDay[dateKey];
             const isToday = dateKey === today;
             const isSelected = dateKey === selectedDay;
-            const hasOverdue = entries?.bills.some((b) => occurrenceStatus(b, dateKey, today) === "overdue");
-            const hasUnpaid = entries?.bills.some((b) => occurrenceStatus(b, dateKey, today) !== "paid");
             return (
               <button
                 key={dateKey}
@@ -179,7 +178,11 @@ export function PlanView({
                 <span className="plan-cal-daynum">{Number(dateKey.slice(8))}</span>
                 {entries && (
                   <span className="plan-cal-dots">
-                    {entries.bills.length > 0 && <span className={`plan-cal-dot ${hasOverdue ? "tone-rust" : hasUnpaid ? "tone-brass" : "tone-teal"}`} />}
+                    {entries.bills.slice(0, MAX_CAL_DOTS).map((b) => {
+                      const st = occurrenceStatus(b, dateKey, today);
+                      return <span key={b.id} className={`plan-cal-dot ${st === "overdue" ? "tone-rust" : st === "paid" ? "tone-teal" : "tone-brass"}`} />;
+                    })}
+                    {entries.bills.length > MAX_CAL_DOTS && <span className="plan-cal-dot-more">+{entries.bills.length - MAX_CAL_DOTS}</span>}
                     {entries.goals.length > 0 && <Target size={10} className="tone-amber" />}
                   </span>
                 )}
@@ -188,9 +191,9 @@ export function PlanView({
           })}
         </div>
         <div className="plan-cal-legend muted">
-          <span><span className="plan-cal-dot tone-brass" /> Upcoming</span>
-          <span><span className="plan-cal-dot tone-rust" /> Overdue</span>
-          <span><span className="plan-cal-dot tone-teal" /> Paid</span>
+          <span><span className="plan-cal-dot tone-brass" /> Upcoming bill</span>
+          <span><span className="plan-cal-dot tone-rust" /> Overdue bill</span>
+          <span><span className="plan-cal-dot tone-teal" /> Paid bill</span>
           <span><Target size={10} className="tone-amber" /> Goal target date</span>
         </div>
       </div>
