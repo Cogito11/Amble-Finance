@@ -340,8 +340,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-day-panel { display:flex; flex-direction:column; gap:12px; }
 .plan-day-heading { font-family:'Fraunces',serif; font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
 .plan-occ-list { display:flex; flex-direction:column; gap:10px; }
-.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 0; border-bottom:1px solid var(--border); }
+.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 4px; margin:0 -4px; border-bottom:1px solid var(--border); border-radius:8px; cursor:pointer; }
 .plan-occ-row:last-child { border-bottom:none; }
+.plan-occ-row:hover { background: var(--surface-2); }
+.plan-occ-row:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .plan-occ-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; }
 .plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:13.5px; flex-wrap:wrap; }
 .plan-occ-sub { font-size:12px; }

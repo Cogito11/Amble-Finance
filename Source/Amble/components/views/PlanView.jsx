@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
-  Plus, ChevronLeft, ChevronRight, Pencil, Trash2, CheckCircle2, Undo2,
+  Plus, ChevronLeft, ChevronRight, CheckCircle2, Undo2,
   CalendarClock, Target, Repeat, AlertCircle
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
@@ -16,8 +16,8 @@ const MAX_CAL_DOTS = 4; // per-day cap before collapsing into a "+N" overflow ba
 
 export function PlanView({
   bills, goals, accounts, categories, transactions, balances,
-  onAddBill, onEditBill, onDeleteBill,
-  onAddGoal, onEditGoal, onDeleteGoal, onAddContribution,
+  onAddBill, onEditBill,
+  onAddGoal, onEditGoal, onAddContribution,
   onMarkPaid, onUnmarkPaid, onAssignTransaction, onLinkTransaction,
 }) {
   const today = todayStr();
@@ -81,7 +81,14 @@ export function PlanView({
     const candidates = status !== "paid" ? linkCandidates(bill, dateKey) : [];
 
     return (
-      <div key={key} className="plan-occ-row">
+      <div
+        key={key}
+        className="plan-occ-row"
+        role="button"
+        tabIndex={0}
+        onClick={() => { if (window.getSelection().toString()) return; onEditBill(bill); }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditBill(bill); } }}
+      >
         <div className="plan-occ-main">
           <div className="plan-occ-name">
             {bill.name}
@@ -101,13 +108,14 @@ export function PlanView({
         </div>
         <div className="row-actions">
           {status === "paid" ? (
-            <button className="btn btn-ghost btn-sm" onClick={() => onUnmarkPaid(bill.id, dateKey)}><Undo2 size={13} /> Undo</button>
+            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onUnmarkPaid(bill.id, dateKey); }}><Undo2 size={13} /> Undo</button>
           ) : (
             <>
-              <button className="btn btn-ghost btn-sm" onClick={() => onMarkPaid(bill.id, dateKey)}><CheckCircle2 size={13} /> Mark paid</button>
+              <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); onMarkPaid(bill.id, dateKey); }}><CheckCircle2 size={13} /> Mark paid</button>
               <select
                 className="select plan-link-select"
                 value=""
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
                   const v = e.target.value;
                   if (!v) return;
@@ -123,7 +131,6 @@ export function PlanView({
               </select>
             </>
           )}
-          <button className="icon-btn" title="Edit bill" onClick={() => onEditBill(bill)}><Pencil size={13} /></button>
         </div>
       </div>
     );
@@ -216,12 +223,18 @@ export function PlanView({
           <div className="plan-occ-list">
             {selectedDayEntries.bills.map((b) => renderOccurrenceRow(b, selectedDay))}
             {selectedDayEntries.goals.map((g) => (
-              <div key={g.id} className="plan-occ-row">
+              <div
+                key={g.id}
+                className="plan-occ-row"
+                role="button"
+                tabIndex={0}
+                onClick={() => { if (window.getSelection().toString()) return; onEditGoal(g); }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}
+              >
                 <div className="plan-occ-main">
                   <div className="plan-occ-name"><Target size={13} className="tone-amber" /> {g.name} <span className="pill">Goal target date</span></div>
                   <div className="muted plan-occ-sub">Target: {fmt(g.targetAmount)}</div>
                 </div>
-                <button className="icon-btn" title="Edit goal" onClick={() => onEditGoal(g)}><Pencil size={13} /></button>
               </div>
             ))}
           </div>
@@ -243,10 +256,6 @@ export function PlanView({
                       <div className="budget-card-name">
                         {b.name}
                         {b.recurring && <span className="pill"><Repeat size={11} /> {b.frequency}</span>}
-                      </div>
-                      <div className="row-actions">
-                        <button className="icon-btn" title="Edit bill" onClick={(e) => { e.stopPropagation(); onEditBill(b); }}><Pencil size={14} /></button>
-                        <button className="icon-btn" title="Delete bill" onClick={(e) => { e.stopPropagation(); onDeleteBill(b.id); }}><Trash2 size={14} /></button>
                       </div>
                     </div>
                     <div className="muted">{accountName(b.accountId)} · {categoryName(b.categoryId)}</div>
@@ -276,10 +285,6 @@ export function PlanView({
                       <div className="budget-card-name">
                         {g.name}
                         {progress.achieved && <span className="pill tone-teal"><CheckCircle2 size={11} /> Achieved</span>}
-                      </div>
-                      <div className="row-actions">
-                        <button className="icon-btn" title="Edit goal" onClick={(e) => { e.stopPropagation(); onEditGoal(g); }}><Pencil size={14} /></button>
-                        <button className="icon-btn" title="Delete goal" onClick={(e) => { e.stopPropagation(); onDeleteGoal(g.id); }}><Trash2 size={14} /></button>
                       </div>
                     </div>
                     <div className="dash-budget-bar-track">

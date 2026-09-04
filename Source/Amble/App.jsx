@@ -1159,10 +1159,8 @@ export default function App() {
                 balances={balances}
                 onAddBill={() => setBillModal({})}
                 onEditBill={setBillModal}
-                onDeleteBill={requestDeleteBill}
                 onAddGoal={() => setGoalModal({})}
                 onEditGoal={setGoalModal}
-                onDeleteGoal={requestDeleteGoal}
                 onAddContribution={addGoalContribution}
                 onMarkPaid={markBillPaid}
                 onUnmarkPaid={unmarkBillPaid}
