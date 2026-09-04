@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
-  Plus, ChevronLeft, ChevronRight, Pencil, Trash2, CheckCircle2, Undo2, Link2, Receipt,
+  Plus, ChevronLeft, ChevronRight, Pencil, Trash2, CheckCircle2, Undo2,
   CalendarClock, Target, Repeat, AlertCircle
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
@@ -22,7 +22,6 @@ export function PlanView({
   const today = todayStr();
   const [monthCursor, setMonthCursor] = useState(firstOfMonth(today));
   const [selectedDay, setSelectedDay] = useState(today);
-  const [linkingKey, setLinkingKey] = useState(null); // `${billId}:${dateKey}`
   const [contribInputs, setContribInputs] = useState({}); // goalId -> string
 
   const accountName = (id) => accounts.find((a) => a.id === id)?.name || "Unknown account";
@@ -78,7 +77,7 @@ export function PlanView({
     const key = `${bill.id}:${dateKey}`;
     const linkedTxId = bill.completions ? bill.completions[dateKey] : null;
     const linkedTx = typeof linkedTxId === "string" ? transactions.find((t) => t.id === linkedTxId) : null;
-    const candidates = linkingKey === key ? linkCandidates(bill, dateKey) : [];
+    const candidates = status !== "paid" ? linkCandidates(bill, dateKey) : [];
 
     return (
       <div key={key} className="plan-occ-row">
@@ -105,32 +104,26 @@ export function PlanView({
           ) : (
             <>
               <button className="btn btn-ghost btn-sm" onClick={() => onMarkPaid(bill.id, dateKey)}><CheckCircle2 size={13} /> Mark paid</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setLinkingKey(linkingKey === key ? null : key)}><Link2 size={13} /> Link transaction</button>
+              <select
+                className="select plan-link-select"
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  if (v === "__new__") onAssignTransaction(bill, dateKey);
+                  else onLinkTransaction(bill.id, dateKey, v);
+                }}
+              >
+                <option value="" disabled>Link transaction…</option>
+                {candidates.map((t) => (
+                  <option key={t.id} value={t.id}>{fmtDate(t.date)} · {t.description || "—"} · {fmt(t.amount)}</option>
+                ))}
+                <option value="__new__">+ Create a new transaction for this</option>
+              </select>
             </>
           )}
           <button className="icon-btn" title="Edit bill" onClick={() => onEditBill(bill)}><Pencil size={13} /></button>
         </div>
-        {linkingKey === key && (
-          <div className="plan-link-panel">
-            {candidates.length > 0 ? (
-              <div className="plan-link-list">
-                {candidates.map((t) => (
-                  <button key={t.id} className="plan-link-item" onClick={() => { onLinkTransaction(bill.id, dateKey, t.id); setLinkingKey(null); }}>
-                    <Receipt size={13} className="muted" />
-                    <span>{t.description || "—"}</span>
-                    <span className="muted">{fmtDate(t.date)}</span>
-                    <span className="amount">{fmt(t.amount)}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="settings-desc" style={{ margin: 0 }}>No unlinked transactions on this account match yet.</p>
-            )}
-            <button className="btn btn-primary btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => { setLinkingKey(null); onAssignTransaction(bill, dateKey); }}>
-              <Plus size={13} /> Create a new transaction for this
-            </button>
-          </div>
-        )}
       </div>
     );
   };

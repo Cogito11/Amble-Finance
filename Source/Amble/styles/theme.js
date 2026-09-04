@@ -344,11 +344,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-occ-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; }
 .plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:13.5px; flex-wrap:wrap; }
 .plan-occ-sub { font-size:12px; }
-.plan-link-panel { flex-basis:100%; display:flex; flex-direction:column; gap:8px; background: var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-top:4px; }
-.plan-link-list { display:flex; flex-direction:column; gap:2px; }
-.plan-link-item { display:flex; align-items:center; gap:8px; padding:6px 4px; border-radius:6px; background:transparent; border:none; cursor:pointer; font-size:12.5px; color:var(--text); text-align:left; }
-.plan-link-item:hover { background: var(--surface); }
-.plan-link-item span:nth-child(2) { flex:1; }
+.plan-link-select { width:auto; padding:6px 10px; font-size:12.5px; }
 .plan-columns { align-items:flex-start; }
 .plan-col-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin: 0 0 10px; }
 .plan-bill-list, .plan-goal-list { display:flex; flex-direction:column; gap:10px; }
