@@ -6,7 +6,7 @@ import { Modal } from "../common/Modal";
 import { blurOnWheel, uid } from "../../utils/misc";
 import { todayStr } from "../../utils/dates";
 
-export function BillModal({ initial, accounts, categories, onSave, onClose, onDelete }) {
+export function BillModal({ initial, accounts, categories, budgets, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [name, setName] = useState(initial.name || "");
   const [type, setType] = useState(initial.type || "expense");
@@ -21,7 +21,15 @@ export function BillModal({ initial, accounts, categories, onSave, onClose, onDe
   const [endDate, setEndDate] = useState(initial.endDate || "");
   const [notes, setNotes] = useState(initial.notes || "");
 
-  const parentCategories = categories.filter((c) => c.type === type && !c.parentCategoryId);
+  // A category mirrored from a budget (planId set) should only be selectable
+  // while that budget is the active one - same rule TransactionModal applies.
+  // A bill already pointing at a category from a since-deactivated budget still
+  // shows it (so editing an older bill doesn't silently lose its category name),
+  // but it can't be newly picked for anything else.
+  const activeBudgetId = (budgets || []).find((b) => b.active)?.id;
+  const isSelectable = (c) => !c.planId || c.planId === activeBudgetId;
+
+  const parentCategories = categories.filter((c) => c.type === type && !c.parentCategoryId && (isSelectable(c) || c.id === categoryId));
 
   const canSave = name.trim().length > 0 && amount && parseFloat(amount) > 0 && accountId && dueDate;
 

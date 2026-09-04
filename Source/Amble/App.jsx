@@ -1255,6 +1255,7 @@ export default function App() {
           initial={billModal}
           accounts={state.accounts}
           categories={state.categories}
+          budgets={state.plans}
           onSave={saveBill}
           onClose={() => setBillModal(null)}
           onDelete={requestDeleteBill}
