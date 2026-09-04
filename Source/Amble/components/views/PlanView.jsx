@@ -16,13 +16,14 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export function PlanView({
   bills, goals, accounts, categories, transactions, balances,
   onAddBill, onEditBill, onDeleteBill,
-  onAddGoal, onEditGoal, onDeleteGoal,
+  onAddGoal, onEditGoal, onDeleteGoal, onAddContribution,
   onMarkPaid, onUnmarkPaid, onAssignTransaction, onLinkTransaction,
 }) {
   const today = todayStr();
   const [monthCursor, setMonthCursor] = useState(firstOfMonth(today));
   const [selectedDay, setSelectedDay] = useState(today);
   const [linkingKey, setLinkingKey] = useState(null); // `${billId}:${dateKey}`
+  const [contribInputs, setContribInputs] = useState({}); // goalId -> string
 
   const accountName = (id) => accounts.find((a) => a.id === id)?.name || "Unknown account";
   const categoryName = (id) => (id ? (categories.find((c) => c.id === id)?.name || "Uncategorized") : "Uncategorized");
@@ -77,6 +78,7 @@ export function PlanView({
     const key = `${bill.id}:${dateKey}`;
     const linkedTxId = bill.completions ? bill.completions[dateKey] : null;
     const linkedTx = typeof linkedTxId === "string" ? transactions.find((t) => t.id === linkedTxId) : null;
+    const candidates = linkingKey === key ? linkCandidates(bill, dateKey) : [];
 
     return (
       <div key={key} className="plan-occ-row">
@@ -110,14 +112,14 @@ export function PlanView({
         </div>
         {linkingKey === key && (
           <div className="plan-link-panel">
-            {linkCandidates(bill, dateKey).length > 0 ? (
+            {candidates.length > 0 ? (
               <div className="plan-link-list">
-                {linkCandidates(bill, dateKey).map((t) => (
+                {candidates.map((t) => (
                   <button key={t.id} className="plan-link-item" onClick={() => { onLinkTransaction(bill.id, dateKey, t.id); setLinkingKey(null); }}>
                     <Receipt size={13} className="muted" />
                     <span>{t.description || "—"}</span>
                     <span className="muted">{fmtDate(t.date)}</span>
-                    <span className="mono">{fmt(t.amount)}</span>
+                    <span className="amount">{fmt(t.amount)}</span>
                   </button>
                 ))}
               </div>
@@ -135,13 +137,16 @@ export function PlanView({
 
   if (!hasAnyPlan) {
     return (
-      <EmptyState
-        icon={CalendarClock}
-        title="Nothing planned yet"
-        message="Add a bill to track (one-time or recurring) or set a savings goal, and they'll show up here on the calendar."
-        actionLabel="Add bill"
-        onAction={onAddBill}
-      />
+      <div className="plan-empty-wrap">
+        <EmptyState
+          icon={CalendarClock}
+          title="Nothing planned yet"
+          message="Add a bill to track (one-time or recurring) or set a savings goal, and they'll show up here on the calendar."
+          actionLabel="Add bill"
+          onAction={onAddBill}
+        />
+        <button className="btn btn-ghost btn-sm plan-empty-alt" onClick={onAddGoal}><Plus size={14} /> Or add a goal instead</button>
+      </div>
     );
   }
 
@@ -175,6 +180,8 @@ export function PlanView({
                 key={dateKey}
                 className={`plan-cal-cell ${isToday ? "plan-cal-cell-today" : ""} ${isSelected ? "plan-cal-cell-selected" : ""}`}
                 onClick={() => setSelectedDay(dateKey)}
+                aria-label={`${fmtDate(dateKey)}${entries?.bills.length ? `, ${entries.bills.length} bill${entries.bills.length === 1 ? "" : "s"} due` : ""}${entries?.goals.length ? `, goal target date` : ""}`}
+                aria-pressed={isSelected}
               >
                 <span className="plan-cal-daynum">{Number(dateKey.slice(8))}</span>
                 {entries && (
@@ -186,6 +193,12 @@ export function PlanView({
               </button>
             );
           })}
+        </div>
+        <div className="plan-cal-legend muted">
+          <span><span className="plan-cal-dot tone-brass" /> Upcoming</span>
+          <span><span className="plan-cal-dot tone-rust" /> Overdue</span>
+          <span><span className="plan-cal-dot tone-teal" /> Paid</span>
+          <span><Target size={10} className="tone-amber" /> Goal target date</span>
         </div>
       </div>
 
@@ -233,7 +246,9 @@ export function PlanView({
                     <div className="muted">{accountName(b.accountId)} · {categoryName(b.categoryId)}</div>
                     <div className="plan-bill-bottom">
                       <span className={`amount ${b.type === "income" ? "tone-teal" : "tone-rust"}`}>{b.type === "income" ? "+" : "−"}{fmt(b.amount)}</span>
-                      <span className="muted">{next ? `Next due ${fmtDate(next.dateKey)}` : "Fully paid"}</span>
+                      <span className={next && next.dateKey < today ? "tone-rust" : "muted"}>
+                        {next ? (next.dateKey < today ? `Overdue since ${fmtDate(next.dateKey)}` : `Next due ${fmtDate(next.dateKey)}`) : "Fully paid"}
+                      </span>
                     </div>
                   </div>
                 );
@@ -270,6 +285,25 @@ export function PlanView({
                         {g.targetDate ? (progress.overdue ? `Past due ${fmtDate(g.targetDate)}` : `By ${fmtDate(g.targetDate)}`) : "No target date"}
                       </span>
                     </div>
+                    {g.trackingMode === "manual" && !progress.achieved && (
+                      <div className="plan-goal-contrib" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="number" min="0" step="0.01" placeholder="Add amount saved"
+                          className="input mono" value={contribInputs[g.id] || ""}
+                          onChange={(e) => setContribInputs((s) => ({ ...s, [g.id]: e.target.value }))}
+                        />
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            const amt = parseFloat(contribInputs[g.id]);
+                            if (amt > 0) onAddContribution(g.id, amt);
+                            setContribInputs((s) => ({ ...s, [g.id]: "" }));
+                          }}
+                        >
+                          <Plus size={13} /> Add
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -179,7 +179,13 @@ export default function App() {
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
-    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth" };
+    // Every section defaults to visible except "plan" - it's a newer, more
+    // involved feature (bills/goals/calendar) that not everyone wants cluttering
+    // the sidebar, so it starts opt-in. Existing installs get this too, since
+    // their saved prefs (below) won't have a "plan" key yet to override it -
+    // same mechanism that already brings any new section in hidden or shown per
+    // its own default without touching users' existing customizations.
+    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, section.id !== "plan"])), footerMetric: "netWorth" };
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
       if (!raw) return defaultPrefs;
@@ -785,6 +791,16 @@ export default function App() {
       onConfirm: () => { deleteGoal(id); setConfirmDialog(null); },
     });
   };
+  // Quick "add contribution" from the Plan view's goal card, for manually-tracked
+  // goals - avoids opening the full edit modal just to bump a running total.
+  const addGoalContribution = (goalId, amount) => {
+    setState((s) => ({
+      ...s,
+      goals: s.goals.map((g) => (g.id === goalId && g.trackingMode === "manual"
+        ? { ...g, manualAmount: (g.manualAmount || 0) + amount }
+        : g)),
+    }));
+  };
 
   const setCurrency = (code) => {
     setState((s) => ({ ...s, currency: code }));
@@ -1147,6 +1163,7 @@ export default function App() {
                 onAddGoal={() => setGoalModal({})}
                 onEditGoal={setGoalModal}
                 onDeleteGoal={requestDeleteGoal}
+                onAddContribution={addGoalContribution}
                 onMarkPaid={markBillPaid}
                 onUnmarkPaid={unmarkBillPaid}
                 onAssignTransaction={assignTransactionToBill}

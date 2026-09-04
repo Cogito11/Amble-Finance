@@ -357,6 +357,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-bill-card:focus-visible, .plan-goal-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .plan-bill-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .plan-bill-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12.5px; }
+.plan-cal-legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-size:11.5px; }
+.plan-cal-legend span { display:inline-flex; align-items:center; gap:5px; }
+.plan-empty-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
+.plan-empty-alt { color: var(--text-muted); }
+.plan-goal-contrib { display:flex; gap:8px; margin-top:2px; }
+.plan-goal-contrib .input { flex:1; padding:6px 10px; font-size:12.5px; }
 @media (max-width: 900px) {
   .plan-columns { grid-template-columns: 1fr; }
 }
