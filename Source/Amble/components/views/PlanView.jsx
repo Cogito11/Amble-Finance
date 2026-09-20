@@ -6,13 +6,24 @@ import {
 import { EmptyState } from "../common/EmptyState";
 import {
   addMonths, dayOfWeek, daysInMonth, firstOfMonth, generateBillOccurrences,
-  goalProgress, monthLabel, nextUnpaidOccurrence, occurrenceStatus, sortedBillsList, sortedGoalsList,
+  addDays, goalProgress, latestUnpaidOccurrence, monthLabel, nextUnpaidOccurrence, occurrenceStatus, sortedGoalsList,
 } from "../../state/planning";
 import { fmt, fmtDate } from "../../utils/format";
 import { todayStr } from "../../utils/dates";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_CAL_DOTS = 4; // per-day cap before collapsing into a "+N" overflow badge
+
+function PlanListSection({ title, items, renderItem }) {
+  return (
+    <section className="plan-list-section">
+      <h4 className="plan-list-section-title">{title}</h4>
+      <div className="plan-bill-list">
+        {items.map(renderItem)}
+      </div>
+    </section>
+  );
+}
 
 export function PlanView({
   bills, goals, accounts, categories, transactions, balances,
@@ -24,6 +35,7 @@ export function PlanView({
   const [monthCursor, setMonthCursor] = useState(firstOfMonth(today));
   const [selectedDay, setSelectedDay] = useState(today);
   const [contribInputs, setContribInputs] = useState({}); // goalId -> string
+  const [showArchived, setShowArchived] = useState(false);
 
   const accountName = (id) => accounts.find((a) => a.id === id)?.name || "Unknown account";
   const categoryName = (id) => (id ? (categories.find((c) => c.id === id)?.name || "Uncategorized") : "Uncategorized");
@@ -56,18 +68,35 @@ export function PlanView({
 
   const selectedDayEntries = occurrencesByDay[selectedDay] || { bills: [], goals: [] };
   const hasAnyPlan = (bills || []).length > 0 || (goals || []).length > 0;
-  const sortedBills = useMemo(() => sortedBillsList(bills, today), [bills, today]);
-  const sortedGoals = useMemo(() => sortedGoalsList(goals), [goals]);
+  const billGroups = useMemo(() => {
+    const horizon = addDays(today, 30);
+    const groups = { attention: [], upcoming: [], later: [], completed: [] };
+    (bills || []).forEach((bill) => {
+      const next = nextUnpaidOccurrence(bill, today);
+      const overdue = latestUnpaidOccurrence(bill, today);
+      const item = { bill, next, overdue, date: overdue?.dateKey || next?.dateKey || "9999-99-99" };
+      if (overdue) groups.attention.push(item);
+      else if (next && next.dateKey <= horizon) groups.upcoming.push(item);
+      else if (next) groups.later.push(item);
+      else groups.completed.push(item);
+    });
+    Object.values(groups).forEach((group) => group.sort((a, b) => a.date.localeCompare(b.date) || (a.bill.name || "").localeCompare(b.bill.name || "")));
+    return groups;
+  }, [bills, today]);
+  const goalGroups = useMemo(() => {
+    const groups = { active: [], overdue: [], completed: [] };
+    sortedGoalsList(goals).forEach((goal) => {
+      const progress = goalProgress(goal, balances, today);
+      if (progress.achieved) groups.completed.push({ goal, progress });
+      else if (progress.overdue) groups.overdue.push({ goal, progress });
+      else groups.active.push({ goal, progress });
+    });
+    return groups;
+  }, [goals, balances, today]);
 
   const planSummary = useMemo(() => {
-    const upcomingBills = (bills || []).filter((bill) => {
-      const next = nextUnpaidOccurrence(bill, today);
-      return next && next.dateKey >= today;
-    }).length;
-    const overdueBills = (bills || []).filter((bill) => {
-      const next = nextUnpaidOccurrence(bill, today);
-      return next && next.dateKey < today;
-    }).length;
+    const upcomingBills = billGroups.upcoming.length;
+    const overdueBills = billGroups.attention.length;
     const onTrackGoals = (goals || []).filter((goal) => {
       const progress = goalProgress(goal, balances, today);
       return progress.achieved || progress.pct >= 75;
@@ -76,7 +105,7 @@ export function PlanView({
     const totalGoalSaved = (goals || []).reduce((sum, goal) => sum + goalProgress(goal, balances, today).current, 0);
 
     return { upcomingBills, overdueBills, onTrackGoals, totalGoalTarget, totalGoalSaved };
-  }, [bills, goals, balances, today]);
+  }, [billGroups, goals, balances, today]);
 
   // Transactions on the bill's account, near the occurrence date, not already
   // linked to this or any other bill occurrence - candidates for "link an
@@ -91,6 +120,66 @@ export function PlanView({
       .slice(0, 6)
       .map((x) => x.t);
   };
+
+  const renderBillCard = ({ bill, next, overdue }) => {
+    const occurrence = overdue || next;
+    return (
+      <div key={bill.id} className="plan-bill-card" role="button" tabIndex={0} onClick={() => onEditBill(bill)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditBill(bill); } }}>
+        <div className="plan-bill-top">
+          <div className="budget-card-name">
+            {bill.name}
+            {bill.recurring && <span className="pill"><Repeat size={11} /> {bill.frequency}</span>}
+          </div>
+        </div>
+        <div className="muted">{accountName(bill.accountId)} · {categoryName(bill.categoryId)}</div>
+        <div className="plan-bill-bottom">
+          <span className={`amount ${bill.type === "income" ? "tone-teal" : "tone-rust"}`}>{bill.type === "income" ? "+" : "−"}{fmt(bill.amount)}</span>
+          <span className={overdue ? "tone-rust" : "muted"}>
+            {occurrence ? (overdue ? `Overdue since ${fmtDate(occurrence.dateKey)}` : `Next due ${fmtDate(occurrence.dateKey)}`) : "Fully paid"}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGoalCard = ({ goal, progress }) => (
+    <div key={goal.id} className="plan-goal-card" role="button" tabIndex={0} onClick={() => onEditGoal(goal)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(goal); } }}>
+      <div className="plan-bill-top">
+        <div className="budget-card-name">
+          {goal.name}
+          {progress.achieved && <span className="pill tone-teal"><CheckCircle2 size={11} /> Achieved</span>}
+        </div>
+      </div>
+      <div className="dash-budget-bar-track">
+        <div className="dash-budget-bar-fill" style={{ width: `${progress.pct}%`, background: progress.achieved ? "var(--teal)" : "var(--brass)" }} />
+      </div>
+      <div className="plan-bill-bottom">
+        <span className="muted">{fmt(progress.current)} of {fmt(progress.target)}</span>
+        <span className={`muted ${progress.overdue ? "tone-rust" : ""}`}>
+          {goal.targetDate ? (progress.overdue ? `Past due ${fmtDate(goal.targetDate)}` : `By ${fmtDate(goal.targetDate)}`) : "No target date"}
+        </span>
+      </div>
+      {goal.trackingMode === "manual" && !progress.achieved && (
+        <div className="plan-goal-contrib" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="number" min="0" step="0.01" placeholder="Add amount saved"
+            className="input mono" value={contribInputs[goal.id] || ""}
+            onChange={(e) => setContribInputs((s) => ({ ...s, [goal.id]: e.target.value }))}
+          />
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              const amt = parseFloat(contribInputs[goal.id]);
+              if (amt > 0) onAddContribution(goal.id, amt);
+              setContribInputs((s) => ({ ...s, [goal.id]: "" }));
+            }}
+          >
+            <Plus size={13} /> Add
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   const renderOccurrenceRow = (bill, dateKey) => {
     const status = occurrenceStatus(bill, dateKey, today);
@@ -283,7 +372,7 @@ export function PlanView({
           <div className="plan-summary-card">
             <div className="plan-summary-icon tone-brass"><CalendarClock size={17} /></div>
             <div>
-              <div className="plan-summary-label">Upcoming bills</div>
+              <div className="plan-summary-label">Due in 30 days</div>
               <div className="plan-summary-value tone-brass">{planSummary.upcomingBills}</div>
             </div>
           </div>
@@ -313,84 +402,35 @@ export function PlanView({
       <div className="grid-2 plan-columns">
         <div>
           <h3 className="plan-col-title">Bills</h3>
-          {sortedBills.length === 0 ? (
-            <p className="settings-desc">No bills yet.</p>
+          {billGroups.attention.length === 0 && billGroups.upcoming.length === 0 && (!showArchived || (billGroups.later.length === 0 && billGroups.completed.length === 0)) ? (
+            <p className="settings-desc">No active bills.</p>
           ) : (
-            <div className="plan-bill-list">
-              {sortedBills.map((b) => {
-                const next = nextUnpaidOccurrence(b, today);
-                return (
-                  <div key={b.id} className="plan-bill-card" role="button" tabIndex={0} onClick={() => onEditBill(b)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditBill(b); } }}>
-                    <div className="plan-bill-top">
-                      <div className="budget-card-name">
-                        {b.name}
-                        {b.recurring && <span className="pill"><Repeat size={11} /> {b.frequency}</span>}
-                      </div>
-                    </div>
-                    <div className="muted">{accountName(b.accountId)} · {categoryName(b.categoryId)}</div>
-                    <div className="plan-bill-bottom">
-                      <span className={`amount ${b.type === "income" ? "tone-teal" : "tone-rust"}`}>{b.type === "income" ? "+" : "−"}{fmt(b.amount)}</span>
-                      <span className={next && next.dateKey < today ? "tone-rust" : "muted"}>
-                        {next ? (next.dateKey < today ? `Overdue since ${fmtDate(next.dateKey)}` : `Next due ${fmtDate(next.dateKey)}`) : "Fully paid"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="plan-list-sections">
+              {billGroups.attention.length > 0 && <PlanListSection title="Needs attention" items={billGroups.attention} renderItem={renderBillCard} />}
+              {billGroups.upcoming.length > 0 && <PlanListSection title="Next 30 days" items={billGroups.upcoming} renderItem={renderBillCard} />}
+              {showArchived && billGroups.later.length > 0 && <PlanListSection title="Later" items={billGroups.later} renderItem={renderBillCard} />}
+              {showArchived && billGroups.completed.length > 0 && <PlanListSection title="Completed" items={billGroups.completed} renderItem={renderBillCard} />}
             </div>
           )}
         </div>
         <div>
           <h3 className="plan-col-title">Goals</h3>
-          {sortedGoals.length === 0 ? (
-            <p className="settings-desc">No goals yet.</p>
+          {goalGroups.active.length === 0 && goalGroups.overdue.length === 0 && (!showArchived || goalGroups.completed.length === 0) ? (
+            <p className="settings-desc">No active goals.</p>
           ) : (
-            <div className="plan-goal-list">
-              {sortedGoals.map((g) => {
-                const progress = goalProgress(g, balances, today);
-                return (
-                  <div key={g.id} className="plan-goal-card" role="button" tabIndex={0} onClick={() => onEditGoal(g)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}>
-                    <div className="plan-bill-top">
-                      <div className="budget-card-name">
-                        {g.name}
-                        {progress.achieved && <span className="pill tone-teal"><CheckCircle2 size={11} /> Achieved</span>}
-                      </div>
-                    </div>
-                    <div className="dash-budget-bar-track">
-                      <div className="dash-budget-bar-fill" style={{ width: `${progress.pct}%`, background: progress.achieved ? "var(--teal)" : "var(--brass)" }} />
-                    </div>
-                    <div className="plan-bill-bottom">
-                      <span className="muted">{fmt(progress.current)} of {fmt(progress.target)}</span>
-                      <span className={`muted ${progress.overdue ? "tone-rust" : ""}`}>
-                        {g.targetDate ? (progress.overdue ? `Past due ${fmtDate(g.targetDate)}` : `By ${fmtDate(g.targetDate)}`) : "No target date"}
-                      </span>
-                    </div>
-                    {g.trackingMode === "manual" && !progress.achieved && (
-                      <div className="plan-goal-contrib" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="number" min="0" step="0.01" placeholder="Add amount saved"
-                          className="input mono" value={contribInputs[g.id] || ""}
-                          onChange={(e) => setContribInputs((s) => ({ ...s, [g.id]: e.target.value }))}
-                        />
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            const amt = parseFloat(contribInputs[g.id]);
-                            if (amt > 0) onAddContribution(g.id, amt);
-                            setContribInputs((s) => ({ ...s, [g.id]: "" }));
-                          }}
-                        >
-                          <Plus size={13} /> Add
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="plan-list-sections">
+              {goalGroups.overdue.length > 0 && <PlanListSection title="Needs attention" items={goalGroups.overdue} renderItem={renderGoalCard} />}
+              {goalGroups.active.length > 0 && <PlanListSection title="Active goals" items={goalGroups.active} renderItem={renderGoalCard} />}
+              {showArchived && goalGroups.completed.length > 0 && <PlanListSection title="Completed" items={goalGroups.completed} renderItem={renderGoalCard} />}
             </div>
           )}
         </div>
       </div>
+      {(billGroups.later.length > 0 || billGroups.completed.length > 0 || goalGroups.completed.length > 0) && (
+        <button className="btn btn-ghost btn-sm plan-archive-toggle" onClick={() => setShowArchived((visible) => !visible)}>
+          {showArchived ? "Hide later and completed" : "Show later and completed"}
+        </button>
+      )}
     </div>
   );
 }

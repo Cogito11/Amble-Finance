@@ -386,6 +386,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-link-select { min-width:0; max-width:100%; flex:1 1 180px; }
 .plan-columns { align-items:flex-start; }
 .plan-col-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin: 0 0 10px; }
+.plan-list-sections { display:flex; flex-direction:column; gap:16px; }
+.plan-list-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; margin:0 0 8px; }
 .plan-bill-list, .plan-goal-list { display:flex; flex-direction:column; gap:10px; }
 .plan-bill-card, .plan-goal-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition: border-color .15s; }
 .plan-bill-card .budget-card-name, .plan-goal-card .budget-card-name { font-size:17px; }
@@ -399,6 +401,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-empty-alt { color: var(--text-muted); }
 .plan-goal-contrib { display:flex; gap:8px; margin-top:2px; }
 .plan-goal-contrib .input { flex:1; padding:6px 10px; font-size:12.5px; }
+.plan-archive-toggle { align-self:center; margin-top:-2px; }
 @media (max-width: 900px) {
   .plan-main-grid { grid-template-columns: 1fr; }
   .plan-columns { grid-template-columns: 1fr; }

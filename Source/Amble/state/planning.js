@@ -136,12 +136,19 @@ export function occurrenceStatus(bill, dateKey, today) {
 }
 
 // Earliest unpaid occurrence on or after `fromDate`, looking up to ~3 years
-// ahead. Used for "next due" summaries (Plan view's upcoming list, sorting).
+// ahead. Historical occurrences are handled separately so recurring bills do
+// not stay stuck on an old unpaid date.
 export function nextUnpaidOccurrence(bill, fromDate) {
   if (!bill?.dueDate) return null;
   const horizon = addDays(fromDate, 366 * 3);
-  const occurrences = generateBillOccurrences(bill, bill.dueDate < fromDate ? bill.dueDate : fromDate, horizon);
+  const occurrences = generateBillOccurrences(bill, fromDate, horizon);
   return occurrences.find((o) => !(bill.completions && bill.completions[o.dateKey])) || null;
+}
+
+export function latestUnpaidOccurrence(bill, throughDate) {
+  if (!bill?.dueDate) return null;
+  const occurrences = generateBillOccurrences(bill, bill.dueDate, throughDate);
+  return [...occurrences].reverse().find((o) => !(bill.completions && bill.completions[o.dateKey])) || null;
 }
 
 export function sortedBillsList(bills, today) {
