@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   Plus, ChevronLeft, ChevronRight, CheckCircle2, Undo2,
-  CalendarClock, Target, Repeat, AlertCircle
+  CalendarClock, Target, Repeat, AlertCircle, CircleDollarSign, TrendingUp
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import {
@@ -58,6 +58,25 @@ export function PlanView({
   const hasAnyPlan = (bills || []).length > 0 || (goals || []).length > 0;
   const sortedBills = useMemo(() => sortedBillsList(bills, today), [bills, today]);
   const sortedGoals = useMemo(() => sortedGoalsList(goals), [goals]);
+
+  const planSummary = useMemo(() => {
+    const upcomingBills = (bills || []).filter((bill) => {
+      const next = nextUnpaidOccurrence(bill, today);
+      return next && next.dateKey >= today;
+    }).length;
+    const overdueBills = (bills || []).filter((bill) => {
+      const next = nextUnpaidOccurrence(bill, today);
+      return next && next.dateKey < today;
+    }).length;
+    const onTrackGoals = (goals || []).filter((goal) => {
+      const progress = goalProgress(goal, balances, today);
+      return progress.achieved || progress.pct >= 75;
+    }).length;
+    const totalGoalTarget = (goals || []).reduce((sum, goal) => sum + (goal.targetAmount || 0), 0);
+    const totalGoalSaved = (goals || []).reduce((sum, goal) => sum + goalProgress(goal, balances, today).current, 0);
+
+    return { upcomingBills, overdueBills, onTrackGoals, totalGoalTarget, totalGoalSaved };
+  }, [bills, goals, balances, today]);
 
   // Transactions on the bill's account, near the occurrence date, not already
   // linked to this or any other bill occurrence - candidates for "link an
@@ -158,7 +177,8 @@ export function PlanView({
         <button className="btn btn-primary" onClick={onAddBill}><Plus size={16} /> New bill</button>
       </div>
 
-      <div className="card plan-calendar-card">
+      <div className="plan-main-grid">
+        <div className="card plan-calendar-card">
         <div className="plan-calendar-nav">
           <button className="icon-btn" onClick={() => setMonthCursor(addMonths(monthCursor, -1))} aria-label="Previous month"><ChevronLeft size={16} /></button>
           <div className="plan-calendar-month">{monthLabel(monthCursor)}</div>
@@ -213,33 +233,82 @@ export function PlanView({
           <span><span className="plan-cal-dot tone-teal" /> Paid bill</span>
           <span><Target size={10} className="tone-amber" /> Goal target date</span>
         </div>
+        </div>
+
+        <div className="card plan-day-panel">
+          <div className="plan-day-heading">
+            <span>{fmtDate(selectedDay)}{selectedDay === today && <span className="pill">Today</span>}</span>
+            <span className="plan-day-meta muted">{selectedDayEntries.bills.length + selectedDayEntries.goals.length} item{selectedDayEntries.bills.length + selectedDayEntries.goals.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="plan-day-sections">
+              <section className="plan-day-section">
+                <h4 className="plan-day-section-title">Bills</h4>
+                {selectedDayEntries.bills.length === 0 ? (
+                  <p className="settings-desc plan-day-empty">No Bills Today</p>
+                ) : (
+                  <div className="plan-occ-list">
+                    {selectedDayEntries.bills.map((b) => renderOccurrenceRow(b, selectedDay))}
+                  </div>
+                )}
+              </section>
+              <section className="plan-day-section">
+                <h4 className="plan-day-section-title">Goals</h4>
+                {selectedDayEntries.goals.length === 0 ? (
+                  <p className="settings-desc plan-day-empty">No Goals Today</p>
+                ) : (
+                  <div className="plan-occ-list">
+                    {selectedDayEntries.goals.map((g) => (
+                      <div
+                        key={g.id}
+                        className="plan-occ-row"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => { if (window.getSelection().toString()) return; onEditGoal(g); }}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}
+                      >
+                        <div className="plan-occ-main">
+                          <div className="plan-occ-name"><Target size={13} className="tone-amber" /> {g.name} <span className="pill">Goal target date</span></div>
+                          <div className="muted plan-occ-sub">Target: {fmt(g.targetAmount)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+          </div>
+        </div>
       </div>
 
-      <div className="card plan-day-panel">
-        <div className="plan-day-heading">{fmtDate(selectedDay)}{selectedDay === today && <span className="pill">Today</span>}</div>
-        {selectedDayEntries.bills.length === 0 && selectedDayEntries.goals.length === 0 ? (
-          <p className="settings-desc" style={{ margin: 0 }}>Nothing due this day.</p>
-        ) : (
-          <div className="plan-occ-list">
-            {selectedDayEntries.bills.map((b) => renderOccurrenceRow(b, selectedDay))}
-            {selectedDayEntries.goals.map((g) => (
-              <div
-                key={g.id}
-                className="plan-occ-row"
-                role="button"
-                tabIndex={0}
-                onClick={() => { if (window.getSelection().toString()) return; onEditGoal(g); }}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}
-              >
-                <div className="plan-occ-main">
-                  <div className="plan-occ-name"><Target size={13} className="tone-amber" /> {g.name} <span className="pill">Goal target date</span></div>
-                  <div className="muted plan-occ-sub">Target: {fmt(g.targetAmount)}</div>
-                </div>
-              </div>
-            ))}
+      <div className="plan-summary-grid">
+          <div className="plan-summary-card">
+            <div className="plan-summary-icon tone-brass"><CalendarClock size={17} /></div>
+            <div>
+              <div className="plan-summary-label">Upcoming bills</div>
+              <div className="plan-summary-value tone-brass">{planSummary.upcomingBills}</div>
+            </div>
           </div>
-        )}
-      </div>
+          <div className="plan-summary-card">
+            <div className="plan-summary-icon tone-rust"><AlertCircle size={17} /></div>
+            <div>
+              <div className="plan-summary-label">Overdue</div>
+              <div className="plan-summary-value tone-rust">{planSummary.overdueBills}</div>
+            </div>
+          </div>
+          <div className="plan-summary-card">
+            <div className="plan-summary-icon tone-teal"><TrendingUp size={17} /></div>
+            <div>
+              <div className="plan-summary-label">Goals on track</div>
+              <div className="plan-summary-value tone-teal">{planSummary.onTrackGoals}</div>
+            </div>
+          </div>
+          <div className="plan-summary-card">
+            <div className="plan-summary-icon tone-amber"><CircleDollarSign size={17} /></div>
+            <div>
+              <div className="plan-summary-label">Saved toward goals</div>
+              <div className="plan-summary-value tone-amber">{fmt(planSummary.totalGoalSaved)} / {fmt(planSummary.totalGoalTarget)}</div>
+            </div>
+          </div>
+        </div>
 
       <div className="grid-2 plan-columns">
         <div>

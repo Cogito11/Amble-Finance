@@ -320,38 +320,75 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
 
 /* ---------------------------------- plan view ---------------------------------- */
-.plan-view { display:flex; flex-direction:column; gap:18px; }
+.plan-view { display:flex; flex-direction:column; gap:10px; }
 .plan-header { display:flex; justify-content:flex-end; gap:10px; }
-.plan-calendar-card { padding:16px 18px 18px; }
-.plan-calendar-nav { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-.plan-calendar-month { font-family:'Fraunces',serif; font-weight:600; font-size:15.5px; min-width:150px; text-align:center; }
-.plan-cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; }
-.plan-cal-weekdays { margin-bottom:4px; }
-.plan-cal-weekday { text-align:center; font-size:11px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding-bottom:2px; }
-.plan-cal-cell { position:relative; aspect-ratio:1/0.75; min-height:44px; border:1px solid transparent; border-radius:8px; background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding:5px 4px 4px; gap:3px; font-family:'Inter',sans-serif; color:var(--text); }
+.plan-main-grid { display:grid; grid-template-columns:minmax(0, 1.55fr) minmax(300px, .75fr); gap:16px; align-items:stretch; }
+.plan-summary-grid {
+  display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0 16px;
+  margin-top:6px;
+  padding:8px 14px;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+}
+.plan-summary-card {
+  padding:15px 0;
+  min-height:72px;
+  display:flex; align-items:center; gap:8px;
+}
+.plan-summary-card:not(:last-child) { border-right:1px solid var(--border); }
+.plan-summary-icon {
+  width:36px; height:36px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.plan-summary-label { font-size:9.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; }
+.plan-summary-value { font-family:'Fraunces',serif; font-weight:600; font-size:16px; line-height:1.2; margin-top:2px; }
+.plan-calendar-card { padding:16px 18px 14px; margin-bottom:0; }
+.plan-calendar-nav { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.plan-calendar-month { font-family:'Fraunces',serif; font-weight:600; font-size:13px; min-width:130px; text-align:center; }
+.plan-cal-grid {
+  display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:4px;
+  width:100%; margin: 0 auto;
+}
+.plan-cal-weekdays { margin-bottom:3px; }
+.plan-cal-weekday { text-align:center; font-size:9.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding-bottom:2px; }
+.plan-cal-cell {
+  position:relative; width:100%; aspect-ratio:1.45 / 1; min-height:0; border:1px solid transparent; border-radius:8px;
+  background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  padding:4px 2px 3px; gap:3px; font-family:'Inter',sans-serif; color:var(--text);
+}
 .plan-cal-cell:hover { background: var(--surface-2); }
 .plan-cal-cell-blank { cursor:default; background:transparent; pointer-events:none; }
 .plan-cal-cell-today .plan-cal-daynum { background: var(--brass); color: var(--on-brass); border-radius:50%; }
 .plan-cal-cell-selected { border-color: var(--brass); }
-.plan-cal-daynum { font-size:12px; width:18px; height:18px; display:flex; align-items:center; justify-content:center; }
-.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap; max-width:48px; }
-.plan-cal-dot { width:8px; height:8px; border-radius:50%; background: currentColor; flex-shrink:0; }
-.plan-cal-dot-more { font-size:10px; line-height:1; color: var(--text-faint); font-weight:600; }
-.plan-day-panel { display:flex; flex-direction:column; gap:12px; }
-.plan-day-heading { font-family:'Fraunces',serif; font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
-.plan-occ-list { display:flex; flex-direction:column; gap:10px; }
-.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 4px; margin:0 -4px; border-bottom:1px solid var(--border); border-radius:8px; cursor:pointer; }
-.plan-occ-row:last-child { border-bottom:none; }
+.plan-cal-daynum { font-size:11px; width:17px; height:17px; display:flex; align-items:center; justify-content:center; }
+.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:3px; flex-wrap:wrap; max-width:36px; }
+.plan-cal-dot { width:5px; height:5px; border-radius:50%; background: currentColor; flex-shrink:0; }
+.plan-cal-dot-more { font-size:8px; line-height:1; color: var(--text-faint); font-weight:600; }
+.plan-day-panel { display:flex; flex-direction:column; gap:8px; height:100%; margin-bottom:0; }
+.plan-day-heading {
+  font-family:'Fraunces',serif; font-weight:600; font-size:15px;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+}
+.plan-day-meta { font-family:'Inter',sans-serif; font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; }
+.plan-day-sections { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.plan-day-section { min-width:0; }
+.plan-day-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; margin:0 0 4px; }
+.plan-day-empty { margin:0; font-size:12px; }
+.plan-occ-list { display:flex; flex-direction:column; gap:8px; }
+.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:11px 10px; border:1px solid var(--border); border-radius:8px; cursor:pointer; }
 .plan-occ-row:hover { background: var(--surface-2); }
 .plan-occ-row:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .plan-occ-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; }
-.plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:13.5px; flex-wrap:wrap; }
-.plan-occ-sub { font-size:12px; }
+.plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:14.5px; flex-wrap:wrap; }
+.plan-occ-sub { font-size:12.5px; }
 .plan-link-select { width:auto; padding:6px 10px; font-size:12.5px; }
+.plan-occ-row .row-actions { min-width:0; max-width:100%; flex-wrap:wrap; }
+.plan-link-select { min-width:0; max-width:100%; flex:1 1 180px; }
 .plan-columns { align-items:flex-start; }
 .plan-col-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin: 0 0 10px; }
 .plan-bill-list, .plan-goal-list { display:flex; flex-direction:column; gap:10px; }
 .plan-bill-card, .plan-goal-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition: border-color .15s; }
+.plan-bill-card .budget-card-name, .plan-goal-card .budget-card-name { font-size:17px; }
 .plan-bill-card:hover, .plan-goal-card:hover { border-color: var(--brass); }
 .plan-bill-card:focus-visible, .plan-goal-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
 .plan-bill-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -363,7 +400,27 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-goal-contrib { display:flex; gap:8px; margin-top:2px; }
 .plan-goal-contrib .input { flex:1; padding:6px 10px; font-size:12.5px; }
 @media (max-width: 900px) {
+  .plan-main-grid { grid-template-columns: 1fr; }
   .plan-columns { grid-template-columns: 1fr; }
+  .plan-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-summary-card:not(:last-child) { border-right:none; }
+  .plan-summary-card:nth-child(odd) { border-right:1px solid var(--border); }
+  .plan-summary-value { font-size:15px; }
+}
+
+@media (max-width: 1050px) and (min-width: 901px) {
+  .plan-main-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-height: 760px) {
+  .plan-calendar-card { padding: 10px 12px 10px; }
+  .plan-calendar-nav { margin-bottom: 5px; }
+  .plan-cal-cell { min-height: 40px; max-height: 40px; }
+  .plan-cal-daynum { width: 15px; height: 15px; font-size: 10px; }
+  .plan-cal-dots { max-width: 30px; gap: 2px; }
+  .plan-cal-dot { width: 4px; height: 4px; }
+  .plan-day-panel { gap: 8px; }
+  .plan-occ-row { padding: 8px 4px; }
 }
 
 .budget-active-card { display:flex; flex-direction:column; gap:10px; }
