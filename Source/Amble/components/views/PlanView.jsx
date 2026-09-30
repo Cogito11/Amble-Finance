@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
-  Plus, ChevronLeft, ChevronRight, CheckCircle2, Undo2,
+  Plus, ChevronLeft, ChevronRight, CheckCircle2, Circle, Undo2,
   CalendarClock, Target, Repeat, AlertCircle, CircleDollarSign, TrendingUp
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
@@ -12,18 +12,11 @@ import { fmt, fmtDate } from "../../utils/format";
 import { todayStr } from "../../utils/dates";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MAX_CAL_DOTS = 4; // per-day cap before collapsing into a "+N" overflow badge
+const MAX_CAL_DOTS = 4;   // dots per day (compact cells) before collapsing into "+N"
+const MAX_CAL_CHIPS = 2;  // labeled chips per day (roomy cells) before collapsing into "+N more"
+const GOAL_HORIZON_DAYS = 30; // bottom list only shows goals due within this many days
 
-function PlanListSection({ title, items, renderItem }) {
-  return (
-    <section className="plan-list-section">
-      <h4 className="plan-list-section-title">{title}</h4>
-      <div className="plan-bill-list">
-        {items.map(renderItem)}
-      </div>
-    </section>
-  );
-}
+const markerTone = (status) => (status === "overdue" ? "tone-rust" : status === "paid" ? "tone-teal" : "tone-brass");
 
 export function PlanView({
   bills, goals, accounts, categories, transactions, balances,
@@ -35,7 +28,7 @@ export function PlanView({
   const [monthCursor, setMonthCursor] = useState(firstOfMonth(today));
   const [selectedDay, setSelectedDay] = useState(today);
   const [contribInputs, setContribInputs] = useState({}); // goalId -> string
-  const [showArchived, setShowArchived] = useState(false);
+  const [showAllGoals, setShowAllGoals] = useState(false);
 
   const accountName = (id) => accounts.find((a) => a.id === id)?.name || "Unknown account";
   const categoryName = (id) => (id ? (categories.find((c) => c.id === id)?.name || "Uncategorized") : "Uncategorized");
@@ -67,45 +60,59 @@ export function PlanView({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const selectedDayEntries = occurrencesByDay[selectedDay] || { bills: [], goals: [] };
+  const selectedCount = selectedDayEntries.bills.length + selectedDayEntries.goals.length;
   const hasAnyPlan = (bills || []).length > 0 || (goals || []).length > 0;
-  const billGroups = useMemo(() => {
-    const horizon = addDays(today, 30);
-    const groups = { attention: [], upcoming: [], later: [], completed: [] };
+
+  // Bottom lists are deliberately narrow: bills due in the *current* calendar
+  // month (not the month being browsed) and goals due within the
+  // next GOAL_HORIZON_DAYS. Everything else stays reachable from the calendar.
+  const currentMonthStart = firstOfMonth(today);
+  const currentMonthEnd = `${currentMonthStart.slice(0, 7)}-${String(daysInMonth(currentMonthStart)).padStart(2, "0")}`;
+  const monthBillRows = useMemo(() => {
+    const rows = [];
     (bills || []).forEach((bill) => {
-      const next = nextUnpaidOccurrence(bill, today);
-      const overdue = latestUnpaidOccurrence(bill, today);
-      const item = { bill, next, overdue, date: overdue?.dateKey || next?.dateKey || "9999-99-99" };
-      if (overdue) groups.attention.push(item);
-      else if (next && next.dateKey <= horizon) groups.upcoming.push(item);
-      else if (next) groups.later.push(item);
-      else groups.completed.push(item);
+      generateBillOccurrences(bill, currentMonthStart, currentMonthEnd).forEach((o) => {
+        rows.push({ bill, dateKey: o.dateKey, status: occurrenceStatus(bill, o.dateKey, today) });
+      });
     });
-    Object.values(groups).forEach((group) => group.sort((a, b) => a.date.localeCompare(b.date) || (a.bill.name || "").localeCompare(b.bill.name || "")));
-    return groups;
-  }, [bills, today]);
-  const goalGroups = useMemo(() => {
-    const groups = { active: [], overdue: [], completed: [] };
+    return rows.sort((x, y) => x.dateKey.localeCompare(y.dateKey) || (x.bill.name || "").localeCompare(y.bill.name || ""));
+  }, [bills, today, currentMonthStart, currentMonthEnd]);
+  const monthPaidCount = monthBillRows.filter((r) => r.status === "paid").length;
+
+  const { upcomingGoalRows, hiddenGoalRows } = useMemo(() => {
+    const horizon = addDays(today, GOAL_HORIZON_DAYS);
+    const upcoming = [];
+    const hidden = [];
     sortedGoalsList(goals).forEach((goal) => {
       const progress = goalProgress(goal, balances, today);
-      if (progress.achieved) groups.completed.push({ goal, progress });
-      else if (progress.overdue) groups.overdue.push({ goal, progress });
-      else groups.active.push({ goal, progress });
+      const due = goal.targetDate && goal.targetDate >= today && goal.targetDate <= horizon;
+      // Achieved goals still show while their date is coming up (with an
+      // "Achieved" badge) - hiding them made a goal look like it had vanished.
+      if (due) upcoming.push({ goal, progress });
+      else hidden.push({ goal, progress });
     });
-    return groups;
+    return { upcomingGoalRows: upcoming, hiddenGoalRows: hidden };
   }, [goals, balances, today]);
+  const goalRows = showAllGoals ? [...upcomingGoalRows, ...hiddenGoalRows] : upcomingGoalRows;
 
   const planSummary = useMemo(() => {
-    const upcomingBills = billGroups.upcoming.length;
-    const overdueBills = billGroups.attention.length;
+    const horizon = addDays(today, 30);
+    const yesterday = addDays(today, -1);
+    let upcomingBills = 0;
+    let overdueBills = 0;
+    (bills || []).forEach((bill) => {
+      if (latestUnpaidOccurrence(bill, yesterday)) { overdueBills += 1; return; }
+      const next = nextUnpaidOccurrence(bill, today);
+      if (next && next.dateKey <= horizon) upcomingBills += 1;
+    });
     const onTrackGoals = (goals || []).filter((goal) => {
       const progress = goalProgress(goal, balances, today);
       return progress.achieved || progress.pct >= 75;
     }).length;
     const totalGoalTarget = (goals || []).reduce((sum, goal) => sum + (goal.targetAmount || 0), 0);
     const totalGoalSaved = (goals || []).reduce((sum, goal) => sum + goalProgress(goal, balances, today).current, 0);
-
     return { upcomingBills, overdueBills, onTrackGoals, totalGoalTarget, totalGoalSaved };
-  }, [billGroups, goals, balances, today]);
+  }, [bills, goals, balances, today]);
 
   // Transactions on the bill's account, near the occurrence date, not already
   // linked to this or any other bill occurrence - candidates for "link an
@@ -121,43 +128,68 @@ export function PlanView({
       .map((x) => x.t);
   };
 
-  const renderBillCard = ({ bill, next, overdue }) => {
-    const occurrence = overdue || next;
+  const renderMonthBillRow = ({ bill, dateKey, status }) => {
+    const paid = status === "paid";
+    const linkedTxId = bill.completions ? bill.completions[dateKey] : null;
+    const linkedTx = typeof linkedTxId === "string" ? transactions.find((t) => t.id === linkedTxId) : null;
+    const day = Number(dateKey.slice(8));
     return (
-      <div key={bill.id} className="plan-bill-card" role="button" tabIndex={0} onClick={() => onEditBill(bill)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditBill(bill); } }}>
-        <div className="plan-bill-top">
-          <div className="budget-card-name">
-            {bill.name}
+      <div
+        key={`${bill.id}:${dateKey}`}
+        className={`plan-row plan-row-${status}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => onEditBill(bill)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditBill(bill); } }}
+      >
+        <div className="plan-date-badge">
+          <b>{day}</b>
+          <span>{WEEKDAY_LABELS[dayOfWeek(dateKey)]}</span>
+        </div>
+        <div className="plan-row-main">
+          <div className="plan-row-name">
+            <span className="plan-row-title">{bill.name}</span>
             {bill.recurring && <span className="pill"><Repeat size={11} /> {bill.frequency}</span>}
           </div>
+          <div className="muted plan-row-sub">
+            {accountName(bill.accountId)} · {categoryName(bill.categoryId)}{linkedTx ? " · linked" : ""}
+          </div>
         </div>
-        <div className="muted">{accountName(bill.accountId)} · {categoryName(bill.categoryId)}</div>
-        <div className="plan-bill-bottom">
-          <span className={`amount ${bill.type === "income" ? "tone-teal" : "tone-rust"}`}>{bill.type === "income" ? "+" : "−"}{fmt(bill.amount)}</span>
-          <span className={overdue ? "tone-rust" : "muted"}>
-            {occurrence ? (overdue ? `Overdue since ${fmtDate(occurrence.dateKey)}` : `Next due ${fmtDate(occurrence.dateKey)}`) : "Fully paid"}
+        <div className="plan-row-side">
+          <span className={`amount ${bill.type === "income" ? "tone-teal" : "tone-rust"}`}>{bill.type === "income" ? "+" : "−"}{fmt(linkedTx ? linkedTx.amount : bill.amount)}</span>
+          <span className={`plan-row-status ${paid ? "tone-teal" : status === "overdue" ? "tone-rust" : "muted"}`}>
+            {paid ? "Paid" : status === "overdue" ? "Overdue" : "Upcoming"}
           </span>
         </div>
+        <button
+          className={`icon-btn plan-check ${paid ? "tone-teal" : ""}`}
+          title={paid ? "Undo paid" : "Mark paid"}
+          aria-label={paid ? `Undo paid for ${bill.name}` : `Mark ${bill.name} paid`}
+          onClick={(e) => { e.stopPropagation(); if (paid) onUnmarkPaid(bill.id, dateKey); else onMarkPaid(bill.id, dateKey); }}
+        >
+          {paid ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+        </button>
       </div>
     );
   };
 
-  const renderGoalCard = ({ goal, progress }) => (
-    <div key={goal.id} className="plan-goal-card" role="button" tabIndex={0} onClick={() => onEditGoal(goal)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(goal); } }}>
-      <div className="plan-bill-top">
-        <div className="budget-card-name">
-          {goal.name}
-          {progress.achieved && <span className="pill tone-teal"><CheckCircle2 size={11} /> Achieved</span>}
-        </div>
+  const renderGoalRow = ({ goal, progress }) => (
+    <div key={goal.id} className="plan-row plan-goal-row" role="button" tabIndex={0} onClick={() => onEditGoal(goal)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(goal); } }}>
+      <div className="plan-goal-top">
+        <span className="plan-row-title"><Target size={13} className="tone-amber" /> {goal.name}</span>
+        {progress.achieved && <span className="pill tone-teal"><CheckCircle2 size={11} /> Achieved</span>}
+        <span className={`plan-goal-due ${progress.overdue ? "tone-rust" : "muted"}`}>
+          {goal.targetDate
+            ? (progress.overdue ? `Past due ${fmtDate(goal.targetDate)}` : progress.daysLeft === 0 ? "Due today" : `${progress.daysLeft} day${progress.daysLeft === 1 ? "" : "s"} left · ${fmtDate(goal.targetDate)}`)
+            : "No target date"}
+        </span>
       </div>
       <div className="dash-budget-bar-track">
         <div className="dash-budget-bar-fill" style={{ width: `${progress.pct}%`, background: progress.achieved ? "var(--teal)" : "var(--brass)" }} />
       </div>
-      <div className="plan-bill-bottom">
-        <span className="muted">{fmt(progress.current)} of {fmt(progress.target)}</span>
-        <span className={`muted ${progress.overdue ? "tone-rust" : ""}`}>
-          {goal.targetDate ? (progress.overdue ? `Past due ${fmtDate(goal.targetDate)}` : `By ${fmtDate(goal.targetDate)}`) : "No target date"}
-        </span>
+      <div className="plan-goal-amounts muted">
+        <span>{fmt(progress.current)} of {fmt(progress.target)}</span>
+        <span>{Math.round(progress.pct)}%</span>
       </div>
       {goal.trackingMode === "manual" && !progress.achieved && (
         <div className="plan-goal-contrib" onClick={(e) => e.stopPropagation()}>
@@ -259,178 +291,176 @@ export function PlanView({
     );
   }
 
+  const weeks = cells.length / 7;
+
   return (
     <div className="plan-view">
-      <div className="plan-header">
-        <button className="btn btn-ghost" onClick={onAddGoal}><Plus size={16} /> New goal</button>
-        <button className="btn btn-primary" onClick={onAddBill}><Plus size={16} /> New bill</button>
+      <div className="plan-stats">
+        <div className="plan-stat">
+          <div className="plan-stat-icon tone-brass"><CalendarClock size={17} /></div>
+          <div><div className="plan-stat-label">Due in 30 days</div><div className="plan-stat-value tone-brass">{planSummary.upcomingBills}</div></div>
+        </div>
+        <div className="plan-stat">
+          <div className="plan-stat-icon tone-rust"><AlertCircle size={17} /></div>
+          <div><div className="plan-stat-label">Overdue</div><div className="plan-stat-value tone-rust">{planSummary.overdueBills}</div></div>
+        </div>
+        <div className="plan-stat">
+          <div className="plan-stat-icon tone-teal"><TrendingUp size={17} /></div>
+          <div><div className="plan-stat-label">Goals on track</div><div className="plan-stat-value tone-teal">{planSummary.onTrackGoals}</div></div>
+        </div>
+        <div className="plan-stat">
+          <div className="plan-stat-icon tone-amber"><CircleDollarSign size={17} /></div>
+          <div><div className="plan-stat-label">Saved toward goals</div><div className="plan-stat-value tone-amber" title={`${fmt(planSummary.totalGoalSaved)} / ${fmt(planSummary.totalGoalTarget)}`}>{fmt(planSummary.totalGoalSaved)} <span className="plan-stat-of">/ {fmt(planSummary.totalGoalTarget)}</span></div></div>
+        </div>
       </div>
 
-      <div className="plan-main-grid">
+      <div className="plan-main">
         <div className="card plan-calendar-card">
-        <div className="plan-calendar-nav">
-          <button className="icon-btn" onClick={() => setMonthCursor(addMonths(monthCursor, -1))} aria-label="Previous month"><ChevronLeft size={16} /></button>
-          <div className="plan-calendar-month">{monthLabel(monthCursor)}</div>
-          <button className="icon-btn" onClick={() => setMonthCursor(addMonths(monthCursor, 1))} aria-label="Next month"><ChevronRight size={16} /></button>
-          <button className="btn btn-ghost btn-sm" style={{ marginLeft: "auto" }} onClick={() => { setMonthCursor(firstOfMonth(today)); setSelectedDay(today); }}>Today</button>
-        </div>
-        <div className="plan-cal-grid plan-cal-weekdays">
-          {WEEKDAY_LABELS.map((w) => <div key={w} className="plan-cal-weekday">{w}</div>)}
-        </div>
-        <div className="plan-cal-grid">
-          {cells.map((dateKey, i) => {
-            if (!dateKey) return <div key={i} className="plan-cal-cell plan-cal-cell-blank" />;
-            const entries = occurrencesByDay[dateKey];
-            const isToday = dateKey === today;
-            const isSelected = dateKey === selectedDay;
-            // A single combined pool of markers (bill occurrences + goal target
-            // dates) capped at MAX_CAL_DOTS total, so the "+N" overflow always
-            // trails everything actually shown instead of a bill-only count
-            // landing ahead of a goal marker that then renders after it.
-            const dayMarkers = entries
-              ? [
-                  ...entries.bills.map((b) => ({ kind: "bill", key: b.id, status: occurrenceStatus(b, dateKey, today) })),
-                  ...entries.goals.map((g) => ({ kind: "goal", key: g.id })),
-                ]
-              : [];
-            return (
-              <button
-                key={dateKey}
-                className={`plan-cal-cell ${isToday ? "plan-cal-cell-today" : ""} ${isSelected ? "plan-cal-cell-selected" : ""}`}
-                onClick={() => setSelectedDay(dateKey)}
-                aria-label={`${fmtDate(dateKey)}${entries?.bills.length ? `, ${entries.bills.length} bill${entries.bills.length === 1 ? "" : "s"} due` : ""}${entries?.goals.length ? `, goal target date` : ""}`}
-                aria-pressed={isSelected}
-              >
-                <span className="plan-cal-daynum">{Number(dateKey.slice(8))}</span>
-                {dayMarkers.length > 0 && (
-                  <span className="plan-cal-dots">
-                    {dayMarkers.slice(0, MAX_CAL_DOTS).map((m) => (
-                      m.kind === "bill"
-                        ? <span key={`b-${m.key}`} className={`plan-cal-dot ${m.status === "overdue" ? "tone-rust" : m.status === "paid" ? "tone-teal" : "tone-brass"}`} />
-                        : <Target key={`g-${m.key}`} size={10} className="tone-amber" />
-                    ))}
-                    {dayMarkers.length > MAX_CAL_DOTS && <span className="plan-cal-dot-more">+{dayMarkers.length - MAX_CAL_DOTS}</span>}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        <div className="plan-cal-legend muted">
-          <span><span className="plan-cal-dot tone-brass" /> Upcoming bill</span>
-          <span><span className="plan-cal-dot tone-rust" /> Overdue bill</span>
-          <span><span className="plan-cal-dot tone-teal" /> Paid bill</span>
-          <span><Target size={10} className="tone-amber" /> Goal target date</span>
-        </div>
+          <div className="plan-cal-head">
+            <button className="icon-btn" onClick={() => setMonthCursor(addMonths(monthCursor, -1))} aria-label="Previous month"><ChevronLeft size={18} /></button>
+            <div className="plan-cal-title">{monthLabel(monthCursor)}</div>
+            <button className="icon-btn" onClick={() => setMonthCursor(addMonths(monthCursor, 1))} aria-label="Next month"><ChevronRight size={18} /></button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setMonthCursor(firstOfMonth(today)); setSelectedDay(today); }}>Today</button>
+            <div className="plan-cal-actions">
+              <button className="btn btn-ghost btn-sm" onClick={onAddGoal}><Plus size={14} /> Goal</button>
+              <button className="btn btn-primary btn-sm" onClick={onAddBill}><Plus size={14} /> Bill</button>
+            </div>
+          </div>
+
+          <div className="plan-cal-body">
+            <div className="plan-cal-weekdays" aria-hidden="true">
+              {WEEKDAY_LABELS.map((w) => <div key={w} className="plan-cal-weekday"><span className="wd-full">{w}</span><span className="wd-short">{w[0]}</span></div>)}
+            </div>
+            <div className="plan-cal-grid" style={{ "--weeks": weeks }}>
+              {cells.map((dateKey, i) => {
+                if (!dateKey) return <div key={i} className="plan-cal-cell plan-cal-cell-blank" />;
+                const entries = occurrencesByDay[dateKey];
+                const isToday = dateKey === today;
+                const isSelected = dateKey === selectedDay;
+                // One combined pool of markers (bills + goal target dates), so the
+                // "+N" overflow always trails everything actually shown.
+                const markers = entries
+                  ? [
+                      ...entries.bills.map((b) => ({ kind: "bill", key: b.id, label: b.name, tone: markerTone(occurrenceStatus(b, dateKey, today)) })),
+                      ...entries.goals.map((g) => ({ kind: "goal", key: g.id, label: g.name, tone: "tone-amber" })),
+                    ]
+                  : [];
+                return (
+                  <button
+                    key={dateKey}
+                    className={`plan-cal-cell ${isToday ? "plan-cal-cell-today" : ""} ${isSelected ? "plan-cal-cell-selected" : ""}`}
+                    onClick={() => setSelectedDay(dateKey)}
+                    aria-label={`${fmtDate(dateKey)}${entries?.bills.length ? `, ${entries.bills.length} bill${entries.bills.length === 1 ? "" : "s"} due` : ""}${entries?.goals.length ? `, goal target date` : ""}`}
+                    aria-pressed={isSelected}
+                  >
+                    <span className="plan-cal-daynum">{Number(dateKey.slice(8))}</span>
+                    {markers.length > 0 && (
+                      <>
+                        <span className="plan-cal-dots">
+                          {markers.slice(0, MAX_CAL_DOTS).map((m) => (
+                            m.kind === "bill"
+                              ? <span key={`b-${m.key}`} className={`plan-cal-dot ${m.tone}`} />
+                              : <Target key={`g-${m.key}`} size={10} className="tone-amber" />
+                          ))}
+                          {markers.length > MAX_CAL_DOTS && <span className="plan-cal-more">+{markers.length - MAX_CAL_DOTS}</span>}
+                        </span>
+                        <span className="plan-cal-chips">
+                          {markers.slice(0, MAX_CAL_CHIPS).map((m) => (
+                            <span key={`${m.kind}-${m.key}`} className={`plan-cal-chip ${m.tone}`}>
+                              {m.kind === "goal" && <Target size={9} />}
+                              <span>{m.label}</span>
+                            </span>
+                          ))}
+                          {markers.length > MAX_CAL_CHIPS && <span className="plan-cal-more">+{markers.length - MAX_CAL_CHIPS} more</span>}
+                        </span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="plan-cal-legend muted">
+            <span><span className="plan-cal-dot tone-brass" /> Upcoming</span>
+            <span><span className="plan-cal-dot tone-rust" /> Overdue</span>
+            <span><span className="plan-cal-dot tone-teal" /> Paid</span>
+            <span><Target size={10} className="tone-amber" /> Goal date</span>
+          </div>
         </div>
 
         <div className="card plan-day-panel">
-          <div className="plan-day-heading">
-            <span>{fmtDate(selectedDay)}{selectedDay === today && <span className="pill">Today</span>}</span>
-            <span className="plan-day-meta muted">{selectedDayEntries.bills.length + selectedDayEntries.goals.length} item{selectedDayEntries.bills.length + selectedDayEntries.goals.length === 1 ? "" : "s"}</span>
+          <div className="plan-day-head">
+            <div className="plan-day-date">{fmtDate(selectedDay)}{selectedDay === today && <span className="pill">Today</span>}</div>
+            <span className="plan-day-meta muted">{selectedCount} item{selectedCount === 1 ? "" : "s"}</span>
           </div>
-          <div className="plan-day-sections">
-              <section className="plan-day-section">
-                <h4 className="plan-day-section-title">Bills</h4>
-                {selectedDayEntries.bills.length === 0 ? (
-                  <p className="settings-desc plan-day-empty">No Bills Today</p>
-                ) : (
-                  <div className="plan-occ-list">
-                    {selectedDayEntries.bills.map((b) => renderOccurrenceRow(b, selectedDay))}
-                  </div>
-                )}
-              </section>
-              <section className="plan-day-section">
-                <h4 className="plan-day-section-title">Goals</h4>
-                {selectedDayEntries.goals.length === 0 ? (
-                  <p className="settings-desc plan-day-empty">No Goals Today</p>
-                ) : (
-                  <div className="plan-occ-list">
-                    {selectedDayEntries.goals.map((g) => (
-                      <div
-                        key={g.id}
-                        className="plan-occ-row"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => { if (window.getSelection().toString()) return; onEditGoal(g); }}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}
-                      >
-                        <div className="plan-occ-main">
-                          <div className="plan-occ-name"><Target size={13} className="tone-amber" /> {g.name} <span className="pill">Goal target date</span></div>
-                          <div className="muted plan-occ-sub">Target: {fmt(g.targetAmount)}</div>
-                        </div>
+          <div className="plan-day-body">
+            <section>
+              <h4 className="plan-day-section-title">Bills</h4>
+              {selectedDayEntries.bills.length === 0 ? (
+                <p className="settings-desc plan-day-empty">No bills on this day.</p>
+              ) : (
+                <div className="plan-occ-list">{selectedDayEntries.bills.map((b) => renderOccurrenceRow(b, selectedDay))}</div>
+              )}
+            </section>
+            <section>
+              <h4 className="plan-day-section-title">Goals</h4>
+              {selectedDayEntries.goals.length === 0 ? (
+                <p className="settings-desc plan-day-empty">No goal dates on this day.</p>
+              ) : (
+                <div className="plan-occ-list">
+                  {selectedDayEntries.goals.map((g) => (
+                    <div
+                      key={g.id}
+                      className="plan-occ-row plan-occ-goal"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => { if (window.getSelection().toString()) return; onEditGoal(g); }}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEditGoal(g); } }}
+                    >
+                      <div className="plan-occ-main">
+                        <div className="plan-occ-name"><Target size={13} className="tone-amber" /> {g.name} <span className="pill">Goal date</span></div>
+                        <div className="muted plan-occ-sub">Target: {fmt(g.targetAmount)}</div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </section>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
         </div>
       </div>
 
-      <div className="plan-summary-grid">
-          <div className="plan-summary-card">
-            <div className="plan-summary-icon tone-brass"><CalendarClock size={17} /></div>
-            <div>
-              <div className="plan-summary-label">Due in 30 days</div>
-              <div className="plan-summary-value tone-brass">{planSummary.upcomingBills}</div>
-            </div>
+      <div className="plan-lists">
+        <section className="card plan-list-card">
+          <div className="plan-list-head">
+            <h3 className="plan-list-title">Bills · {monthLabel(currentMonthStart)}</h3>
+            {monthBillRows.length > 0 && <span className="muted plan-list-meta">{monthPaidCount} of {monthBillRows.length} paid</span>}
           </div>
-          <div className="plan-summary-card">
-            <div className="plan-summary-icon tone-rust"><AlertCircle size={17} /></div>
-            <div>
-              <div className="plan-summary-label">Overdue</div>
-              <div className="plan-summary-value tone-rust">{planSummary.overdueBills}</div>
-            </div>
-          </div>
-          <div className="plan-summary-card">
-            <div className="plan-summary-icon tone-teal"><TrendingUp size={17} /></div>
-            <div>
-              <div className="plan-summary-label">Goals on track</div>
-              <div className="plan-summary-value tone-teal">{planSummary.onTrackGoals}</div>
-            </div>
-          </div>
-          <div className="plan-summary-card">
-            <div className="plan-summary-icon tone-amber"><CircleDollarSign size={17} /></div>
-            <div>
-              <div className="plan-summary-label">Saved toward goals</div>
-              <div className="plan-summary-value tone-amber">{fmt(planSummary.totalGoalSaved)} / {fmt(planSummary.totalGoalTarget)}</div>
-            </div>
-          </div>
-        </div>
+          {monthBillRows.length === 0 ? (
+            <p className="settings-desc plan-list-empty">No bills due this month.</p>
+          ) : (
+            <div className="plan-row-list">{monthBillRows.map(renderMonthBillRow)}</div>
+          )}
+        </section>
 
-      <div className="grid-2 plan-columns">
-        <div>
-          <h3 className="plan-col-title">Bills</h3>
-          {billGroups.attention.length === 0 && billGroups.upcoming.length === 0 && (!showArchived || (billGroups.later.length === 0 && billGroups.completed.length === 0)) ? (
-            <p className="settings-desc">No active bills.</p>
+        <section className="card plan-list-card">
+          <div className="plan-list-head">
+            <h3 className="plan-list-title">Goals · next {GOAL_HORIZON_DAYS} days</h3>
+            {upcomingGoalRows.length > 0 && <span className="muted plan-list-meta">{upcomingGoalRows.length} due</span>}
+          </div>
+          {goalRows.length === 0 ? (
+            <p className="settings-desc plan-list-empty">No goals due in the next {GOAL_HORIZON_DAYS} days.</p>
           ) : (
-            <div className="plan-list-sections">
-              {billGroups.attention.length > 0 && <PlanListSection title="Needs attention" items={billGroups.attention} renderItem={renderBillCard} />}
-              {billGroups.upcoming.length > 0 && <PlanListSection title="Next 30 days" items={billGroups.upcoming} renderItem={renderBillCard} />}
-              {showArchived && billGroups.later.length > 0 && <PlanListSection title="Later" items={billGroups.later} renderItem={renderBillCard} />}
-              {showArchived && billGroups.completed.length > 0 && <PlanListSection title="Completed" items={billGroups.completed} renderItem={renderBillCard} />}
-            </div>
+            <div className="plan-row-list">{goalRows.map(renderGoalRow)}</div>
           )}
-        </div>
-        <div>
-          <h3 className="plan-col-title">Goals</h3>
-          {goalGroups.active.length === 0 && goalGroups.overdue.length === 0 && (!showArchived || goalGroups.completed.length === 0) ? (
-            <p className="settings-desc">No active goals.</p>
-          ) : (
-            <div className="plan-list-sections">
-              {goalGroups.overdue.length > 0 && <PlanListSection title="Needs attention" items={goalGroups.overdue} renderItem={renderGoalCard} />}
-              {goalGroups.active.length > 0 && <PlanListSection title="Active goals" items={goalGroups.active} renderItem={renderGoalCard} />}
-              {showArchived && goalGroups.completed.length > 0 && <PlanListSection title="Completed" items={goalGroups.completed} renderItem={renderGoalCard} />}
-            </div>
+          {hiddenGoalRows.length > 0 && (
+            <button className="btn btn-ghost btn-sm plan-list-toggle" onClick={() => setShowAllGoals((v) => !v)}>
+              {showAllGoals ? "Hide other goals" : `Show ${hiddenGoalRows.length} other goal${hiddenGoalRows.length === 1 ? "" : "s"}`}
+            </button>
           )}
-        </div>
+        </section>
       </div>
-      {(billGroups.later.length > 0 || billGroups.completed.length > 0 || goalGroups.completed.length > 0) && (
-        <button className="btn btn-ghost btn-sm plan-archive-toggle" onClick={() => setShowArchived((visible) => !visible)}>
-          {showArchived ? "Hide later and completed" : "Show later and completed"}
-        </button>
-      )}
     </div>
   );
 }

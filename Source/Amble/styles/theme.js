@@ -320,110 +320,131 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
 
 /* ---------------------------------- plan view ---------------------------------- */
-.plan-view { display:flex; flex-direction:column; gap:10px; }
-.plan-header { display:flex; justify-content:flex-end; gap:10px; }
-.plan-main-grid { display:grid; grid-template-columns:minmax(0, 1.55fr) minmax(300px, .75fr); gap:16px; align-items:stretch; }
-.plan-summary-grid {
-  display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0 16px;
-  margin-top:6px;
-  padding:8px 14px;
-  background:var(--surface); border:1px solid var(--border); border-radius:12px;
-}
-.plan-summary-card {
-  padding:15px 0;
-  min-height:72px;
-  display:flex; align-items:center; gap:8px;
-}
-.plan-summary-card:not(:last-child) { border-right:1px solid var(--border); }
-.plan-summary-icon {
-  width:36px; height:36px; border-radius:10px;
-  display:flex; align-items:center; justify-content:center;
-  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
-}
-.plan-summary-label { font-size:9.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; }
-.plan-summary-value { font-family:'Fraunces',serif; font-weight:600; font-size:16px; line-height:1.2; margin-top:2px; }
-.plan-calendar-card { padding:16px 18px 14px; margin-bottom:0; }
-.plan-calendar-nav { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.plan-calendar-month { font-family:'Fraunces',serif; font-weight:600; font-size:13px; min-width:130px; text-align:center; }
-.plan-cal-grid {
-  display:grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap:4px;
-  width:100%; margin: 0 auto;
-}
-.plan-cal-weekdays { margin-bottom:3px; }
-.plan-cal-weekday { text-align:center; font-size:9.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.03em; padding-bottom:2px; }
+.plan-view { display:flex; flex-direction:column; gap:14px; min-width:0; }
+
+/* stat strip */
+.plan-stats { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
+.plan-stat { display:flex; align-items:center; gap:12px; min-width:0; padding:12px 14px; background:var(--surface); border:1px solid var(--border); border-radius:12px; }
+.plan-stat > div:last-child { min-width:0; }
+.plan-stat-icon { width:34px; height:34px; flex-shrink:0; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); }
+.plan-stat-label { font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plan-stat-value { font-family:'Fraunces',serif; font-weight:600; font-size:18px; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plan-stat-of { font-size:12px; font-weight:500; color:var(--text-faint); }
+
+/* calendar + day panel. The row's height follows the viewport, and the
+   calendar grid divides whatever height it gets evenly across its weeks, so
+   it fits the window instead of being sized from the cell width. */
+.plan-main { display:grid; grid-template-columns:minmax(0, 1fr) minmax(300px, 360px); gap:14px; height:clamp(400px, calc(100vh - 270px), 720px); min-width:0; }
+.plan-calendar-card { container-type:inline-size; container-name:plancal; display:flex; flex-direction:column; gap:10px; min-width:0; min-height:0; margin:0; padding:14px 16px 12px; }
+.plan-cal-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.plan-cal-title { font-family:'Fraunces',serif; font-weight:600; font-size:18px; min-width:150px; text-align:center; }
+.plan-cal-actions { margin-left:auto; display:flex; gap:8px; }
+.plan-cal-body { flex:1; min-height:0; display:flex; flex-direction:column; gap:4px; }
+.plan-cal-weekdays { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; }
+.plan-cal-weekday { text-align:center; font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; padding:2px 0; }
+.plan-cal-weekday .wd-short { display:none; }
+.plan-cal-grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); grid-template-rows:repeat(var(--weeks, 6), minmax(0, 1fr)); gap:4px; }
 .plan-cal-cell {
-  position:relative; width:100%; aspect-ratio:1.45 / 1; min-height:0; border:1px solid transparent; border-radius:8px;
-  background:transparent; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
-  padding:4px 2px 3px; gap:3px; font-family:'Inter',sans-serif; color:var(--text);
+  min-width:0; min-height:0; overflow:hidden; text-align:left;
+  display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:4px 5px;
+  background:var(--surface); border:1px solid var(--border); border-radius:8px; cursor:pointer;
+  font-family:'Inter',sans-serif; color:var(--text); transition:background .12s, border-color .12s;
 }
-.plan-cal-cell:hover { background: var(--surface-2); }
-.plan-cal-cell-blank { cursor:default; background:transparent; pointer-events:none; }
-.plan-cal-cell-today .plan-cal-daynum { background: var(--brass); color: var(--on-brass); border-radius:50%; }
-.plan-cal-cell-selected { border-color: var(--brass); }
-.plan-cal-daynum { font-size:11px; width:17px; height:17px; display:flex; align-items:center; justify-content:center; }
-.plan-cal-dots { display:flex; align-items:center; justify-content:center; gap:3px; flex-wrap:wrap; max-width:36px; }
-.plan-cal-dot { width:5px; height:5px; border-radius:50%; background: currentColor; flex-shrink:0; }
-.plan-cal-dot-more { font-size:8px; line-height:1; color: var(--text-faint); font-weight:600; }
-.plan-day-panel { display:flex; flex-direction:column; gap:8px; height:100%; margin-bottom:0; }
-.plan-day-heading {
-  font-family:'Fraunces',serif; font-weight:600; font-size:15px;
-  display:flex; align-items:center; justify-content:space-between; gap:8px;
-}
-.plan-day-meta { font-family:'Inter',sans-serif; font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; }
-.plan-day-sections { display:flex; flex-direction:column; gap:14px; min-width:0; }
-.plan-day-section { min-width:0; }
-.plan-day-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; margin:0 0 4px; }
-.plan-day-empty { margin:0; font-size:12px; }
-.plan-occ-list { display:flex; flex-direction:column; gap:8px; }
-.plan-occ-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:11px 10px; border:1px solid var(--border); border-radius:8px; cursor:pointer; }
-.plan-occ-row:hover { background: var(--surface-2); }
-.plan-occ-row:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
-.plan-occ-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:3px; }
-.plan-occ-name { display:flex; align-items:center; gap:7px; font-weight:500; font-size:14.5px; flex-wrap:wrap; }
-.plan-occ-sub { font-size:12.5px; }
-.plan-link-select { width:auto; padding:6px 10px; font-size:12.5px; }
-.plan-occ-row .row-actions { min-width:0; max-width:100%; flex-wrap:wrap; }
-.plan-link-select { min-width:0; max-width:100%; flex:1 1 180px; }
-.plan-columns { align-items:flex-start; }
-.plan-col-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin: 0 0 10px; }
-.plan-list-sections { display:flex; flex-direction:column; gap:16px; }
-.plan-list-section-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; margin:0 0 8px; }
-.plan-bill-list, .plan-goal-list { display:flex; flex-direction:column; gap:10px; }
-.plan-bill-card, .plan-goal-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:8px; cursor:pointer; transition: border-color .15s; }
-.plan-bill-card .budget-card-name, .plan-goal-card .budget-card-name { font-size:17px; }
-.plan-bill-card:hover, .plan-goal-card:hover { border-color: var(--brass); }
-.plan-bill-card:focus-visible, .plan-goal-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
-.plan-bill-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.plan-bill-bottom { display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:12.5px; }
-.plan-cal-legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-size:11.5px; }
+.plan-cal-cell:hover { background:var(--surface-2); }
+.plan-cal-cell-blank { cursor:default; background:transparent; border-color:transparent; pointer-events:none; }
+.plan-cal-cell-selected { border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+.plan-cal-daynum { align-self:flex-start; min-width:20px; height:20px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; font-size:12px; font-weight:500; }
+.plan-cal-cell-today .plan-cal-daynum { background:var(--brass); color:var(--on-brass); }
+.plan-cal-dots { display:flex; align-items:center; flex-wrap:wrap; gap:3px; padding-left:2px; }
+.plan-cal-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; display:inline-block; }
+.plan-cal-more { font-size:10px; line-height:1.2; color:var(--text-faint); font-weight:600; }
+.plan-cal-chips { display:none; flex-direction:column; gap:2px; min-height:0; overflow:hidden; }
+.plan-cal-chip { display:flex; align-items:center; gap:3px; min-width:0; padding:1px 5px; border-radius:4px; font-size:10.5px; line-height:1.3; font-weight:500; background:color-mix(in srgb, currentColor 14%, transparent); }
+.plan-cal-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-cal-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:11.5px; }
 .plan-cal-legend span { display:inline-flex; align-items:center; gap:5px; }
+
+/* roomy cells (wide card and tall window) show labeled chips instead of dots */
+@media (min-height:760px) {
+  @container plancal (min-width:600px) {
+    .plan-cal-dots { display:none; }
+    .plan-cal-chips { display:flex; }
+  }
+}
+/* very narrow card (popout, small window): one-letter weekdays, tighter cells */
+@container plancal (max-width:420px) {
+  .plan-cal-weekday .wd-full { display:none; }
+  .plan-cal-weekday .wd-short { display:inline; }
+  .plan-cal-cell { padding:3px; }
+  .plan-cal-daynum { font-size:11px; min-width:18px; height:18px; }
+  .plan-cal-title { min-width:0; font-size:16px; }
+}
+
+/* selected-day panel */
+.plan-day-panel { display:flex; flex-direction:column; min-width:0; min-height:0; margin:0; padding:0; overflow:hidden; }
+.plan-day-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.plan-day-date { display:flex; align-items:center; gap:8px; font-family:'Fraunces',serif; font-weight:600; font-size:15px; }
+.plan-day-meta { font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; }
+.plan-day-body { flex:1; min-height:0; overflow-y:auto; padding:14px 16px 16px; display:flex; flex-direction:column; gap:16px; }
+.plan-day-section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-faint); margin:0 0 8px; }
+.plan-day-empty { margin:0; font-size:12.5px; }
+.plan-occ-list { display:flex; flex-direction:column; gap:8px; }
+.plan-occ-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px 10px; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.plan-occ-row:hover { background:var(--surface-2); }
+.plan-occ-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+.plan-occ-main { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.plan-occ-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-weight:500; font-size:14px; }
+.plan-occ-sub { font-size:12.5px; }
+.plan-occ-row .row-actions { grid-column:1 / -1; justify-content:flex-start; flex-wrap:wrap; min-width:0; }
+.plan-link-select { width:auto; min-width:0; max-width:100%; flex:1 1 160px; padding:6px 10px; font-size:12.5px; }
+
+/* bottom lists */
+.plan-lists { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; align-items:start; }
+.plan-list-card { margin:0; padding:16px; min-width:0; }
+.plan-list-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.plan-list-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin:0; }
+.plan-list-meta { font-size:12px; white-space:nowrap; }
+.plan-list-empty { margin:0; padding:14px 0 6px; text-align:center; }
+.plan-list-toggle { margin-top:10px; }
+.plan-row-list { display:flex; flex-direction:column; gap:8px; }
+.plan-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }
+.plan-row:hover { border-color:var(--brass); background:var(--surface-2); }
+.plan-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+.plan-row-paid { opacity:.72; }
+.plan-date-badge { width:42px; flex-shrink:0; text-align:center; padding:4px 0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; line-height:1.15; }
+.plan-date-badge b { display:block; font-family:'Fraunces',serif; font-size:15px; }
+.plan-date-badge span { font-size:9.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); }
+.plan-row-overdue .plan-date-badge { border-color:var(--rust); }
+.plan-row-paid .plan-date-badge { border-color:var(--teal); }
+.plan-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.plan-row-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+.plan-row-title { display:inline-flex; align-items:center; gap:6px; font-weight:500; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-row-sub { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-row-side { display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex-shrink:0; }
+.plan-row-status { font-size:11.5px; }
+.plan-check { flex-shrink:0; padding:4px; }
+.plan-goal-row { flex-direction:column; align-items:stretch; gap:8px; }
+.plan-goal-top { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.plan-goal-due { font-size:12px; }
+.plan-goal-amounts { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; }
+.plan-goal-contrib { display:flex; gap:8px; }
+.plan-goal-contrib .input { flex:1; min-width:0; padding:6px 10px; font-size:12.5px; }
 .plan-empty-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
-.plan-empty-alt { color: var(--text-muted); }
-.plan-goal-contrib { display:flex; gap:8px; margin-top:2px; }
-.plan-goal-contrib .input { flex:1; padding:6px 10px; font-size:12.5px; }
-.plan-archive-toggle { align-self:center; margin-top:-2px; }
-@media (max-width: 900px) {
-  .plan-main-grid { grid-template-columns: 1fr; }
-  .plan-columns { grid-template-columns: 1fr; }
-  .plan-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .plan-summary-card:not(:last-child) { border-right:none; }
-  .plan-summary-card:nth-child(odd) { border-right:1px solid var(--border); }
-  .plan-summary-value { font-size:15px; }
-}
+.plan-empty-alt { color:var(--text-muted); }
 
-@media (max-width: 1050px) and (min-width: 901px) {
-  .plan-main-grid { grid-template-columns: 1fr; }
+@media (max-width:900px) {
+  .plan-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .plan-main { grid-template-columns:1fr; height:auto; }
+  .plan-calendar-card { height:clamp(380px, 62vh, 560px); }
+  .plan-day-panel { max-height:460px; }
+  .plan-lists { grid-template-columns:1fr; }
 }
-
-@media (max-height: 760px) {
-  .plan-calendar-card { padding: 10px 12px 10px; }
-  .plan-calendar-nav { margin-bottom: 5px; }
-  .plan-cal-cell { min-height: 40px; max-height: 40px; }
-  .plan-cal-daynum { width: 15px; height: 15px; font-size: 10px; }
-  .plan-cal-dots { max-width: 30px; gap: 2px; }
-  .plan-cal-dot { width: 4px; height: 4px; }
-  .plan-day-panel { gap: 8px; }
-  .plan-occ-row { padding: 8px 4px; }
+@media (max-width:420px) {
+  .plan-stat { padding:10px; gap:8px; }
+  .plan-stat-icon { width:28px; height:28px; }
+  .plan-stat-value { font-size:16px; }
+  .plan-cal-actions { margin-left:0; width:100%; }
+  .plan-cal-actions .btn { flex:1; justify-content:center; }
 }
 
 .budget-active-card { display:flex; flex-direction:column; gap:10px; }
