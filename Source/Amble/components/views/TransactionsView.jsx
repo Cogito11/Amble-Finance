@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import {
   Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
 } from "lucide-react";
@@ -6,8 +6,45 @@ import { EmptyState } from "../common/EmptyState";
 import { fmt, fmtDate } from "../../utils/format";
 
 const SEARCH_DEBOUNCE_MS = 200;
-const ESTIMATED_ROW_HEIGHT = 49; // px - used both to size the spacer rows and to convert scroll position into row indices
+const DEFAULT_ROW_HEIGHT = 49; // px - only used until real rows have been measured; after that the running average of measured rows stands in for unmeasured ones
 const OVERSCAN_ROWS = 25; // rows kept mounted above/below the actual viewport as a scroll buffer
+const HYSTERESIS_ROWS = 10; // the window is only rebuilt once the viewport gets within this many rows of its edge, so a row sitting right on the boundary can't flip in and out every frame
+
+// Nearest ancestor that actually scrolls (null = the page itself scrolls).
+function getScrollParent(el) {
+  let node = el?.parentElement;
+  while (node && node !== document.body) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+// offsets[i] = top of row i (px from the top of the table body), offsets[n] = total height.
+// Rows that have been measured use their real height; the rest use `fallback`.
+function buildOffsets(rows, heights, fallback) {
+  const offsets = new Array(rows.length + 1);
+  let y = 0;
+  for (let i = 0; i < rows.length; i++) {
+    offsets[i] = y;
+    y += heights.get(rows[i].id) ?? fallback;
+  }
+  offsets[rows.length] = y;
+  return offsets;
+}
+
+// Index of the row containing vertical position y (binary search).
+function indexAtOffset(offsets, y) {
+  let lo = 0;
+  let hi = offsets.length - 2;
+  if (hi < 0) return 0;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (offsets[mid] <= y) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
 
 function ColumnFilter({ label, active, open, onToggle, onClear, children }) {
   return (
@@ -45,6 +82,7 @@ const TransactionRow = React.memo(function TransactionRow({ t, categoryMap, acco
   return (
     <tr
       className="tx-row"
+      data-tx-id={String(t.id)}
       tabIndex={0}
       onClick={() => { if (window.getSelection().toString()) return; onEdit(t); }}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onEdit(t); } }}
@@ -66,17 +104,15 @@ const TransactionRow = React.memo(function TransactionRow({ t, categoryMap, acco
   );
 });
 
-// A blank spacer row standing in for `count` unmounted rows above or below
-// the current window, so the table's overall height (and therefore scroll
-// position/scrollbar size) stays roughly correct even though those rows
-// aren't actually in the DOM. Height is an estimate, not a measurement - see
-// ESTIMATED_ROW_HEIGHT - so this is deliberately approximate rather than
-// pixel-exact.
-function SpacerRow({ count }) {
-  if (count <= 0) return null;
+// A blank spacer row standing in for the unmounted rows above or below the
+// current window. Its height is the sum of those rows' measured heights (or
+// the running average for rows never seen yet), so unmounting a tall row
+// leaves a gap of exactly that row's height and nothing shifts.
+function SpacerRow({ height }) {
+  if (height <= 0) return null;
   return (
     <tr aria-hidden="true">
-      <td colSpan="6" style={{ height: count * ESTIMATED_ROW_HEIGHT, padding: 0, border: "none" }} />
+      <td colSpan="6" style={{ height, padding: 0, border: "none" }} />
     </tr>
   );
 }
@@ -203,51 +239,80 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
     });
   }, [transactions, filters, debouncedSearch, sort, catName, accName, orderById]);
 
+  // ---- variable-height windowing -------------------------------------------
+  // Real row heights are measured after render and cached by transaction id.
+  // Unmeasured rows are assumed to be the average measured height.
+  const heightsRef = useRef(new Map());
+  const heightStatsRef = useRef({ sum: 0, count: 0 });
+  const [layoutVersion, setLayoutVersion] = useState(0);
+
+  const offsets = useMemo(() => {
+    const { sum, count } = heightStatsRef.current;
+    return buildOffsets(filtered, heightsRef.current, count ? sum / count : DEFAULT_ROW_HEIGHT);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, layoutVersion]);
+
+  const clampedStart = Math.min(windowStart, filtered.length);
   const clampedEnd = Math.min(windowEnd, filtered.length);
-  const visibleRows = useMemo(() => filtered.slice(windowStart, clampedEnd), [filtered, windowStart, clampedEnd]);
-  const topSpacerCount = windowStart;
-  const bottomSpacerCount = Math.max(0, filtered.length - clampedEnd);
+  const visibleRows = useMemo(() => filtered.slice(clampedStart, clampedEnd), [filtered, clampedStart, clampedEnd]);
+  const topSpacerHeight = offsets[clampedStart];
+  const bottomSpacerHeight = offsets[filtered.length] - offsets[clampedEnd];
 
-  // Recomputes exactly which rows *should* be mounted for the current
-  // scroll position, rather than waiting for a sentinel element to cross
-  // into view. This is what closes the "scrolled past too fast, landed in
-  // blank space" gap: since it's math based on scroll position (not an
-  // event that has to physically fire from crossing a trigger), a fast
-  // flick that jumps straight to some scroll position still gets the
-  // correct window computed for wherever it landed - there's no trigger to
-  // outrun.
+  // Latest values for the scroll handlers, which are created once.
+  const offsetsRef = useRef(offsets);
+  offsetsRef.current = offsets;
+  const filteredRef = useRef(filtered);
+  filteredRef.current = filtered;
+  const windowRef = useRef({ start: 0, end: 0 });
+  windowRef.current = { start: clampedStart, end: clampedEnd };
+
   const bodyRef = useRef(null);
-
-  // Finds the nearest ancestor that's actually scrollable, rather than
-  // assuming the whole page scrolls. If this table sits inside a
-  // fixed-height panel with its own overflow-y: auto (common in a sidebar
-  // layout), that panel - not window - is what the user is actually
-  // scrolling, and it's the one whose scroll events and dimensions need to
-  // drive this calculation. Falls back to the window/document when nothing
-  // scrollable is found above it, so this works either way without needing
-  // to know the app's layout in advance.
-  const getScrollParent = (el) => {
-    let node = el?.parentElement;
-    while (node && node !== document.body) {
-      const overflowY = window.getComputedStyle(node).overflowY;
-      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) return node;
-      node = node.parentElement;
-    }
-    return null; // null means "the page itself scrolls"
-  };
-
-  // The scroll container doesn't change mid-session, so it's detected once
-  // and cached here rather than re-walking the DOM tree on every scroll
-  // frame - recalcWindow runs on every animation frame during a fast
-  // scroll, and repeating that walk (plus a getComputedStyle call per
-  // ancestor) that often was pure waste.
   const scrollParentRef = useRef(undefined); // undefined = not yet detected, null = page scrolls
+  const anchorRef = useRef(null);
+  const widthRef = useRef(null);
 
+  const resolveScrollParent = useCallback(() => {
+    if (scrollParentRef.current === undefined && bodyRef.current) scrollParentRef.current = getScrollParent(bodyRef.current);
+    return scrollParentRef.current ?? null;
+  }, []);
+
+  const readScroll = useCallback(() => {
+    const parent = resolveScrollParent();
+    return parent
+      ? { top: parent.scrollTop, edge: parent.getBoundingClientRect().top }
+      : { top: window.scrollY, edge: 0 };
+  }, [resolveScrollParent]);
+
+  const writeScrollTop = useCallback((value) => {
+    const parent = resolveScrollParent();
+    if (parent) parent.scrollTop = value; else window.scrollTo({ top: value });
+  }, [resolveScrollParent]);
+
+  // Remembers which row is at the top of the viewport and where. After any
+  // render that changes the layout above it (rows mounting at their real
+  // height, spacer estimates being refined), the layout effect below nudges
+  // scrollTop so that row is back where the user last saw it.
+  const captureAnchor = useCallback(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const { top, edge } = readScroll();
+    for (const row of body.children) {
+      const id = row.dataset?.txId;
+      if (id === undefined) continue;
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom > edge) {
+        anchorRef.current = { id, offset: rect.top - edge, scrollTop: top, filtered: filteredRef.current };
+        return;
+      }
+    }
+    anchorRef.current = null;
+  }, [readScroll]);
+
+  // Works out which rows should be mounted for the current scroll position.
   const recalcWindow = useCallback(() => {
     const node = bodyRef.current;
     if (!node) return;
-    if (scrollParentRef.current === undefined) scrollParentRef.current = getScrollParent(node);
-    const scrollParent = scrollParentRef.current;
+    const scrollParent = resolveScrollParent();
 
     let tableTop, viewTop, viewBottom;
     if (scrollParent) {
@@ -262,39 +327,90 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       viewBottom = viewTop + window.innerHeight;
     }
 
-    const firstVisible = Math.floor((viewTop - tableTop) / ESTIMATED_ROW_HEIGHT);
-    const lastVisible = Math.ceil((viewBottom - tableTop) / ESTIMATED_ROW_HEIGHT);
+    captureAnchor();
 
-    // Both bounds are clamped against filtered.length, not just the lower
-    // bound against 0 - without this, scrolling deep into a large list and
-    // then applying a filter that shrinks the result set way down (say, to
-    // 10 matches) would leave windowStart computed from the old scroll
-    // position (e.g. 265) with nothing there to slice, rendering an empty
-    // table with a spacer sized for data that no longer exists.
-    const nextStart = Math.max(0, Math.min(firstVisible - OVERSCAN_ROWS, filtered.length));
-    const nextEnd = Math.min(filtered.length, Math.max(nextStart, lastVisible + OVERSCAN_ROWS));
+    const rowOffsets = offsetsRef.current;
+    const count = rowOffsets.length - 1;
+    const first = indexAtOffset(rowOffsets, viewTop - tableTop);
+    const last = indexAtOffset(rowOffsets, viewBottom - tableTop);
 
-    setWindowStart((current) => (current === nextStart ? current : nextStart));
-    setWindowEnd((current) => (current === nextEnd ? current : nextEnd));
-  }, [filtered.length]);
+    // Hysteresis: if the current window still covers the viewport plus a
+    // margin, leave it alone. Without this, a row sitting right on the
+    // window boundary could mount and unmount on consecutive frames.
+    const current = windowRef.current;
+    const needStart = Math.max(0, first - HYSTERESIS_ROWS);
+    const needEnd = Math.min(count, last + 1 + HYSTERESIS_ROWS);
+    if (current.start <= needStart && current.end >= needEnd && current.end <= count) return;
 
-  // Scroll/resize listeners are rAF-throttled so the (cheap, but non-zero)
-  // recalculation runs at most once per animation frame no matter how many
-  // scroll events fire in between - keeps this from becoming its own
-  // performance problem on high-frequency scroll/trackpad input.
-  //
-  // Listens on the actual scroll parent (falling back to window) rather
-  // than always binding to window - binding only to window is what caused
-  // the window to freeze at its initial mount value when this table lives
-  // inside a scrollable panel instead of the page itself. A ResizeObserver
-  // on that same element covers layout changes a plain window "resize"
-  // event would miss - e.g. a sidebar collapsing/expanding changes the
-  // panel's height without the browser window itself resizing.
+    const nextStart = Math.max(0, first - OVERSCAN_ROWS);
+    const nextEnd = Math.min(count, last + 1 + OVERSCAN_ROWS);
+    setWindowStart((value) => (value === nextStart ? value : nextStart));
+    setWindowEnd((value) => (value === nextEnd ? value : nextEnd));
+  }, [resolveScrollParent, captureAnchor]);
+
+  // After every layout-affecting render: (1) undo any visible shift, (2)
+  // measure the rows that are mounted and remember their real heights.
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+
+    const anchor = anchorRef.current;
+    if (anchor && anchor.filtered === filtered) {
+      const el = body.querySelector(`[data-tx-id="${CSS.escape(anchor.id)}"]`);
+      if (el) {
+        const { top, edge } = readScroll();
+        const expected = anchor.offset - (top - anchor.scrollTop);
+        const drift = (el.getBoundingClientRect().top - edge) - expected;
+        if (Math.abs(drift) > 0.5) writeScrollTop(top + drift);
+      }
+    }
+
+    const rowEls = body.querySelectorAll("tr[data-tx-id]");
+    if (rowEls.length === visibleRows.length) {
+      const heights = heightsRef.current;
+      const stats = heightStatsRef.current;
+      const tops = Array.from(rowEls, (el) => el.getBoundingClientRect());
+      let changed = false;
+      for (let i = 0; i < rowEls.length; i++) {
+        // Distance to the next row's top (or own height for the last one)
+        // so fractional pixels and collapsed borders can't accumulate error.
+        const h = i + 1 < tops.length ? tops[i + 1].top - tops[i].top : tops[i].height;
+        const id = visibleRows[i].id;
+        const prev = heights.get(id);
+        if (prev === undefined || Math.abs(prev - h) > 0.5) {
+          if (prev === undefined) stats.count += 1;
+          stats.sum += h - (prev ?? 0);
+          heights.set(id, h);
+          changed = true;
+        }
+      }
+      if (changed) setLayoutVersion((v) => v + 1);
+    }
+
+    captureAnchor();
+  }, [visibleRows, offsets]);
+
+  // Recompute the window when the matched set or the measured layout changes.
+  useLayoutEffect(() => {
+    recalcWindow();
+  }, [recalcWindow, offsets]);
+
+  // Scroll/resize listeners, rAF-throttled. Listens on the real scroll parent
+  // (falling back to window). Cached row heights are dropped when the width
+  // changes, since text wrapping (and so row height) depends on it.
+  const hasAccounts = accounts.length > 0;
   useEffect(() => {
-    scrollParentRef.current = getScrollParent(bodyRef.current);
-    const scrollTarget = scrollParentRef.current || window;
+    scrollParentRef.current = undefined;
+    const scrollParent = resolveScrollParent();
+    const scrollTarget = scrollParent || window;
+
+    // We compensate for layout shifts ourselves; the browser's own scroll
+    // anchoring would otherwise apply a second correction on top of ours.
+    const previousAnchoring = scrollParent ? scrollParent.style.overflowAnchor : "";
+    if (scrollParent) scrollParent.style.overflowAnchor = "none";
+
     let ticking = false;
-    const onScrollOrResize = () => {
+    const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
@@ -302,28 +418,33 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
         ticking = false;
       });
     };
-    scrollTarget.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
+    const onResize = () => {
+      const width = (scrollParent || document.documentElement).clientWidth;
+      if (widthRef.current !== null && widthRef.current !== width) {
+        heightsRef.current.clear();
+        heightStatsRef.current = { sum: 0, count: 0 };
+        setLayoutVersion((v) => v + 1);
+      }
+      widthRef.current = width;
+      onScroll();
+    };
+    widthRef.current = (scrollParent || document.documentElement).clientWidth;
 
+    scrollTarget.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onResize);
     let resizeObserver;
-    if (scrollParentRef.current) {
-      resizeObserver = new ResizeObserver(onScrollOrResize);
-      resizeObserver.observe(scrollParentRef.current);
+    if (scrollParent) {
+      resizeObserver = new ResizeObserver(onResize);
+      resizeObserver.observe(scrollParent);
     }
 
     return () => {
-      scrollTarget.removeEventListener("scroll", onScrollOrResize);
-      window.removeEventListener("resize", onScrollOrResize);
+      scrollTarget.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onResize);
       resizeObserver?.disconnect();
+      if (scrollParent) scrollParent.style.overflowAnchor = previousAnchoring;
     };
-  }, [recalcWindow]);
-
-  // Also recompute whenever the matched set itself changes (new filter,
-  // search, or sort) - the scroll position may not have moved, but the
-  // total row count and the transaction landing on any given index did.
-  useEffect(() => {
-    recalcWindow();
-  }, [recalcWindow]);
+  }, [recalcWindow, resolveScrollParent, hasAccounts]);
 
   const setColumnSort = (column, direction) => setSort({ column, direction });
   const sortValue = (column) => sort.column === column ? sort.direction : "";
@@ -400,7 +521,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                 </tr>
               ) : (
                 <>
-                  <SpacerRow count={topSpacerCount} />
+                  <SpacerRow height={topSpacerHeight} />
                   {visibleRows.map((t) => (
                     <TransactionRow
                       key={t.id}
@@ -411,7 +532,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
                       onDelete={handleDelete}
                     />
                   ))}
-                  <SpacerRow count={bottomSpacerCount} />
+                  <SpacerRow height={bottomSpacerHeight} />
                 </>
               )}
             </tbody>
