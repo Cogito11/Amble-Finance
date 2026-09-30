@@ -410,12 +410,17 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }
 .plan-row:hover { border-color:var(--brass); background:var(--surface-2); }
 .plan-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
-.plan-row-paid { opacity:.72; }
 .plan-date-badge { width:42px; flex-shrink:0; text-align:center; padding:4px 0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; line-height:1.15; }
 .plan-date-badge b { display:block; font-family:'Fraunces',serif; font-size:15px; }
 .plan-date-badge span { font-size:9.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); }
 .plan-row-overdue .plan-date-badge { border-color:var(--rust); }
-.plan-row-paid .plan-date-badge { border-color:var(--teal); }
+/* done items (paid / received bills, achieved goals) read as green, not faded */
+.plan-row-paid, .plan-row-done, .plan-occ-paid { border-color:color-mix(in srgb, var(--teal) 45%, var(--border)); background:color-mix(in srgb, var(--teal) 9%, var(--surface)); }
+.plan-row-paid:hover, .plan-row-done:hover, .plan-occ-paid:hover { border-color:var(--teal); background:color-mix(in srgb, var(--teal) 14%, var(--surface)); }
+.plan-row-paid .plan-date-badge { border-color:var(--teal); background:color-mix(in srgb, var(--teal) 16%, var(--surface-2)); }
+.plan-row-paid .plan-date-badge b, .plan-row-paid .plan-date-badge span { color:var(--teal); }
+.plan-goal-pct { display:inline-flex; align-items:center; gap:4px; }
+.plan-row-done .plan-goal-pct { color:var(--teal); font-weight:600; }
 .plan-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
 .plan-row-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
 .plan-row-title { display:inline-flex; align-items:center; gap:6px; font-weight:500; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
