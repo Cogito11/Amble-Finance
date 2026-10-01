@@ -202,3 +202,22 @@ export function clearRemovedCategoryFromBills(bills, removedCategoryIds) {
   if (!removedCategoryIds || removedCategoryIds.length === 0) return bills;
   return bills.map((b) => (removedCategoryIds.includes(b.categoryId) ? { ...b, categoryId: null } : b));
 }
+
+/* ---------------------------------- load / import sanitizing ---------------------------------- */
+// Bills and goals come from JSON (localStorage, another window, or a backup
+// file), so don't trust their shape: anything that isn't an object with an id
+// is dropped, and a bill's completions is always a plain object.
+const isRecord = (x) => x && typeof x === "object" && !Array.isArray(x) && typeof x.id === "string" && x.id !== "";
+
+export function sanitizeBills(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(isRecord).map((b) => ({
+    ...b,
+    completions: b.completions && typeof b.completions === "object" && !Array.isArray(b.completions) ? b.completions : {},
+  }));
+}
+
+export function sanitizeGoals(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(isRecord);
+}

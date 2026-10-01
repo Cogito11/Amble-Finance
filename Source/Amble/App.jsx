@@ -26,7 +26,7 @@ import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
-import { clearRemovedCategoryFromBills, clearRemovedTransactionFromBills } from "./state/planning";
+import { clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, sanitizeBills, sanitizeGoals } from "./state/planning";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
@@ -301,8 +301,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
-          bills: Array.isArray(raw.bills) ? raw.bills : [],
-          goals: Array.isArray(raw.goals) ? raw.goals : [],
+          bills: sanitizeBills(raw.bills),
+          goals: sanitizeGoals(raw.goals),
         } : defaultState());
       } catch (e) {
         setState(defaultState());
@@ -327,8 +327,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
-          bills: Array.isArray(raw.bills) ? raw.bills : [],
-          goals: Array.isArray(raw.goals) ? raw.goals : [],
+          bills: sanitizeBills(raw.bills),
+          goals: sanitizeGoals(raw.goals),
         });
       } catch (err) { /* ignore malformed/partial writes */ }
     };
@@ -567,8 +567,10 @@ export default function App() {
     const a = state.accounts.find((x) => x.id === id);
     const inUse = state.transactions.some((t) => t.accountId === id || t.toAccountId === id);
     const billInUse = state.bills.some((b) => b.accountId === id);
+    const goalInUse = state.goals.some((g) => g.trackingMode === "account" && g.accountId === id);
     if (inUse) { setAccError("This account has transactions on it. Delete those transactions first."); return; }
     if (billInUse) { setAccError("This account has a bill assigned to it. Delete or reassign that bill first."); return; }
+    if (goalInUse) { setAccError("This account is being tracked by a goal. Delete that goal or change how it's tracked first."); return; }
     setConfirmDialog({
       title: "Delete account?",
       message: `This will permanently delete “${a?.name || "this account"}”. This can't be undone.`,
@@ -857,7 +859,7 @@ export default function App() {
         if (!valid) throw new Error("bad shape");
         setConfirmDialog({
           title: "Import backup?",
-          message: `This will replace all current accounts, categories, transactions, and budgets with the contents of “${file.name}”. This can't be undone.`,
+          message: `This will replace all current accounts, categories, transactions, budgets, bills, and goals with the contents of “${file.name}”. This can't be undone.`,
           confirmLabel: "Import & replace",
           onConfirm: () => {
             setState({
@@ -866,6 +868,8 @@ export default function App() {
               categories: data.categories,
               transactions: data.transactions,
               plans: migrateBudgetOrder(Array.isArray(data.plans) ? data.plans : []),
+              bills: sanitizeBills(data.bills),
+              goals: sanitizeGoals(data.goals),
               ...(data.currency ? { currency: data.currency } : {}),
               ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
             });
@@ -999,7 +1003,7 @@ export default function App() {
   const requestResetSampleData = () => {
     setConfirmDialog({
       title: "Reset sample/default data?",
-      message: "This will permanently delete all of your accounts, transactions, categories, and budgets, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
+      message: "This will permanently delete all of your accounts, transactions, categories, budgets, bills, and goals, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
       confirmLabel: "Reset data",
       onConfirm: () => {
         setState((s) => ({ ...defaultState(), currency: s.currency }));
@@ -1011,7 +1015,7 @@ export default function App() {
   const requestFactoryReset = () => {
     setConfirmDialog({
       title: "Factory reset application?",
-      message: "This will permanently erase everything, including all accounts, transactions, categories, and budgets, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
+      message: "This will permanently erase everything, including all accounts, transactions, categories, budgets, bills, and goals, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
       confirmLabel: "Factory reset",
       onConfirm: () => {
         setState(defaultState());

@@ -356,11 +356,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-cal-daynum { align-self:flex-start; min-width:20px; height:20px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; font-size:12px; font-weight:500; }
 .plan-cal-cell-today .plan-cal-daynum { background:var(--brass); color:var(--on-brass); }
 .plan-cal-dots { display:flex; align-items:center; flex-wrap:wrap; gap:3px; padding-left:2px; }
-.plan-cal-dot { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; display:inline-block; }
+.plan-cal-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; display:inline-block; }
 .plan-cal-more { font-size:10px; line-height:1.2; color:var(--text-faint); font-weight:600; }
 .plan-cal-chips { display:none; flex-direction:column; gap:2px; min-height:0; overflow:hidden; }
-.plan-cal-chip { display:flex; align-items:center; gap:3px; min-width:0; padding:1px 5px; border-radius:4px; font-size:10.5px; line-height:1.3; font-weight:500; background:color-mix(in srgb, currentColor 14%, transparent); }
+.plan-cal-chip { display:flex; align-items:center; gap:3px; min-width:0; padding:1px 5px; border-radius:4px; font-size:10.5px; line-height:1.3; font-weight:500; }
 .plan-cal-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Text color and tint both come from the same palette variable, so a chip's highlight always matches its text. */
+.plan-cal-chip.tone-brass { color:var(--brass); background:color-mix(in srgb, var(--brass) 14%, transparent); }
+.plan-cal-dot.tone-brass { background:var(--brass); }
+.plan-cal-chip.tone-rust { color:var(--rust); background:color-mix(in srgb, var(--rust) 14%, transparent); }
+.plan-cal-dot.tone-rust { background:var(--rust); }
+.plan-cal-chip.tone-teal { color:var(--teal); background:color-mix(in srgb, var(--teal) 14%, transparent); }
+.plan-cal-dot.tone-teal { background:var(--teal); }
+.plan-cal-chip.tone-amber { color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, transparent); }
+.plan-cal-dot.tone-amber { background:var(--amber); }
 .plan-cal-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:11.5px; }
 .plan-cal-legend span { display:inline-flex; align-items:center; gap:5px; }
 
@@ -407,7 +416,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-list-empty { margin:0; padding:14px 0 6px; text-align:center; }
 .plan-list-toggle { margin-top:10px; }
 .plan-row-list { display:flex; flex-direction:column; gap:8px; }
-.plan-row { display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }
+.plan-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }
 .plan-row:hover { border-color:var(--brass); background:var(--surface-2); }
 .plan-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
 .plan-date-badge { width:42px; flex-shrink:0; text-align:center; padding:4px 0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; line-height:1.15; }
@@ -428,7 +437,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-row-side { display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex-shrink:0; }
 .plan-row-status { font-size:11.5px; }
 .plan-check { flex-shrink:0; padding:4px; }
-.plan-goal-row { flex-direction:column; align-items:stretch; gap:8px; }
+.plan-goal-row { flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:8px; }
+.plan-row-link { flex:1 1 100%; min-width:0; display:flex; }
+.plan-row-link .plan-link-select { flex:1; max-width:none; }
 .plan-goal-top { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
 .plan-goal-due { font-size:12px; }
 .plan-goal-amounts { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; }
