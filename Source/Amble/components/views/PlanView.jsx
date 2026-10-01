@@ -3,10 +3,9 @@ import {
   Plus, ChevronLeft, ChevronRight, CheckCircle2, Circle, Undo2,
   CalendarClock, Target, Repeat, AlertCircle, CircleDollarSign, Wallet, Link2
 } from "lucide-react";
-import { EmptyState } from "../common/EmptyState";
 import {
   addMonths, dayOfWeek, daysInMonth, firstOfMonth, generateBillOccurrences,
-  addDays, goalProgress, latestUnpaidOccurrence, monthLabel, nextUnpaidOccurrence, occurrenceStatus, sortedGoalsList,
+  addDays, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, sortedGoalsList,
 } from "../../state/planning";
 import { fmt, fmtDate } from "../../utils/format";
 import { todayStr } from "../../utils/dates";
@@ -15,6 +14,7 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_CAL_DOTS = 4;   // dots per day (compact cells) before collapsing into "+N"
 const MAX_CAL_CHIPS = 2;  // labeled chips per day (roomy cells) before collapsing into "+N more"
 const GOAL_HORIZON_DAYS = 30; // "Upcoming Goals" includes dated goals due within this many days
+const OVERDUE_WINDOW_DAYS = 30; // the Overdue stat only counts unpaid bills that came due within this many days
 const CARRYOVER_DAYS = 7;     // on the current month, unpaid bills from the last N days of the previous month stay in the bills list
 
 // Every bill occurrence due in [start, end], oldest first, with its status.
@@ -79,7 +79,6 @@ export function PlanView({
 
   const selectedDayEntries = occurrencesByDay[selectedDay] || { bills: [], goals: [] };
   const selectedCount = selectedDayEntries.bills.length + selectedDayEntries.goals.length;
-  const hasAnyPlan = (bills || []).length > 0 || (goals || []).length > 0;
 
   // The bills list follows the month being browsed on the calendar. The goals
   // list is today-relative: goals due within the next GOAL_HORIZON_DAYS (or
@@ -137,14 +136,17 @@ export function PlanView({
   }, [carryoverRows, currentMonthRows]);
 
   const planSummary = useMemo(() => {
-    const horizon = addDays(today, 30);
+    // Both counts are per occurrence (a weekly bill with 4 unpaid weeks is 4).
+    // "Overdue" only looks back OVERDUE_WINDOW_DAYS, so a bill whose first due
+    // date is far in the past doesn't flood the count with ancient history.
     const yesterday = addDays(today, -1);
-    let upcomingBills = 0;
+    const overdueFrom = addDays(today, -OVERDUE_WINDOW_DAYS);
+    const horizon = addDays(today, 30);
     let overdueBills = 0;
+    let upcomingBills = 0;
     (bills || []).forEach((bill) => {
-      if (latestUnpaidOccurrence(bill, yesterday)) { overdueBills += 1; return; }
-      const next = nextUnpaidOccurrence(bill, today);
-      if (next && next.dateKey <= horizon) upcomingBills += 1;
+      generateBillOccurrences(bill, overdueFrom, yesterday).forEach((o) => { if (occurrenceStatus(bill, o.dateKey, today) !== "paid") overdueBills += 1; });
+      generateBillOccurrences(bill, today, horizon).forEach((o) => { if (occurrenceStatus(bill, o.dateKey, today) !== "paid") upcomingBills += 1; });
     });
     const totalGoalTarget = (goals || []).reduce((sum, goal) => sum + (goal.targetAmount || 0), 0);
     const totalGoalSaved = (goals || []).reduce((sum, goal) => sum + goalProgress(goal, balances, today).current, 0);
@@ -154,16 +156,7 @@ export function PlanView({
   // Transactions on the bill's account, near the occurrence date, not already
   // linked to this or any other bill occurrence - candidates for "link an
   // existing transaction" instead of creating a new one.
-  const linkCandidates = (bill, dateKey) => {
-    const linkedTxIds = new Set();
-    (bills || []).forEach((b) => Object.values(b.completions || {}).forEach((v) => { if (typeof v === "string") linkedTxIds.add(v); }));
-    return transactions
-      .filter((t) => t.accountId === bill.accountId && t.type === bill.type && !linkedTxIds.has(t.id))
-      .map((t) => ({ t, gap: Math.abs(new Date(t.date) - new Date(dateKey)) }))
-      .sort((a, b) => a.gap - b.gap)
-      .slice(0, 6)
-      .map((x) => x.t);
-  };
+  const linkCandidates = (bill, dateKey) => linkableTransactions(transactions, bills, bill, dateKey);
 
   // "Link transaction…" picker shared by the day panel and the bills list.
   const renderLinkSelect = (bill, dateKey, onDone) => (
@@ -206,8 +199,8 @@ export function PlanView({
         className={`plan-row plan-row-${status}`}
         role="button"
         tabIndex={0}
-        onClick={() => onEditBill(bill)}
-        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEditBill(bill); } }}
+        onClick={() => onEditBill(bill, dateKey)}
+        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEditBill(bill, dateKey); } }}
       >
         <div className="plan-date-badge">
           <b>{day}</b>
@@ -332,8 +325,8 @@ export function PlanView({
         className={`plan-occ-row ${status === "paid" ? "plan-occ-paid" : ""}`}
         role="button"
         tabIndex={0}
-        onClick={() => { if (window.getSelection().toString()) return; onEditBill(bill); }}
-        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEditBill(bill); } }}
+        onClick={() => { if (window.getSelection().toString()) return; onEditBill(bill, dateKey); }}
+        onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onEditBill(bill, dateKey); } }}
       >
         <div className="plan-occ-main">
           <div className="plan-occ-name">
@@ -366,21 +359,6 @@ export function PlanView({
     );
   };
 
-  if (!hasAnyPlan) {
-    return (
-      <div className="plan-empty-wrap">
-        <EmptyState
-          icon={CalendarClock}
-          title="Nothing planned yet"
-          message="Add a bill to track (one-time or recurring) or set a savings goal, and they'll show up here on the calendar."
-          actionLabel="Add bill"
-          onAction={onAddBill}
-        />
-        <button className="btn btn-ghost btn-sm plan-empty-alt" onClick={onAddGoal}><Plus size={14} /> Or add a goal instead</button>
-      </div>
-    );
-  }
-
   const weeks = cells.length / 7;
 
   return (
@@ -388,11 +366,11 @@ export function PlanView({
       <div className="plan-stats">
         <div className="plan-stat">
           <div className="plan-stat-icon tone-brass"><CalendarClock size={17} /></div>
-          <div><div className="plan-stat-label">Due in 30 days</div><div className="plan-stat-value tone-brass">{planSummary.upcomingBills}</div></div>
+          <div><div className="plan-stat-label" title="Unpaid bills coming due in the next 30 days">Due in 30 days</div><div className="plan-stat-value tone-brass">{planSummary.upcomingBills}</div></div>
         </div>
         <div className="plan-stat">
           <div className="plan-stat-icon tone-rust"><AlertCircle size={17} /></div>
-          <div><div className="plan-stat-label">Overdue</div><div className="plan-stat-value tone-rust">{planSummary.overdueBills}</div></div>
+          <div><div className="plan-stat-label" title="Unpaid bills that came due in the last 30 days">Overdue · 30 days</div><div className="plan-stat-value tone-rust">{planSummary.overdueBills}</div></div>
         </div>
         <div className="plan-stat">
           <div className="plan-stat-icon tone-brass"><Wallet size={17} /></div>
@@ -551,7 +529,7 @@ export function PlanView({
             </div>
           </div>
           {goalRows.length === 0 ? (
-            <p className="settings-desc plan-list-empty">{(goals || []).length === 0 ? "No goals yet. Use + Goal above to add one." : showAllGoals ? "No open goals." : "No upcoming goals."}</p>
+            <p className="settings-desc plan-list-empty">{(goals || []).length === 0 ? "No goals yet." : showAllGoals ? "No open goals." : "No upcoming goals."}</p>
           ) : (
             <div className="plan-row-list">{goalRows.map(renderGoalRow)}</div>
           )}

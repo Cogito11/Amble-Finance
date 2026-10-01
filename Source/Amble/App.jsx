@@ -26,7 +26,7 @@ import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
-import { clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, sanitizeBills, sanitizeGoals } from "./state/planning";
+import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, sanitizeBills, sanitizeGoals } from "./state/planning";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
@@ -465,6 +465,13 @@ export default function App() {
     };
   }, [loaded, view, txModal, accModal, catModal, budgetModal, billModal, goalModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
 
+  // The bill being edited was deleted elsewhere (e.g. another window): close its modal.
+  // (Kept above the early return below so the hook order never changes between renders.)
+  const editedBillMissing = !!(loaded && state && billModal && billModal.billId && !state.bills.some((b) => b.id === billModal.billId));
+  useEffect(() => {
+    if (editedBillMissing) setBillModal(null);
+  }, [editedBillMissing]);
+
   if (!loaded || !state) {
     return (
       <div className={`app-loading${darkMode ? " dark" : ""}`}>
@@ -729,15 +736,29 @@ export default function App() {
   };
 
   /* ---------------------------------- plan: bills ---------------------------------- */
-  const saveBill = (b) => {
+  const modalBill = billModal && billModal.billId ? state.bills.find((b) => b.id === billModal.billId) : null;
+  // `billModal` is {} for a new bill, or { billId, dateKey } when editing: the
+  // bill is read live from state, and dateKey is the occurrence that was clicked.
+  // Returns { error } (shown in the modal) instead of closing when an edit is invalid.
+  const saveBill = ({ values, billId, dateKey, scope }) => {
+    if (!billId) {
+      setState((s) => ({ ...s, bills: [...s.bills, { id: uid(), ...values, completions: {} }] }));
+      setBillModal(null);
+      return {};
+    }
+    const newId = uid();
+    const check = applyBillEdit(state.bills, { billId, dateKey, values, scope, newId });
+    if (check.error) return { error: check.error };
+    // Re-apply against the latest bills so paid marks made meanwhile (e.g. from a popped-out window) are never overwritten.
     setState((s) => {
-      const exists = s.bills.some((x) => x.id === b.id);
-      return { ...s, bills: exists ? s.bills.map((x) => (x.id === b.id ? b : x)) : [...s.bills, b] };
+      const res = applyBillEdit(s.bills, { billId, dateKey, values, scope, newId });
+      return res.error ? s : { ...s, bills: res.bills };
     });
     setBillModal(null);
+    return {};
   };
-  const deleteBill = (id) => {
-    setState((s) => ({ ...s, bills: s.bills.filter((b) => b.id !== id) }));
+  const deleteBill = (id, scope = "all", dateKey) => {
+    setState((s) => ({ ...s, bills: removeBillScope(s.bills, { billId: id, dateKey, scope }) }));
     setBillModal(null);
   };
   const requestDeleteBill = (id) => {
@@ -1162,7 +1183,7 @@ export default function App() {
                 transactions={state.transactions}
                 balances={balances}
                 onAddBill={() => setBillModal({})}
-                onEditBill={setBillModal}
+                onEditBill={(bill, dateKey) => setBillModal({ billId: bill.id, dateKey })}
                 onAddGoal={() => setGoalModal({})}
                 onEditGoal={setGoalModal}
                 onAddContribution={addGoalContribution}
@@ -1252,15 +1273,23 @@ export default function App() {
           onRecolorCategory={recolorBudgetCategory}
         />
       )}
-      {billModal !== null && (
+      {billModal !== null && (!billModal.billId || modalBill) && (
         <BillModal
-          initial={billModal}
+          key={billModal.billId || "new"}
+          initial={modalBill || {}}
+          occurrenceDate={billModal.dateKey}
+          bills={state.bills}
+          transactions={state.transactions}
           accounts={state.accounts}
           categories={state.categories}
           budgets={state.plans}
           onSave={saveBill}
           onClose={() => setBillModal(null)}
-          onDelete={requestDeleteBill}
+          onDelete={(id, scope, dateKey) => (scope ? deleteBill(id, scope, dateKey) : requestDeleteBill(id))}
+          onMarkPaid={markBillPaid}
+          onUnmarkPaid={unmarkBillPaid}
+          onLinkTransaction={linkBillTransaction}
+          onAssignTransaction={(bill, dateKey) => { setBillModal(null); assignTransactionToBill(bill, dateKey); }}
         />
       )}
       {goalModal !== null && (

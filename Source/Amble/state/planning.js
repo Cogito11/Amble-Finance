@@ -13,6 +13,8 @@ import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
 //     frequency: "weekly" | "biweekly" | "monthly" | "yearly",
 //     endDate,                             // "YYYY-MM-DD" or null - stop generating after this date
 //     notes,
+//     seriesId,                            // optional; shared by every segment of one recurring bill (falls back to id)
+//     anchorDay,                           // optional; see generateBillOccurrences
 //     completions: { [dateKey]: transactionId | true },
 //       // keyed by the occurrence's date. `true` means "marked paid manually",
 //       // a transaction id means that occurrence is linked to a real transaction.
@@ -112,7 +114,9 @@ export function daysInMonth(dateStr) {
 export function generateBillOccurrences(bill, rangeStart, rangeEnd) {
   if (!bill?.dueDate) return [];
   const occurrences = [];
-  const anchorDay = toDate(bill.dueDate).getDate();
+  // `anchorDay` is only set on a split-off segment that begins on a clamped
+  // date (e.g. Feb 28 of a bill due the 31st), so it keeps returning to the 31st.
+  const anchorDay = bill.anchorDay || toDate(bill.dueDate).getDate();
   let cursor = bill.dueDate;
   let steps = 0;
   while (steps < 500) {
@@ -220,4 +224,210 @@ export function sanitizeBills(list) {
 export function sanitizeGoals(list) {
   if (!Array.isArray(list)) return [];
   return list.filter(isRecord);
+}
+
+/* ---------------------------------- recurring series ---------------------------------- */
+// A recurring bill behaves like a repeating calendar event. Paid / linked state
+// belongs to one occurrence (completions are keyed by date). Editing the bill
+// itself with "this and following" splits it: the existing bill is closed the
+// day before the occurrence being edited (it keeps its own history), and a new
+// bill carrying the edited values starts from that occurrence. Every segment of
+// one bill shares a `seriesId`, which is what "all" and the Overdue count use.
+// Bills saved before this existed have no seriesId and simply use their own id.
+
+export const seriesOf = (bill) => bill.seriesId || bill.id;
+export const seriesMembers = (bills, bill) => (bills || []).filter((b) => seriesOf(b) === seriesOf(bill));
+// True when deleting/editing needs the "this and following / all" choice.
+export const isSeries = (bills, bill) => !!bill.recurring || seriesMembers(bills, bill).length > 1;
+
+const SERIES_FIELDS = ["name", "type", "amount", "accountId", "categoryId", "notes"];
+const FIELD_LABELS = { name: "name", type: "type", amount: "amount", accountId: "account", categoryId: "category", notes: "notes" };
+const norm = (v) => (v == null || v === "" ? null : v);
+const niceDate = (key) => toDate(key).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+const isOccurrence = (bill, dateKey) => !!dateKey && generateBillOccurrences(bill, dateKey, dateKey).length > 0;
+
+// Which occurrence a bill's modal should be about: the one that was clicked,
+// otherwise the next unpaid one, otherwise the latest overdue one.
+export function pickOccurrence(bill, today, preferred) {
+  if (isOccurrence(bill, preferred)) return preferred;
+  return nextUnpaidOccurrence(bill, today)?.dateKey || latestUnpaidOccurrence(bill, addDays(today, -1))?.dateKey || bill.dueDate;
+}
+
+// Start of the next segment of this bill's series (a later "version" that
+// takes over), or null. Used to explain what "this and following" stops at.
+export function nextSegmentStart(bills, bill) {
+  const later = seriesMembers(bills, bill).filter((m) => m.id !== bill.id && m.dueDate > bill.dueDate).map((m) => m.dueDate).sort();
+  return later[0] || null;
+}
+
+// Last occurrence strictly before `beforeDate` across the whole series.
+function previousOccurrence(bills, bill, beforeDate) {
+  let prev = null;
+  seriesMembers(bills, bill).forEach((m) => {
+    const occ = generateBillOccurrences(m, m.dueDate, addDays(beforeDate, -1));
+    const last = occ.length ? occ[occ.length - 1].dateKey : null;
+    if (last && (!prev || last > prev)) prev = last;
+  });
+  return prev;
+}
+
+// What did the form change relative to the bill as it was opened (at `occDate`)?
+export function describeBillChanges(bill, values, occDate) {
+  const labels = SERIES_FIELDS.filter((k) => norm(bill[k]) !== norm(values[k])).map((k) => FIELD_LABELS[k]);
+  const fieldsChanged = labels.length > 0;
+  const startDate = bill.recurring ? occDate : bill.dueDate;
+  const planLabels = [];
+  if (!!values.recurring !== !!bill.recurring) planLabels.push("repeat");
+  else if (values.recurring && values.frequency !== bill.frequency) planLabels.push("frequency");
+  if (values.dueDate !== startDate) planLabels.push("due date");
+  const endChanged = norm(bill.endDate) !== norm(values.recurring ? values.endDate : null);
+  if (endChanged) planLabels.push("end date");
+  return {
+    fieldsChanged,
+    planChanged: planLabels.some((l) => l !== "end date"),
+    endChanged,
+    labels: [...labels, ...planLabels],
+    any: fieldsChanged || planLabels.length > 0,
+  };
+}
+
+// Re-keys payment marks onto a new schedule: the edited occurrence's own mark
+// follows it to its new date, and any other mark is kept only if it still lands
+// on an occurrence of the new schedule.
+function remapMarks(marks, newBill, fromDate, toDate_) {
+  const keys = Object.keys(marks || {});
+  if (!keys.length) return {};
+  const maxKey = keys.reduce((a, b) => (a > b ? a : b));
+  const valid = new Set(generateBillOccurrences({ ...newBill, completions: {} }, toDate_, maxKey > toDate_ ? maxKey : toDate_).map((o) => o.dateKey));
+  const out = {};
+  keys.forEach((k) => { if (k !== fromDate && valid.has(k)) out[k] = marks[k]; });
+  if (marks[fromDate] !== undefined) out[toDate_] = marks[fromDate];
+  return out;
+}
+
+const splitMarks = (marks, pivot) => {
+  const before = {};
+  const after = {};
+  Object.entries(marks || {}).forEach(([k, v]) => { (k < pivot ? before : after)[k] = v; });
+  return { before, after };
+};
+
+// Applies a bill-modal save to a list of bills. Pure: returns { bills } or { error }.
+//   values: the form's fields (name, type, amount, accountId, categoryId, dueDate,
+//           recurring, frequency, endDate, notes)
+//   dateKey: the occurrence the modal was opened for
+//   scope: "following" (default) | "all" - only used for recurring bills
+//   newId: id for a new segment, if a split is needed
+export function applyBillEdit(bills, { billId, dateKey, values, scope = "following", newId }) {
+  const B = bills.find((b) => b.id === billId);
+  if (!B) return { error: "That bill no longer exists.", bills };
+  const sid = seriesOf(B);
+  const fields = {
+    name: values.name, type: values.type, amount: values.amount, accountId: values.accountId,
+    categoryId: values.categoryId || null, notes: values.notes || "",
+  };
+  const recurring2 = !!values.recurring;
+  const freq2 = recurring2 ? values.frequency : null;
+  const end2 = recurring2 ? (values.endDate || null) : null;
+  const replace = (list) => bills.flatMap((b) => (b.id === B.id ? list : [b]));
+  const inSeries = seriesMembers(bills, B).length > 1;
+
+  // One-time bill (or a one-time segment): edit in place; its single mark follows its date.
+  if (!B.recurring) {
+    if (end2 && values.dueDate > end2) return { error: "The end date is before the due date.", bills };
+    const next = nextSegmentStart(bills, B);
+    const covered = recurring2 ? end2 : values.dueDate;
+    if (next && (values.dueDate >= next || !covered || covered >= next)) {
+      return { error: `That overlaps a later version of this bill that starts ${niceDate(next)}.`, bills };
+    }
+    const completions = { ...(B.completions || {}) };
+    if (values.dueDate !== B.dueDate && completions[B.dueDate] !== undefined) {
+      completions[values.dueDate] = completions[B.dueDate];
+      delete completions[B.dueDate];
+    }
+    const out = { ...B, ...fields, dueDate: values.dueDate, recurring: recurring2, frequency: freq2, endDate: end2, completions };
+    if (inSeries) out.seriesId = sid;
+    return { bills: replace([out]), savedId: B.id };
+  }
+
+  // Recurring bill.
+  const D = isOccurrence(B, dateKey) ? dateKey : B.dueDate;
+  const ch = describeBillChanges(B, values, D);
+  if (!ch.any) return { bills, savedId: B.id, noop: true };
+
+  // Only the end date changed: just move the end of this segment.
+  if (!ch.fieldsChanged && !ch.planChanged) {
+    if (end2 && end2 < D) return { error: `The end date can't be before this occurrence (${niceDate(D)}). To remove this occurrence and the ones after it, use Delete.`, bills };
+    const next = nextSegmentStart(bills, B);
+    if (next && (!end2 || end2 >= next)) return { error: `That overlaps a later version of this bill that starts ${niceDate(next)}.`, bills };
+    return { bills: replace([{ ...B, endDate: end2 }]), savedId: B.id };
+  }
+
+  // "All": the descriptive fields on every segment. Dates can't be changed this way.
+  if (scope === "all") {
+    if (ch.planChanged || ch.endChanged) return { error: "Date, frequency and end date changes can only apply from this occurrence onward.", bills };
+    // Only the fields that were actually edited go to the other segments; the
+    // rest (e.g. an amount that differs between versions) are left as they are.
+    const edited = Object.fromEntries(SERIES_FIELDS.filter((k) => norm(B[k]) !== norm(fields[k])).map((k) => [k, fields[k]]));
+    return { bills: bills.map((b) => (seriesOf(b) === sid ? { ...b, ...edited } : b)), savedId: B.id };
+  }
+
+  // "This and following".
+  const D2 = values.dueDate;
+  const prev = previousOccurrence(bills, B, D);
+  if (prev && D2 <= prev) return { error: `Pick a date after the previous occurrence (${niceDate(prev)}). To change earlier dates, edit that occurrence instead.`, bills };
+  if (end2 && D2 > end2) return { error: "The end date is before the due date.", bills };
+  const next = nextSegmentStart(bills, B);
+  const covered = recurring2 ? end2 : D2;
+  if (next && (D2 >= next || !covered || covered >= next)) {
+    return { error: `That overlaps a later version of this bill that starts ${niceDate(next)}. Set an end date before then.`, bills };
+  }
+
+  const base = { ...B, ...fields, dueDate: D2, recurring: recurring2, frequency: freq2, endDate: end2, seriesId: sid };
+  delete base.anchorDay;
+  if (D2 === D && recurring2 && (freq2 === "monthly" || freq2 === "yearly")) {
+    const originalAnchor = B.anchorDay || toDate(B.dueDate).getDate();
+    if (originalAnchor !== toDate(D2).getDate()) base.anchorDay = originalAnchor;
+  }
+
+  // First occurrence of this segment: nothing precedes it, so edit it in place.
+  if (D === B.dueDate) {
+    const { before, after } = splitMarks(B.completions, D);
+    return { bills: replace([{ ...base, id: B.id, completions: { ...before, ...remapMarks(after, base, D, D2) } }]), savedId: B.id };
+  }
+
+  // Otherwise split: close this segment the day before, start a new one here.
+  const { before, after } = splitMarks(B.completions, D);
+  const closed = { ...B, seriesId: sid, endDate: addDays(D, -1), completions: before };
+  const created = { ...base, id: newId, completions: remapMarks(after, base, D, D2) };
+  return { bills: replace([closed, created]), savedId: created.id };
+}
+
+// Deletes from a bill series.
+//   scope "all": every segment, with its history.
+//   scope "following": this occurrence onward, within this segment (a later
+//   version that takes over after this segment is kept). Earlier occurrences
+//   and their payment history stay.
+export function removeBillScope(bills, { billId, dateKey, scope = "all" }) {
+  const B = bills.find((b) => b.id === billId);
+  if (!B) return bills;
+  const sid = seriesOf(B);
+  if (scope === "all") return bills.filter((b) => seriesOf(b) !== sid);
+  const D = B.recurring && isOccurrence(B, dateKey) ? dateKey : B.dueDate;
+  if (!B.recurring || D <= B.dueDate) return bills.filter((b) => b.id !== B.id);
+  const { before } = splitMarks(B.completions, D);
+  return bills.map((b) => (b.id === B.id ? { ...B, seriesId: sid, endDate: addDays(D, -1), completions: before } : b));
+}
+
+// Existing transactions that could be linked to an occurrence: same account and
+// direction, nearest in date, and not already linked to some bill occurrence.
+export function linkableTransactions(transactions, bills, bill, dateKey) {
+  const linked = new Set();
+  (bills || []).forEach((b) => Object.values(b.completions || {}).forEach((v) => { if (typeof v === "string") linked.add(v); }));
+  return (transactions || [])
+    .filter((t) => t.accountId === bill.accountId && t.type === bill.type && !linked.has(t.id))
+    .map((t) => ({ t, gap: Math.abs(new Date(t.date) - new Date(dateKey)) }))
+    .sort((a, b) => a.gap - b.gap)
+    .slice(0, 6)
+    .map((x) => x.t);
 }

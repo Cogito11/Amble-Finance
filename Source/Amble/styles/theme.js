@@ -320,7 +320,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
 
 /* ---------------------------------- plan view ---------------------------------- */
-.plan-view { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.plan-view { display:flex; flex-direction:column; gap:14px; min-width:0; container-type:inline-size; container-name:planview; }
 
 /* stat strip */
 .plan-stats { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
@@ -445,17 +445,39 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-goal-amounts { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; }
 .plan-goal-contrib { display:flex; gap:8px; }
 .plan-goal-contrib .input { flex:1; min-width:0; padding:6px 10px; font-size:12.5px; }
-.plan-empty-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; }
-.plan-empty-alt { color:var(--text-muted); }
 
-@media (max-width:900px) {
-  .plan-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+/* bill modal: this-occurrence card and apply-to scope choice */
+.bill-occ { display:flex; flex-direction:column; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+.bill-occ-paid { border-color:color-mix(in srgb, var(--teal) 45%, var(--border)); background:color-mix(in srgb, var(--teal) 9%, var(--surface)); }
+.bill-occ-overdue { border-color:color-mix(in srgb, var(--rust) 45%, var(--border)); }
+.bill-occ .plan-link-select { flex:0 0 auto; width:100%; max-width:none; }
+.bill-occ-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.bill-occ-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; }
+.bill-occ-status { font-size:12.5px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; }
+.bill-occ-paid .bill-occ-status { color:var(--teal); }
+.bill-occ-overdue .bill-occ-status { color:var(--rust); }
+.bill-scope-list { display:flex; flex-direction:column; gap:10px; }
+.bill-scope-opt { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.bill-scope-opt:hover { background:var(--surface-2); }
+.bill-scope-opt.active { border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+.bill-scope-opt.disabled { opacity:.55; cursor:not-allowed; }
+.bill-scope-opt input { margin-top:3px; accent-color:var(--brass); }
+.bill-scope-opt b { display:block; font-size:14px; font-weight:600; }
+.bill-scope-desc { display:block; font-size:12.5px; margin-top:2px; }
+
+/* These key off the width of the Plan page itself, not the window: the sidebar
+   takes a big slice of a window, so a window-width breakpoint stacked the
+   calendar too late and left it squished. */
+@container planview (max-width:940px) {
   .plan-main { grid-template-columns:1fr; height:auto; }
   .plan-calendar-card { height:clamp(380px, 62vh, 560px); }
   .plan-day-panel { max-height:460px; }
+}
+@container planview (max-width:720px) {
+  .plan-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   .plan-lists { grid-template-columns:1fr; }
 }
-@media (max-width:420px) {
+@container planview (max-width:440px) {
   .plan-stat { padding:10px; gap:8px; }
   .plan-stat-icon { width:28px; height:28px; }
   .plan-stat-value { font-size:16px; }

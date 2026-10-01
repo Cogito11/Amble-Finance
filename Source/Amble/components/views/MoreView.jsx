@@ -14,8 +14,10 @@ const PATCH_NOTES = [
     items: [
       "Added the **Plan** sidebar tab with a calendar for bills, income, and goals.",
       "Added recurring and one-time bills and income entries.",
-      "Bills can be marked as complete or linked to transactions.",
+      "Bills can be marked as complete manually or linked to a transaction.",
       "Added account balance goals with target dates and progress tracking.",
+      "Fixed a bug where the transaction list scroll bar would fall out of sync with the cursor.",
+      "Fixed an issue that would cause the transaction list to jitter while at rest.",
     ],
   },
   {
