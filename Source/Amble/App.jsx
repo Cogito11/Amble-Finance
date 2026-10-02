@@ -12,6 +12,8 @@ import { TransactionModal } from "./components/modals/TransactionModal";
 import { WidgetSettingsModal } from "./components/modals/WidgetSettingsModal";
 import { SidebarSettingsModal } from "./components/modals/SidebarSettingsModal";
 import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
+import { BillModal } from "./components/modals/BillModal";
+import { GoalModal } from "./components/modals/GoalModal";
 import { ToolsView } from "./components/tools/ToolsView";
 import { AccountsView } from "./components/views/AccountsView";
 import { StatusView } from "./components/views/StatusView";
@@ -19,10 +21,12 @@ import { Dashboard } from "./components/views/Dashboard";
 import { MoreView } from "./components/views/MoreView";
 import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
+import { PlanView } from "./components/views/PlanView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
 import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
+import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, sanitizeBills, sanitizeGoals } from "./state/planning";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
@@ -153,6 +157,12 @@ export default function App() {
   const [accModal, setAccModal] = useState(null);
   const [catModal, setCatModal] = useState(null);
   const [budgetModal, setBudgetModal] = useState(null);
+  const [billModal, setBillModal] = useState(null);
+  const [goalModal, setGoalModal] = useState(null);
+  // Set when a transaction is opened from a Plan bill occurrence ("Create a new
+  // transaction for this") so saveTransaction below knows to also link the
+  // resulting transaction id back onto that bill's occurrence once it's saved.
+  const [pendingBillLink, setPendingBillLink] = useState(null);
   const [accError, setAccError] = useState("");
   const [closedAccountsOpen, setClosedAccountsOpen] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -169,7 +179,13 @@ export default function App() {
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
-    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth" };
+    // Every section defaults to visible except "plan" - it's a newer, more
+    // involved feature (bills/goals/calendar) that not everyone wants cluttering
+    // the sidebar, so it starts opt-in. Existing installs get this too, since
+    // their saved prefs (below) won't have a "plan" key yet to override it -
+    // same mechanism that already brings any new section in hidden or shown per
+    // its own default without touching users' existing customizations.
+    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, section.id !== "plan"])), footerMetric: "netWorth" };
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
       if (!raw) return defaultPrefs;
@@ -285,6 +301,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+          bills: sanitizeBills(raw.bills),
+          goals: sanitizeGoals(raw.goals),
         } : defaultState());
       } catch (e) {
         setState(defaultState());
@@ -309,6 +327,8 @@ export default function App() {
           ...raw,
           plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
           accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
+          bills: sanitizeBills(raw.bills),
+          goals: sanitizeGoals(raw.goals),
         });
       } catch (err) { /* ignore malformed/partial writes */ }
     };
@@ -359,6 +379,7 @@ export default function App() {
   // top or fire an action the visible modal doesn't expect.
   const anyOverlayOpen =
     txModal !== null || accModal !== null || catModal !== null || budgetModal !== null ||
+    billModal !== null || goalModal !== null ||
     widgetModalOpen || sidebarModalOpen || closedAccountsOpen || !!confirmDialog || shortcutsOpen;
 
   // This must run unconditionally on every render (it's a hook), so it's declared
@@ -380,10 +401,12 @@ export default function App() {
         if (sidebarModalOpen) { setSidebarModalOpen(false); return; }
         if (statusModalOpen) { setStatusModalOpen(false); return; }
         if (closedAccountsOpen) { setClosedAccountsOpen(false); return; }
-        if (txModal !== null) { setTxModal(null); return; }
+        if (txModal !== null) { setTxModal(null); setPendingBillLink(null); return; }
         if (accModal !== null) { setAccModal(null); setAccError(""); return; }
         if (catModal !== null) { setCatModal(null); return; }
         if (budgetModal !== null) { setBudgetModal(null); return; }
+        if (billModal !== null) { setBillModal(null); return; }
+        if (goalModal !== null) { setGoalModal(null); return; }
         return;
       }
 
@@ -416,7 +439,7 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more" };
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more", "8": "plan" };
         if (navByKey[key]) {
           setView(navByKey[key]);
           return;
@@ -440,7 +463,14 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, budgetModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, budgetModal, billModal, goalModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+
+  // The bill being edited was deleted elsewhere (e.g. another window): close its modal.
+  // (Kept above the early return below so the hook order never changes between renders.)
+  const editedBillMissing = !!(loaded && state && billModal && billModal.billId && !state.bills.some((b) => b.id === billModal.billId));
+  useEffect(() => {
+    if (editedBillMissing) setBillModal(null);
+  }, [editedBillMissing]);
 
   if (!loaded || !state) {
     return (
@@ -461,12 +491,23 @@ export default function App() {
   const saveTransaction = (t) => {
     setState((s) => {
       const exists = s.transactions.some((x) => x.id === t.id);
-      return { ...s, transactions: exists ? s.transactions.map((x) => x.id === t.id ? t : x) : [...s.transactions, t] };
+      const transactions = exists ? s.transactions.map((x) => x.id === t.id ? t : x) : [...s.transactions, t];
+      const bills = pendingBillLink
+        ? s.bills.map((b) => (b.id === pendingBillLink.billId
+            ? { ...b, completions: { ...(b.completions || {}), [pendingBillLink.dateKey]: t.id } }
+            : b))
+        : s.bills;
+      return { ...s, transactions, bills };
     });
     setTxModal(null);
+    setPendingBillLink(null);
   };
   const deleteTransaction = (id) => {
-    setState((s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== id) }));
+    setState((s) => ({
+      ...s,
+      transactions: s.transactions.filter((t) => t.id !== id),
+      bills: clearRemovedTransactionFromBills(s.bills, id),
+    }));
     setTxModal(null);
   };
   const requestDeleteTransaction = (id) => {
@@ -532,7 +573,11 @@ export default function App() {
   const requestDeleteAccount = (id) => {
     const a = state.accounts.find((x) => x.id === id);
     const inUse = state.transactions.some((t) => t.accountId === id || t.toAccountId === id);
+    const billInUse = state.bills.some((b) => b.accountId === id);
+    const goalInUse = state.goals.some((g) => g.trackingMode === "account" && g.accountId === id);
     if (inUse) { setAccError("This account has transactions on it. Delete those transactions first."); return; }
+    if (billInUse) { setAccError("This account has a bill assigned to it. Delete or reassign that bill first."); return; }
+    if (goalInUse) { setAccError("This account is being tracked by a goal. Delete that goal or change how it's tracked first."); return; }
     setConfirmDialog({
       title: "Delete account?",
       message: `This will permanently delete “${a?.name || "this account"}”. This can't be undone.`,
@@ -568,6 +613,7 @@ export default function App() {
       ...s,
       categories: s.categories.filter((c) => c.id !== id),
       transactions: s.transactions.map((t) => t.categoryId === id ? { ...t, categoryId: null } : t),
+      bills: clearRemovedCategoryFromBills(s.bills, [id]),
     }));
     setCatModal(null);
   };
@@ -689,6 +735,96 @@ export default function App() {
     });
   };
 
+  /* ---------------------------------- plan: bills ---------------------------------- */
+  const modalBill = billModal && billModal.billId ? state.bills.find((b) => b.id === billModal.billId) : null;
+  // `billModal` is {} for a new bill, or { billId, dateKey } when editing: the
+  // bill is read live from state, and dateKey is the occurrence that was clicked.
+  // Returns { error } (shown in the modal) instead of closing when an edit is invalid.
+  const saveBill = ({ values, billId, dateKey, scope }) => {
+    if (!billId) {
+      setState((s) => ({ ...s, bills: [...s.bills, { id: uid(), ...values, completions: {} }] }));
+      setBillModal(null);
+      return {};
+    }
+    const newId = uid();
+    const check = applyBillEdit(state.bills, { billId, dateKey, values, scope, newId });
+    if (check.error) return { error: check.error };
+    // Re-apply against the latest bills so paid marks made meanwhile (e.g. from a popped-out window) are never overwritten.
+    setState((s) => {
+      const res = applyBillEdit(s.bills, { billId, dateKey, values, scope, newId });
+      return res.error ? s : { ...s, bills: res.bills };
+    });
+    setBillModal(null);
+    return {};
+  };
+  const deleteBill = (id, scope = "all", dateKey) => {
+    setState((s) => ({ ...s, bills: removeBillScope(s.bills, { billId: id, dateKey, scope }) }));
+    setBillModal(null);
+  };
+  const requestDeleteBill = (id) => {
+    const b = state.bills.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Delete bill?",
+      message: `This will permanently delete “${b?.name || "this bill"}” and its payment history. Any transactions already linked to it are kept, just unlinked. This can't be undone.`,
+      onConfirm: () => { deleteBill(id); setConfirmDialog(null); },
+    });
+  };
+  const markBillPaid = (billId, dateKey) => {
+    setState((s) => ({ ...s, bills: s.bills.map((b) => (b.id === billId ? { ...b, completions: { ...(b.completions || {}), [dateKey]: true } } : b)) }));
+  };
+  const unmarkBillPaid = (billId, dateKey) => {
+    setState((s) => ({
+      ...s,
+      bills: s.bills.map((b) => {
+        if (b.id !== billId || !b.completions) return b;
+        const completions = { ...b.completions };
+        delete completions[dateKey];
+        return { ...b, completions };
+      }),
+    }));
+  };
+  const linkBillTransaction = (billId, dateKey, transactionId) => {
+    setState((s) => ({ ...s, bills: s.bills.map((b) => (b.id === billId ? { ...b, completions: { ...(b.completions || {}), [dateKey]: transactionId } } : b)) }));
+  };
+  // Opens the ordinary transaction form pre-filled from a bill occurrence.
+  // saveTransaction (below) checks pendingBillLink once the form is submitted
+  // and links the resulting transaction back onto this exact occurrence.
+  const assignTransactionToBill = (bill, dateKey) => {
+    setPendingBillLink({ billId: bill.id, dateKey });
+    setTxModal({ type: bill.type, date: dateKey, description: bill.name, amount: bill.amount, accountId: bill.accountId, categoryId: bill.categoryId });
+  };
+
+  /* ---------------------------------- plan: goals ---------------------------------- */
+  const saveGoal = (g) => {
+    setState((s) => {
+      const exists = s.goals.some((x) => x.id === g.id);
+      return { ...s, goals: exists ? s.goals.map((x) => (x.id === g.id ? g : x)) : [...s.goals, g] };
+    });
+    setGoalModal(null);
+  };
+  const deleteGoal = (id) => {
+    setState((s) => ({ ...s, goals: s.goals.filter((g) => g.id !== id) }));
+    setGoalModal(null);
+  };
+  const requestDeleteGoal = (id) => {
+    const g = state.goals.find((x) => x.id === id);
+    setConfirmDialog({
+      title: "Delete goal?",
+      message: `This will permanently delete “${g?.name || "this goal"}”. This can't be undone.`,
+      onConfirm: () => { deleteGoal(id); setConfirmDialog(null); },
+    });
+  };
+  // Quick "add contribution" from the Plan view's goal card, for manually-tracked
+  // goals - avoids opening the full edit modal just to bump a running total.
+  const addGoalContribution = (goalId, amount) => {
+    setState((s) => ({
+      ...s,
+      goals: s.goals.map((g) => (g.id === goalId && g.trackingMode === "manual"
+        ? { ...g, manualAmount: (g.manualAmount || 0) + amount }
+        : g)),
+    }));
+  };
+
   const setCurrency = (code) => {
     setState((s) => ({ ...s, currency: code }));
   };
@@ -744,7 +880,7 @@ export default function App() {
         if (!valid) throw new Error("bad shape");
         setConfirmDialog({
           title: "Import backup?",
-          message: `This will replace all current accounts, categories, transactions, and budgets with the contents of “${file.name}”. This can't be undone.`,
+          message: `This will replace all current accounts, categories, transactions, budgets, bills, and goals with the contents of “${file.name}”. This can't be undone.`,
           confirmLabel: "Import & replace",
           onConfirm: () => {
             setState({
@@ -753,6 +889,8 @@ export default function App() {
               categories: data.categories,
               transactions: data.transactions,
               plans: migrateBudgetOrder(Array.isArray(data.plans) ? data.plans : []),
+              bills: sanitizeBills(data.bills),
+              goals: sanitizeGoals(data.goals),
               ...(data.currency ? { currency: data.currency } : {}),
               ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
             });
@@ -886,7 +1024,7 @@ export default function App() {
   const requestResetSampleData = () => {
     setConfirmDialog({
       title: "Reset sample/default data?",
-      message: "This will permanently delete all of your accounts, transactions, categories, and budgets, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
+      message: "This will permanently delete all of your accounts, transactions, categories, budgets, bills, and goals, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
       confirmLabel: "Reset data",
       onConfirm: () => {
         setState((s) => ({ ...defaultState(), currency: s.currency }));
@@ -898,7 +1036,7 @@ export default function App() {
   const requestFactoryReset = () => {
     setConfirmDialog({
       title: "Factory reset application?",
-      message: "This will permanently erase everything, including all accounts, transactions, categories, and budgets, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
+      message: "This will permanently erase everything, including all accounts, transactions, categories, budgets, bills, and goals, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
       confirmLabel: "Factory reset",
       onConfirm: () => {
         setState(defaultState());
@@ -968,7 +1106,7 @@ export default function App() {
               {effectiveView === "status" && (
                 <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && (
+              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
               {!popoutView && (
@@ -1036,6 +1174,25 @@ export default function App() {
                 onReorder={reorderBudget}
               />
             )}
+            {effectiveView === "plan" && (
+              <PlanView
+                bills={state.bills}
+                goals={state.goals}
+                accounts={state.accounts}
+                categories={state.categories}
+                transactions={state.transactions}
+                balances={balances}
+                onAddBill={() => setBillModal({})}
+                onEditBill={(bill, dateKey) => setBillModal({ billId: bill.id, dateKey })}
+                onAddGoal={() => setGoalModal({})}
+                onEditGoal={setGoalModal}
+                onAddContribution={addGoalContribution}
+                onMarkPaid={markBillPaid}
+                onUnmarkPaid={unmarkBillPaid}
+                onAssignTransaction={assignTransactionToBill}
+                onLinkTransaction={linkBillTransaction}
+              />
+            )}
             {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
             {effectiveView === "more" && (
               <MoreView
@@ -1074,7 +1231,7 @@ export default function App() {
           budgets={state.plans}
           transactions={state.transactions}
           onSave={saveTransaction}
-          onClose={() => setTxModal(null)}
+          onClose={() => { setTxModal(null); setPendingBillLink(null); }}
           onDelete={requestDeleteTransaction}
         />
       )}
@@ -1114,6 +1271,34 @@ export default function App() {
           onClose={() => setBudgetModal(null)}
           onDelete={requestDeleteBudget}
           onRecolorCategory={recolorBudgetCategory}
+        />
+      )}
+      {billModal !== null && (!billModal.billId || modalBill) && (
+        <BillModal
+          key={billModal.billId || "new"}
+          initial={modalBill || {}}
+          occurrenceDate={billModal.dateKey}
+          bills={state.bills}
+          transactions={state.transactions}
+          accounts={state.accounts}
+          categories={state.categories}
+          budgets={state.plans}
+          onSave={saveBill}
+          onClose={() => setBillModal(null)}
+          onDelete={(id, scope, dateKey) => (scope ? deleteBill(id, scope, dateKey) : requestDeleteBill(id))}
+          onMarkPaid={markBillPaid}
+          onUnmarkPaid={unmarkBillPaid}
+          onLinkTransaction={linkBillTransaction}
+          onAssignTransaction={(bill, dateKey) => { setBillModal(null); assignTransactionToBill(bill, dateKey); }}
+        />
+      )}
+      {goalModal !== null && (
+        <GoalModal
+          initial={goalModal}
+          accounts={state.accounts}
+          onSave={saveGoal}
+          onClose={() => setGoalModal(null)}
+          onDelete={requestDeleteGoal}
         />
       )}
       {widgetModalOpen && (

@@ -10,6 +10,17 @@ import { checkForUpdate } from "../../utils/updates";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.7.0",
+    items: [
+      "Added the **Plan** sidebar tab with a calendar for bills, income, and goals.",
+      "Added recurring and one-time bills and income entries.",
+      "Bills can be marked as complete manually or linked to a transaction.",
+      "Added account balance goals with target dates and progress tracking.",
+      "Fixed a bug where the transaction list scroll bar would fall out of sync with the cursor.",
+      "Fixed an issue that would cause the transaction list to jitter while at rest.",
+    ],
+  },
+  {
     version: "1.6.8",
     items: [
       "Transaction searching no longer attempts to query after every keystroke.",

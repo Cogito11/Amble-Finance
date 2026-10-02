@@ -319,6 +319,171 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .budget-cat-item-subrow { background: var(--surface-2); }
 .budget-cat-item-name-cell { padding-left:23px !important; color:var(--text-muted); }
 
+/* ---------------------------------- plan view ---------------------------------- */
+.plan-view { display:flex; flex-direction:column; gap:14px; min-width:0; container-type:inline-size; container-name:planview; }
+
+/* stat strip */
+.plan-stats { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
+.plan-stat { display:flex; align-items:center; gap:12px; min-width:0; padding:12px 14px; background:var(--surface); border:1px solid var(--border); border-radius:12px; }
+.plan-stat > div:last-child { min-width:0; }
+.plan-stat-icon { width:34px; height:34px; flex-shrink:0; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--surface-2); }
+.plan-stat-label { font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plan-stat-value { font-family:'Fraunces',serif; font-weight:600; font-size:18px; line-height:1.25; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.plan-stat-of { font-size:12px; font-weight:500; color:var(--text-faint); }
+
+/* calendar + day panel. The row's height follows the viewport, and the
+   calendar grid divides whatever height it gets evenly across its weeks, so
+   it fits the window instead of being sized from the cell width. */
+.plan-main { display:grid; grid-template-columns:minmax(0, 1fr) minmax(300px, 360px); gap:14px; height:clamp(400px, calc(100vh - 270px), 720px); min-width:0; }
+.plan-calendar-card { container-type:inline-size; container-name:plancal; display:flex; flex-direction:column; gap:10px; min-width:0; min-height:0; margin:0; padding:14px 16px 12px; }
+.plan-cal-head { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.plan-cal-title { font-family:'Fraunces',serif; font-weight:600; font-size:18px; min-width:150px; text-align:center; }
+.plan-cal-actions { margin-left:auto; display:flex; gap:8px; }
+.plan-cal-body { flex:1; min-height:0; display:flex; flex-direction:column; gap:4px; }
+.plan-cal-weekdays { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; }
+.plan-cal-weekday { text-align:center; font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:0.04em; padding:2px 0; }
+.plan-cal-weekday .wd-short { display:none; }
+.plan-cal-grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); grid-template-rows:repeat(var(--weeks, 6), minmax(0, 1fr)); gap:4px; }
+.plan-cal-cell {
+  min-width:0; min-height:0; overflow:hidden; text-align:left;
+  display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:4px 5px;
+  background:var(--surface); border:1px solid var(--border); border-radius:8px; cursor:pointer;
+  font-family:'Inter',sans-serif; color:var(--text); transition:background .12s, border-color .12s;
+}
+.plan-cal-cell:hover { background:var(--surface-2); }
+.plan-cal-cell-blank { cursor:default; background:transparent; border-color:transparent; pointer-events:none; }
+.plan-cal-cell-selected { border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+.plan-cal-daynum { align-self:flex-start; min-width:20px; height:20px; padding:0 4px; display:inline-flex; align-items:center; justify-content:center; border-radius:10px; font-size:12px; font-weight:500; }
+.plan-cal-cell-today .plan-cal-daynum { background:var(--brass); color:var(--on-brass); }
+.plan-cal-dots { display:flex; align-items:center; flex-wrap:wrap; gap:3px; padding-left:2px; }
+.plan-cal-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; display:inline-block; }
+.plan-cal-more { font-size:10px; line-height:1.2; color:var(--text-faint); font-weight:600; }
+.plan-cal-chips { display:none; flex-direction:column; gap:2px; min-height:0; overflow:hidden; }
+.plan-cal-chip { display:flex; align-items:center; gap:3px; min-width:0; padding:1px 5px; border-radius:4px; font-size:10.5px; line-height:1.3; font-weight:500; }
+.plan-cal-chip > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Text color and tint both come from the same palette variable, so a chip's highlight always matches its text. */
+.plan-cal-chip.tone-brass { color:var(--brass); background:color-mix(in srgb, var(--brass) 14%, transparent); }
+.plan-cal-dot.tone-brass { background:var(--brass); }
+.plan-cal-chip.tone-rust { color:var(--rust); background:color-mix(in srgb, var(--rust) 14%, transparent); }
+.plan-cal-dot.tone-rust { background:var(--rust); }
+.plan-cal-chip.tone-teal { color:var(--teal); background:color-mix(in srgb, var(--teal) 14%, transparent); }
+.plan-cal-dot.tone-teal { background:var(--teal); }
+.plan-cal-chip.tone-amber { color:var(--amber); background:color-mix(in srgb, var(--amber) 14%, transparent); }
+.plan-cal-dot.tone-amber { background:var(--amber); }
+.plan-cal-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:11.5px; }
+.plan-cal-legend span { display:inline-flex; align-items:center; gap:5px; }
+
+/* roomy cells (wide card and tall window) show labeled chips instead of dots */
+@media (min-height:760px) {
+  @container plancal (min-width:600px) {
+    .plan-cal-dots { display:none; }
+    .plan-cal-chips { display:flex; }
+  }
+}
+/* very narrow card (popout, small window): one-letter weekdays, tighter cells */
+@container plancal (max-width:420px) {
+  .plan-cal-weekday .wd-full { display:none; }
+  .plan-cal-weekday .wd-short { display:inline; }
+  .plan-cal-cell { padding:3px; }
+  .plan-cal-daynum { font-size:11px; min-width:18px; height:18px; }
+  .plan-cal-title { min-width:0; font-size:16px; }
+}
+
+/* selected-day panel */
+.plan-day-panel { display:flex; flex-direction:column; min-width:0; min-height:0; margin:0; padding:0; overflow:hidden; }
+.plan-day-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:14px 16px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.plan-day-date { display:flex; align-items:center; gap:8px; font-family:'Fraunces',serif; font-weight:600; font-size:15px; }
+.plan-day-meta { font-size:11.5px; text-transform:uppercase; letter-spacing:0.04em; }
+.plan-day-body { flex:1; min-height:0; overflow-y:auto; padding:14px 16px 16px; display:flex; flex-direction:column; gap:16px; }
+.plan-day-section-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-faint); margin:0 0 8px; }
+.plan-day-empty { margin:0; font-size:12.5px; }
+.plan-occ-list { display:flex; flex-direction:column; gap:8px; }
+.plan-occ-row { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px 10px; align-items:center; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.plan-occ-row:hover { background:var(--surface-2); }
+.plan-occ-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+.plan-occ-main { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.plan-occ-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-weight:500; font-size:14px; }
+.plan-occ-sub { font-size:12.5px; }
+.plan-occ-row .row-actions { grid-column:1 / -1; justify-content:flex-start; flex-wrap:wrap; min-width:0; }
+.plan-link-select { width:auto; min-width:0; max-width:100%; flex:1 1 160px; padding:6px 10px; font-size:12.5px; }
+
+/* bottom lists */
+.plan-lists { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; align-items:start; }
+.plan-list-card { margin:0; padding:16px; min-width:0; }
+.plan-list-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.plan-list-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin:0; }
+.plan-list-meta { font-size:12px; white-space:nowrap; }
+.plan-list-empty { margin:0; padding:14px 0 6px; text-align:center; }
+.plan-list-toggle { margin-top:10px; }
+.plan-row-list { display:flex; flex-direction:column; gap:8px; }
+.plan-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }
+.plan-row:hover { border-color:var(--brass); background:var(--surface-2); }
+.plan-row:focus-visible { outline:2px solid var(--brass); outline-offset:2px; }
+.plan-date-badge { width:42px; flex-shrink:0; text-align:center; padding:4px 0; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; line-height:1.15; }
+.plan-date-badge b { display:block; font-family:'Fraunces',serif; font-size:15px; }
+.plan-date-badge span { font-size:9.5px; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-faint); }
+.plan-row-overdue .plan-date-badge { border-color:var(--rust); }
+/* done items (paid / received bills, achieved goals) read as green, not faded */
+.plan-row-paid, .plan-row-done, .plan-occ-paid { border-color:color-mix(in srgb, var(--teal) 45%, var(--border)); background:color-mix(in srgb, var(--teal) 9%, var(--surface)); }
+.plan-row-paid:hover, .plan-row-done:hover, .plan-occ-paid:hover { border-color:var(--teal); background:color-mix(in srgb, var(--teal) 14%, var(--surface)); }
+.plan-row-paid .plan-date-badge { border-color:var(--teal); background:color-mix(in srgb, var(--teal) 16%, var(--surface-2)); }
+.plan-row-paid .plan-date-badge b, .plan-row-paid .plan-date-badge span { color:var(--teal); }
+.plan-goal-pct { display:inline-flex; align-items:center; gap:4px; }
+.plan-row-done .plan-goal-pct { color:var(--teal); font-weight:600; }
+.plan-row-main { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.plan-row-name { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
+.plan-row-title { display:inline-flex; align-items:center; gap:6px; font-weight:500; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-row-sub { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.plan-row-side { display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex-shrink:0; }
+.plan-row-status { font-size:11.5px; }
+.plan-check { flex-shrink:0; padding:4px; }
+.plan-goal-row { flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:8px; }
+.plan-row-link { flex:1 1 100%; min-width:0; display:flex; }
+.plan-row-link .plan-link-select { flex:1; max-width:none; }
+.plan-goal-top { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.plan-goal-due { font-size:12px; }
+.plan-goal-amounts { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; }
+.plan-goal-contrib { display:flex; gap:8px; }
+.plan-goal-contrib .input { flex:1; min-width:0; padding:6px 10px; font-size:12.5px; }
+
+/* bill modal: this-occurrence card and apply-to scope choice */
+.bill-occ { display:flex; flex-direction:column; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
+.bill-occ-paid { border-color:color-mix(in srgb, var(--teal) 45%, var(--border)); background:color-mix(in srgb, var(--teal) 9%, var(--surface)); }
+.bill-occ-overdue { border-color:color-mix(in srgb, var(--rust) 45%, var(--border)); }
+.bill-occ .plan-link-select { flex:0 0 auto; width:100%; max-width:none; }
+.bill-occ-head { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.bill-occ-title { font-family:'Fraunces',serif; font-weight:600; font-size:14px; }
+.bill-occ-status { font-size:12.5px; color:var(--text-muted); overflow:hidden; text-overflow:ellipsis; }
+.bill-occ-paid .bill-occ-status { color:var(--teal); }
+.bill-occ-overdue .bill-occ-status { color:var(--rust); }
+.bill-scope-list { display:flex; flex-direction:column; gap:10px; }
+.bill-scope-opt { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+.bill-scope-opt:hover { background:var(--surface-2); }
+.bill-scope-opt.active { border-color:var(--brass); box-shadow:0 0 0 1px var(--brass); }
+.bill-scope-opt.disabled { opacity:.55; cursor:not-allowed; }
+.bill-scope-opt input { margin-top:3px; accent-color:var(--brass); }
+.bill-scope-opt b { display:block; font-size:14px; font-weight:600; }
+.bill-scope-desc { display:block; font-size:12.5px; margin-top:2px; }
+
+/* These key off the width of the Plan page itself, not the window: the sidebar
+   takes a big slice of a window, so a window-width breakpoint stacked the
+   calendar too late and left it squished. */
+@container planview (max-width:940px) {
+  .plan-main { grid-template-columns:1fr; height:auto; }
+  .plan-calendar-card { height:clamp(380px, 62vh, 560px); }
+  .plan-day-panel { max-height:460px; }
+}
+@container planview (max-width:720px) {
+  .plan-stats { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  .plan-lists { grid-template-columns:1fr; }
+}
+@container planview (max-width:440px) {
+  .plan-stat { padding:10px; gap:8px; }
+  .plan-stat-icon { width:28px; height:28px; }
+  .plan-stat-value { font-size:16px; }
+  .plan-cal-actions { margin-left:0; width:100%; }
+  .plan-cal-actions .btn { flex:1; justify-content:center; }
+}
 
 .budget-active-card { display:flex; flex-direction:column; gap:10px; }
 .budget-active-name { font-family:'Fraunces',serif; font-weight:600; font-size:17px; }

@@ -33,6 +33,7 @@ export function defaultState() {
   const synced = syncBudgetCategories(seedDefaultBudget(), generalCategories);
   return {
     accounts: [], categories: synced.categories, transactions: [], plans: [synced.budget],
+    bills: [], goals: [],
     currency: "USD", lastBackupAt: null,
   };
 }
