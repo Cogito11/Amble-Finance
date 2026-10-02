@@ -246,7 +246,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .select:hover, .input:hover { border-color: var(--text-faint); }
 .select:focus, .input:focus { outline: none; border-color: var(--brass); }
 
-.acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:16px; }
+/* Equal-height rows: a card that ends up alone on its row (usually "Add account") is
+   as tall as the account cards instead of shrinking to its own content. */
+.acc-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); grid-auto-rows:1fr; gap:16px; }
 .acc-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; display:flex; flex-direction:column; gap:2px; cursor:pointer; transition: opacity .15s, border-color .15s, transform .1s; }
 .acc-card:hover { border-color: var(--brass); }
 .acc-card:focus-visible { outline: 2px solid var(--brass); outline-offset:2px; }
@@ -676,6 +678,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .form-group { display:flex; flex-direction:column; gap:6px; }
 .form-group label { font-size:12px; color:var(--text-muted); }
 .form-group .input, .form-group .select { width:100%; }
+textarea.input { resize:vertical; min-height:72px; line-height:1.45; }
 
 .input-with-swatch { display:flex; align-items:center; gap:9px; }
 .input-with-swatch .input { flex:1; }

@@ -17,6 +17,7 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
   const existingDisplay = initial.id ? (isDebt ? Math.max(0, -(initial.startingBalance || 0)) : (initial.startingBalance || 0)) : "";
   const [balanceInput, setBalanceInput] = useState(existingDisplay);
   const [interestRateInput, setInterestRateInput] = useState(initial.interestRate ?? "");
+  const [notes, setNotes] = useState(initial.notes || "");
   const bodyRef = useRef(null);
 
   // A failed delete (e.g. "this account has transactions on it") lands while the
@@ -51,6 +52,8 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
       type,
       startingBalance: isDebt ? -Math.abs(val) : val,
       interestRate: rateVal,
+      // Optional: left off the account entirely when empty, so clearing it removes it.
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
       order: typeof initial.order === "number" ? initial.order : undefined,
       closed: isClosed,
     });
@@ -106,6 +109,10 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
           <label>{isDebt ? "APR (%)" : "Interest rate (%)"} <span className="muted">· optional</span></label>
           <input type="number" step="0.01" min="0" className="input mono" placeholder="e.g. 4.5" value={interestRateInput} onChange={(e) => setInterestRateInput(e.target.value)} onWheel={blurOnWheel} />
           <div className="tool-note">If set, compatible growth and payoff tools will use this automatically when you select this account.</div>
+        </div>
+        <div className="form-group">
+          <label>Notes <span className="muted">· optional</span></label>
+          <textarea className="input" rows={3} placeholder="Field to put any details you want to remember about this account. What its used for, its rewards rates..." value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
         {isEdit && (
           isClosed ? (
