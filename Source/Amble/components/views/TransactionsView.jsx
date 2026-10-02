@@ -212,7 +212,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       if (hasAmountMin && transaction.amount < amountMin) return false;
       if (hasAmountMax && transaction.amount > amountMax) return false;
       if (searchTerm) {
-        const haystack = [transaction.description, catName(transaction.categoryId), accName(transaction.accountId), accName(transaction.toAccountId), transaction.type];
+        const haystack = [transaction.description, transaction.notes, catName(transaction.categoryId), accName(transaction.accountId), accName(transaction.toAccountId), transaction.type];
         if (!haystack.filter(Boolean).some((value) => String(value).toLowerCase().includes(searchTerm))) return false;
       }
       return true;

@@ -916,7 +916,8 @@ export default function App() {
   const exportTransactionsCSV = () => {
     const accName = (id) => state.accounts.find((a) => a.id === id)?.name || "";
     const catName = (id) => state.categories.find((c) => c.id === id)?.name || "";
-    const header = ["Date", "Type", "Description", "Account", "Transfer To", "Category", "Amount"];
+    // Notes goes last so the position of every existing column stays the same for anyone reading older exports.
+    const header = ["Date", "Type", "Description", "Account", "Transfer To", "Category", "Amount", "Notes"];
     const rows = [...state.transactions]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((t) => [
@@ -927,6 +928,7 @@ export default function App() {
         t.type === "transfer" ? accName(t.toAccountId) : "",
         catName(t.categoryId),
         t.amount.toFixed(2),
+        t.notes || "",
       ]);
     const escape = (v) => {
       const s = String(v ?? "");
