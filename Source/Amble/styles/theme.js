@@ -284,7 +284,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .confirm-message { font-size:13.5px; color:var(--text-muted); line-height:1.55; margin:0; }
 
 .budgets-view { display:flex; flex-direction:column; gap:16px; }
-.budgets-header { display:flex; justify-content:flex-end; }
+.budgets-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.budgets-header .search-input { max-width:420px; }
+.budgets-new-btn { margin-left:auto; }
+.search-clear { padding:2px; flex-shrink:0; }
+.budgets-no-results { margin:0; padding:24px 0; text-align:center; }
 .budgets-list { display:flex; flex-direction:column; gap:14px; }
 .budget-card { background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; cursor:pointer; transition: border-color .15s; }
 .budget-card:hover { border-color: var(--brass); }
