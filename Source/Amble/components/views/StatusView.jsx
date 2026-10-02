@@ -8,6 +8,7 @@ import { STATUS_SECTIONS, defaultStatusPrefs } from "../../constants";
 import { categorySpend, categorySpendTransactions, budgetAllocated, budgetCategoryTotal } from "../../state/categories";
 import { budgetIncomeTotal } from "../../state/budgets";
 import { isWithinRolling30Days } from "../../utils/dates";
+import { roundMoney } from "../../utils/misc";
 import { fmt, fmtDate } from "../../utils/format";
 
 // Combines spending-breakdown rows that share the same category name into a
@@ -635,12 +636,12 @@ export function spendForCategoryId(transactions, categoryId, budgets, categories
 // categorySpend so a dateless budget's total is scoped to a rolling 30 days here
 // too, the same as everywhere else that budget's categories get shown.
 export function budgetTotalSpent(budget, transactions, budgets, categories) {
-  return (budget.categories || []).reduce((total, c) => {
+  return roundMoney((budget.categories || []).reduce((total, c) => {
     if (!c.categoryId) return total;
     const catObj = (categories || []).find((cc) => cc.id === c.categoryId);
     if (!catObj) return total;
     return total + categorySpend(catObj, transactions, budgets, categories);
-  }, 0);
+  }, 0));
 }
 
 export function BudgetCategoryRows({ category, transactions, budgets, allCategories }) {

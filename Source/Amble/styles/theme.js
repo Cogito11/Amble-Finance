@@ -427,6 +427,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .plan-list-title { font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin:0; }
 .plan-list-meta { font-size:12px; white-space:nowrap; }
 .plan-list-empty { margin:0; padding:14px 0 6px; text-align:center; }
+.plan-list-empty-action { display:flex; justify-content:center; padding:4px 0 8px; }
 .plan-list-toggle { margin-top:10px; }
 .plan-row-list { display:flex; flex-direction:column; gap:8px; }
 .plan-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:border-color .15s, background .15s; min-width:0; }

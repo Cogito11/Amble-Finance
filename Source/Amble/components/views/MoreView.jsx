@@ -18,6 +18,7 @@ const PATCH_NOTES = [
       "Added the ability to drag and drop sidebar sections directly in the sidebar to reorder them.",
       "Added a search bar to the budgets view.",
       "When no bills or goals are present, their lists will now show a button to create one.",
+      "Fixed a bug that would cause budget categories to read as over spent when they were at 0.00 left.",
     ],
   },
   {

@@ -1,5 +1,11 @@
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+// Snaps a money value to whole cents. Adding decimal amounts in floating point
+// leaves tiny errors (0.1 + 0.2 === 0.30000000000000004), so a budget that was
+// met exactly could come out a hair over its limit and be flagged "over".
+// Rounding every summed total to cents makes "spent === limit" compare as equal.
+export const roundMoney = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
 // Number inputs change their value when the user scrolls over them while focused,
 // which is an easy way to accidentally mangle an amount. Blurring on wheel stops
 // the browser's default "scroll to change value" behavior for that field while
