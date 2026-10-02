@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { GripVertical } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Modal } from "../common/Modal";
 
 export function SidebarSettingsModal({ sections, visible, footerMetric, onToggle, onReorder, onChangeMetric, onClose }) {
@@ -30,7 +30,7 @@ export function SidebarSettingsModal({ sections, visible, footerMetric, onToggle
                 <input type="checkbox" checked={!!visible[section.id]} onChange={() => onToggle(section.id)} />
                 {section.label}
               </label>
-              <GripVertical className="sidebar-settings-grip" size={18} aria-hidden="true" />
+              <Menu className="sidebar-settings-grip" size={18} aria-hidden="true" />
             </div>
           ))}
         </div>

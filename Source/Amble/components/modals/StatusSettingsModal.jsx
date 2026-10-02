@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { GripVertical } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Modal } from "../common/Modal";
 
 /* ---------------------------------- status page settings modal ---------------------------------- */
@@ -34,7 +34,7 @@ export function StatusSettingsModal({ sections, visible, onToggle, onReorder, on
                   <div className="widget-toggle-desc">{section.description}</div>
                 </div>
               </label>
-              <GripVertical className="sidebar-settings-grip" size={18} aria-hidden="true" />
+              <Menu className="sidebar-settings-grip" size={18} aria-hidden="true" />
             </div>
           ))}
         </div>
