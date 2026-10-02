@@ -178,6 +178,9 @@ export default function App() {
   });
   const [widgetModalOpen, setWidgetModalOpen] = useState(false);
   const [sidebarModalOpen, setSidebarModalOpen] = useState(false);
+  // Drag-to-reorder state for the sidebar itself (the Customize sidebar dialog has its own).
+  const [navDragId, setNavDragId] = useState(null);
+  const [navOverId, setNavOverId] = useState(null);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
     // Every section defaults to visible except "plan" - it's a newer, more
     // involved feature (bills/goals/calendar) that not everyone wants cluttering
@@ -1061,6 +1064,15 @@ export default function App() {
   };
   const footerMetric = footerMetrics[sidebarPrefs.footerMetric] || footerMetrics.netWorth;
   const orderedSidebarSections = sidebarPrefs.order.map((id) => sidebarSections.find((section) => section.id === id)).filter(Boolean);
+  const visibleSidebarSections = orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]);
+  // Where the dragged tab would land relative to the one it is over: dragging down
+  // drops after it, dragging up drops before it (matches how reorderSidebarSection moves it).
+  const navDropSide = (id) => {
+    if (!navDragId || navOverId !== id || navDragId === id) return "";
+    const ids = visibleSidebarSections.map((item) => item.id);
+    return ids.indexOf(navDragId) < ids.indexOf(id) ? "after" : "before";
+  };
+  const endNavDrag = () => { setNavDragId(null); setNavOverId(null); };
   const orderedStatusSections = statusPrefs.order.map((id) => STATUS_SECTIONS.find((section) => section.id === id)).filter(Boolean);
 
   return (
@@ -1076,15 +1088,43 @@ export default function App() {
                 <div className="brand-sub">personal finance</div>
               </div>
             </div>
-            <nav className="nav">
-              {orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]).map((item) => (
-                <button key={item.id} className={`nav-item ${view === item.id ? "active" : ""}`} onClick={() => setView(item.id)}>
-                  <item.icon size={18} /> <span>{item.label}</span>
-                  {openPopoutViews.includes(item.id) && (
-                    <span className="nav-popout-dot" title="Popped out in its own window" aria-label="Popped out in its own window" />
-                  )}
-                </button>
-              ))}
+            <nav
+              className={`nav${navDragId ? " nav-dragging" : ""}`}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setNavOverId(null); }}
+            >
+              {visibleSidebarSections.map((item) => {
+                const side = navDropSide(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    className={`nav-item ${view === item.id ? "active" : ""}${navDragId === item.id ? " nav-item-dragging" : ""}${side ? ` nav-item-drop-${side}` : ""}`}
+                    onClick={() => setView(item.id)}
+                    draggable
+                    onDragStart={(e) => {
+                      setNavDragId(item.id);
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", item.id);
+                    }}
+                    onDragEnd={endNavDrag}
+                    onDragOver={(e) => {
+                      if (!navDragId) return;
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "move";
+                      setNavOverId(item.id);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (navDragId && navDragId !== item.id) reorderSidebarSection(navDragId, item.id);
+                      endNavDrag();
+                    }}
+                  >
+                    <item.icon size={18} /> <span>{item.label}</span>
+                    {openPopoutViews.includes(item.id) && (
+                      <span className="nav-popout-dot" title="Popped out in its own window" aria-label="Popped out in its own window" />
+                    )}
+                  </button>
+                );
+              })}
             </nav>
             <div className="sidebar-footer">
               <div>

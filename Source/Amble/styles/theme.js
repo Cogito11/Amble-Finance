@@ -89,6 +89,13 @@ html, body { margin: 0; padding: 0; height: 100%; }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
 .nav-item.active { background: var(--brass-soft); color: var(--brass); border-left: 2px solid var(--brass); }
 .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--brass-soft); }
+/* drag-to-reorder: dim the tab being dragged and draw a line where it will land */
+.nav-item { position:relative; }
+.nav-item-dragging { opacity:0.45; }
+.nav-dragging .nav-item { cursor:grabbing; }
+.nav-item-drop-before::before, .nav-item-drop-after::after { content:""; position:absolute; left:8px; right:8px; height:2px; border-radius:2px; background:var(--brass); pointer-events:none; }
+.nav-item-drop-before::before { top:-2px; }
+.nav-item-drop-after::after { bottom:-2px; }
 .nav-popout-dot { width:7px; height:7px; border-radius:50%; background: var(--teal); margin-left:auto; flex-shrink:0; }
 
 .icon-btn.popout-open { color: var(--teal); }
@@ -692,6 +699,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   .sidebar-footer { display:none; }
   .nav { flex-direction:row; }
   .nav-item span { display:none; }
+  .nav-item-drop-before::before, .nav-item-drop-after::after { top:6px; bottom:6px; left:auto; right:auto; width:2px; height:auto; }
+  .nav-item-drop-before::before { left:-3px; }
+  .nav-item-drop-after::after { right:-3px; }
   .stat-row, .grid-2, .tools-grid, .tool-result-row { grid-template-columns: 1fr 1fr; }
   .content { padding:18px; }
   .topbar { padding:16px 18px; }
