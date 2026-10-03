@@ -44,6 +44,7 @@
     "artifactName": "Amble_${version}_Setup_${os}_${arch}.${ext}",
     "files": [
       "dist/**/*",
+      "!dist/mac*{,/**/*}",
       "main.js",
       "preload.js",
       "Amble/assets/**/*"
