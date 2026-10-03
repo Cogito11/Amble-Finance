@@ -514,7 +514,12 @@ export function PlanView({
             {listBillRows.length > 0 && <span className="muted plan-list-meta">{monthPaidCount} of {listBillRows.length} done</span>}
           </div>
           {listBillRows.length === 0 ? (
-            <p className="settings-desc plan-list-empty">No bills due in {monthLabel(monthStart)}.</p>
+            <>
+              <p className="settings-desc plan-list-empty">No bills due in {monthLabel(monthStart)}.</p>
+              <div className="plan-list-empty-action">
+                <button className="btn btn-ghost btn-sm" onClick={onAddBill}><Plus size={14} /> Add Bill</button>
+              </div>
+            </>
           ) : (
             <div className="plan-row-list">{listBillRows.map(renderMonthBillRow)}</div>
           )}
@@ -529,7 +534,12 @@ export function PlanView({
             </div>
           </div>
           {goalRows.length === 0 ? (
-            <p className="settings-desc plan-list-empty">{(goals || []).length === 0 ? "No goals yet." : showAllGoals ? "No open goals." : "No upcoming goals."}</p>
+            <>
+              <p className="settings-desc plan-list-empty">{(goals || []).length === 0 ? "No goals yet." : showAllGoals ? "No open goals." : "No upcoming goals."}</p>
+              <div className="plan-list-empty-action">
+                <button className="btn btn-ghost btn-sm" onClick={onAddGoal}><Plus size={14} /> Add Goal</button>
+              </div>
+            </>
           ) : (
             <div className="plan-row-list">{goalRows.map(renderGoalRow)}</div>
           )}

@@ -1,6 +1,6 @@
 import { categoryIncome, clearRemovedCategoryRefs, seedCategories, syncBudgetCategories } from "./categories";
 import { addMonthsClamped, currentMonthRange, toLocalDateStr, todayStr } from "../utils/dates";
-import { uid } from "../utils/misc";
+import { uid, roundMoney } from "../utils/misc";
 
 export const DEFAULT_BUDGET_CATEGORIES = [
   ["Groceries", 500], ["Dining Out", 200], ["Transportation", 200],
@@ -49,13 +49,13 @@ export function defaultState() {
 export function budgetIncomeTotal(budget, transactions, budgets, categories) {
   const items = budget.incomeItems;
   if (!items || !items.length) return Number(budget.income) || 0;
-  return items.reduce((sum, it) => {
+  return roundMoney(items.reduce((sum, it) => {
     if (it.mode === "category") {
       const cat = it.categoryId ? (categories || []).find((c) => c.id === it.categoryId) : null;
       return sum + (cat ? categoryIncome(cat, transactions, budgets, categories) : 0);
     }
     return sum + (Number(it.amount) || 0);
-  }, 0);
+  }, 0));
 }
 
 export const REPEAT_LABELS = { weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly", match: "Match time frame" };

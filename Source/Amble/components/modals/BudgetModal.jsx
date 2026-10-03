@@ -8,7 +8,7 @@ import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../st
 import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays } from "../../state/budgets";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
-import { blurOnWheel, sortTransactionsNewestFirst, uid } from "../../utils/misc";
+import { blurOnWheel, roundMoney, sortTransactionsNewestFirst, uid } from "../../utils/misc";
 
 /* ---------------------------------- budget modal ---------------------------------- */
 export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete, onRecolorCategory }) {
@@ -80,8 +80,9 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
     const cat = (categories || []).find((c) => c.id === it.categoryId);
     return cat ? categoryIncome(cat, transactions || [], budgets || [], categories || []) : 0;
   };
-  const totalIncome = incomeItems.reduce((s, it) => s + itemAmount(it), 0);
-  const allocated = cats.reduce((s, c) => s + budgetCategoryTotal(c), 0);
+  // Rounded to cents (see roundMoney) so a budget that balances exactly never reads as -$0.00 / over.
+  const totalIncome = roundMoney(incomeItems.reduce((s, it) => s + itemAmount(it), 0));
+  const allocated = roundMoney(cats.reduce((s, c) => s + budgetCategoryTotal(c), 0));
   const remaining = totalIncome - allocated;
 
   // Income transactions available to pull from in "Transaction" mode - newest

@@ -10,6 +10,18 @@ import { checkForUpdate } from "../../utils/updates";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.7.1",
+    items: [
+      "Fixed a bug causing the add account button to be shorter than all other accounts.",
+      "Added an optional notes field to accounts and transactions.",
+      "Changed the reorder icons in the sidebar and status edit menus to 3 horizontal lines.",
+      "Added the ability to drag and drop sidebar sections directly in the sidebar to reorder them.",
+      "Added a search bar to the budgets view.",
+      "When no bills or goals are present, their lists will now show a button to create one.",
+      "Fixed a bug that would cause budget categories to read as over spent when they were at 0.00 left.",
+    ],
+  },
+  {
     version: "1.7.0",
     items: [
       "Added the **Plan** sidebar tab with a calendar for bills, income, and goals.",

@@ -1,5 +1,5 @@
 import { isWithinRolling30Days } from "../utils/dates";
-import { uid } from "../utils/misc";
+import { uid, roundMoney } from "../utils/misc";
 
 // Hand-curated (not a mechanical hue-rotation) so neighbors read as distinct
 // colors even within the same hue family - saturation/lightness vary per
@@ -120,12 +120,12 @@ export function seedCategories() {
 }
 
 export function budgetCategoryTotal(cat) {
-  if (cat.mode === "items") return (cat.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0);
+  if (cat.mode === "items") return roundMoney((cat.items || []).reduce((s, i) => s + (Number(i.amount) || 0), 0));
   return Number(cat.bulkAmount) || 0;
 }
 
 export function budgetAllocated(budget) {
-  return (budget.categories || []).reduce((s, c) => s + budgetCategoryTotal(c), 0);
+  return roundMoney((budget.categories || []).reduce((s, c) => s + budgetCategoryTotal(c), 0));
 }
 
 // A transaction counts toward category spend if it's a normal expense, or if it's a
@@ -162,7 +162,7 @@ export function categorySpendTransactions(category, transactions, budgets, categ
 // data itself (not renamed, to avoid a data-migration for saved files/backups) -
 // only the code-facing names below (`budgets`, `ownerBudget`, etc.) use "budget".
 export function categorySpend(category, transactions, budgets, categories) {
-  return categorySpendTransactions(category, transactions, budgets, categories).reduce((s, t) => s + t.amount, 0);
+  return roundMoney(categorySpendTransactions(category, transactions, budgets, categories).reduce((s, t) => s + t.amount, 0));
 }
 
 // A transaction counts toward income-category tracking if it's a normal income
@@ -183,7 +183,7 @@ export function categoryIncome(category, transactions, budgets, categories) {
   let txs = transactions.filter((t) => isIncomeTx(t) && t.categoryId === category.id);
   const hasTimeFrame = !!(ownerBudget && (ownerBudget.startDate || ownerBudget.endDate));
   if (!hasTimeFrame) txs = txs.filter((t) => isWithinRolling30Days(t.date));
-  return txs.reduce((s, t) => s + t.amount, 0);
+  return roundMoney(txs.reduce((s, t) => s + t.amount, 0));
 }
 
 // Mirrors a budget's categories into the app-wide category list so they can be

@@ -22,6 +22,7 @@ export function TransactionModal({ initial, accounts, categories, budgets, trans
   const [accountId, setAccountId] = useState(initial.accountId || openAccounts[0]?.id || accounts[0]?.id || "");
   const [toAccountId, setToAccountId] = useState(initial.toAccountId || "");
   const [categoryId, setCategoryId] = useState(initial.categoryId || "");
+  const [notes, setNotes] = useState(initial.notes || "");
   // Tracks whether the user has manually typed into the description box - either just now,
   // or already (editing a transaction that already has a description). Once true, category
   // changes stop touching the description entirely; only our own autofill leaves it false.
@@ -145,6 +146,8 @@ export function TransactionModal({ initial, accounts, categories, budgets, trans
       accountId,
       toAccountId: type === "transfer" ? toAccountId : null,
       categoryId: categoryId || null,
+      // Optional: left off the transaction entirely when empty, so older data and clearing look the same.
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
     });
   };
 
@@ -212,6 +215,10 @@ export function TransactionModal({ initial, accounts, categories, budgets, trans
             </select>
           </div>
         )}
+        <div className="form-group">
+          <label>Notes <span className="muted">· optional</span></label>
+          <textarea className="input" rows={2} placeholder="Details you want to remember. Split with Sam, receipt in the glovebox..." value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </div>
         {categoryStatus && (
           <div className="modal-status-card">
             {categoryStatus.hasLimit ? (
