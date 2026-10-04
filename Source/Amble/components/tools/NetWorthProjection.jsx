@@ -8,10 +8,11 @@ import {
 import { StatCard } from "../common/StatCard";
 import { fmt } from "../../utils/format";
 import { blurOnWheel } from "../../utils/misc";
+import { sumMoneyBy } from "../../utils/money";
 
 export function NetWorthProjection({ onBack, accounts, balances }) {
   const computedNetWorth = useMemo(
-    () => (accounts || []).reduce((s, a) => s + (balances?.[a.id] || 0), 0),
+    () => sumMoneyBy(accounts || [], (a) => balances?.[a.id] || 0),
     [accounts, balances]
   );
   const hasAccounts = (accounts || []).length > 0;

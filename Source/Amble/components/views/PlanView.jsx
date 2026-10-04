@@ -8,6 +8,7 @@ import {
   addDays, FREQUENCY_LABELS, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, sortedGoalsList,
 } from "../../state/planning";
 import { fmt, fmtDate } from "../../utils/format";
+import { sumMoney, sumMoneyBy } from "../../utils/money";
 import { todayStr } from "../../utils/dates";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -127,12 +128,11 @@ export function PlanView({
 
   // Unpaid expenses still due this month, including the carried-over overdue ones shown in the bills list.
   const leftToPay = useMemo(() => {
-    let total = 0;
-    let count = 0;
+    const amounts = [];
     [...carryoverRows, ...currentMonthRows].forEach(({ bill, status }) => {
-      if (bill.type !== "income" && status !== "paid") { total += bill.amount || 0; count += 1; }
+      if (bill.type !== "income" && status !== "paid") amounts.push(bill.amount || 0);
     });
-    return { total, count };
+    return { total: sumMoney(amounts), count: amounts.length };
   }, [carryoverRows, currentMonthRows]);
 
   const planSummary = useMemo(() => {
@@ -148,8 +148,8 @@ export function PlanView({
       generateBillOccurrences(bill, overdueFrom, yesterday).forEach((o) => { if (occurrenceStatus(bill, o.dateKey, today) !== "paid") overdueBills += 1; });
       generateBillOccurrences(bill, today, horizon).forEach((o) => { if (occurrenceStatus(bill, o.dateKey, today) !== "paid") upcomingBills += 1; });
     });
-    const totalGoalTarget = (goals || []).reduce((sum, goal) => sum + (goal.targetAmount || 0), 0);
-    const totalGoalSaved = (goals || []).reduce((sum, goal) => sum + goalProgress(goal, balances, today).current, 0);
+    const totalGoalTarget = sumMoneyBy(goals || [], (goal) => goal.targetAmount || 0);
+    const totalGoalSaved = sumMoneyBy(goals || [], (goal) => goalProgress(goal, balances, today).current);
     return { upcomingBills, overdueBills, totalGoalTarget, totalGoalSaved };
   }, [bills, goals, balances, today]);
 

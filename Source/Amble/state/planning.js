@@ -1,6 +1,7 @@
 // state/planning.js
 //
 import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
+import { moneyAtLeast, roundMoney, toCents } from "../utils/money";
 
 // Data model added by the "Plan" tab:
 //
@@ -175,13 +176,16 @@ export function sortedBillsList(bills, today) {
 
 /* ---------------------------------- goals ---------------------------------- */
 
+// Everything is compared in whole cents (see utils/money.js): an account funded to exactly
+// the target can sum to 999.9999999999999 in floating point, which used to leave a
+// finished goal stuck at 99.99...% and never marked achieved.
 export function goalProgress(goal, balances, today) {
-  const target = goal.targetAmount || 0;
-  const current = goal.trackingMode === "account"
+  const target = roundMoney(goal.targetAmount);
+  const current = roundMoney(goal.trackingMode === "account"
     ? (goal.accountId ? (balances[goal.accountId] || 0) : 0)
-    : (goal.manualAmount || 0);
-  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
-  const achieved = target > 0 && current >= target;
+    : (goal.manualAmount || 0));
+  const pct = target > 0 ? Math.max(0, Math.min(100, (toCents(current) / toCents(target)) * 100)) : 0;
+  const achieved = target > 0 && moneyAtLeast(current, target);
   const daysLeft = goal.targetDate ? daysBetween(today, goal.targetDate) : null;
   return { current, target, pct, achieved, daysLeft, overdue: !achieved && daysLeft != null && daysLeft < 0 };
 }

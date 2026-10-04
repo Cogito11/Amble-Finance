@@ -5,10 +5,11 @@ import {
 import { Modal } from "../common/Modal";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
 import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../state/categories";
-import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays } from "../../state/budgets";
+import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays, formRepeatAnchors } from "../../state/budgets";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
-import { blurOnWheel, roundMoney, sortTransactionsNewestFirst, uid } from "../../utils/misc";
+import { blurOnWheel, sortTransactionsNewestFirst, uid } from "../../utils/misc";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
 
 /* ---------------------------------- budget modal ---------------------------------- */
 export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete, onRecolorCategory }) {
@@ -46,18 +47,19 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
 
   const canRepeat = !!(startDate && endDate);
   const matchDays = budgetMatchDurationDays({ startDate, endDate });
-  // The day-of-month a monthly repeat should keep aiming for. Preserved from the
-  // budget being edited so an already-repeating budget doesn't lose its original
-  // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date;
-  // only defaults from the current startDate for budgets that haven't repeated yet.
-  const repeatAnchorDay = (initial.repeat && initial.repeat.anchorDay) || (startDate ? new Date(startDate + "T00:00:00").getDate() : null);
+  // The days-of-month a monthly repeat should keep aiming for (start and end). Preserved
+  // from the budget being edited so an already-repeating budget doesn't lose its original
+  // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date - but only
+  // while the date it came from is unchanged; edit the start/end and it re-derives.
+  const { anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay } = formRepeatAnchors(initial, startDate, endDate);
   // Live preview, in the Edit budget menu, of when this cycle becomes due to
   // repeat and what dates the next cycle would have - mirrors budgetDueDate /
   // nextBudgetDates exactly, using the form's current (possibly unsaved) values.
   const repeatPreview = canRepeat
     ? (() => {
-        const due = budgetDueDate({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
-        const next = nextBudgetDates({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
+        const previewRepeat = { frequency: repeatFreq, anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay };
+        const due = budgetDueDate({ startDate, endDate, repeat: previewRepeat });
+        const next = nextBudgetDates({ startDate, endDate, repeat: previewRepeat });
         return due && next ? { due, next } : null;
       })()
     : null;
@@ -207,12 +209,12 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
       name: name.trim(),
       startDate: startDate || null,
       endDate: endDate || null,
-      income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
+      income: sumMoneyBy(cleanedIncomeItems, (it) => it.amount),
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
       order: typeof initial.order === "number" ? initial.order : undefined,
       active: initial.active || false,
-      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
+      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay },
       categories: cats.map((c) => ({
         id: c.id,
         categoryId: c.categoryId,
@@ -277,7 +279,10 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
               {repeatFreq === "match"
                 ? `The budget will repeat once it's set to end, on ${fmtDate(endDate)}. `
                 : `The budget will repeat ${REPEAT_DUE_PHRASES[repeatFreq]} its start date, on ${fmtDate(repeatPreview.due)}. `}
-              When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new budget.
+              {repeatFreq === "monthly"
+                ? "When it repeats, the new budget will cover the same days of the month as this one (ending on the last day of the month if this one does), "
+                : `When it repeats, the new budget will run for the same length of time as this one (${matchDays} day${matchDays === 1 ? "" : "s"}), `}
+              starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new budget.
             </p>
           )}
           {repeatCutoffWarning && (

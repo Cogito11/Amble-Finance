@@ -23,12 +23,13 @@ import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
 import { PlanView } from "./components/views/PlanView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
-import { computeBalance, isAssetAccount, isDebtAccount, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
+import { computeBalance, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
+import { accountTotals, netForMonth } from "./state/totals";
 import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, sanitizeBills, sanitizeGoals } from "./state/planning";
 import { CSS } from "./styles/theme";
-import { currentMonthKey, monthKeyOf, todayStr } from "./utils/dates";
+import { currentMonthKey, todayStr } from "./utils/dates";
 import { fmt, setActiveCurrency } from "./utils/format";
 import { isTypingTarget, uid } from "./utils/misc";
 
@@ -1052,11 +1053,8 @@ export default function App() {
     });
   };
 
-  const netWorth = state.accounts.reduce((s, a) => s + balances[a.id], 0);
-  const totalDebt = state.accounts.filter(isDebtAccount).reduce((sum, account) => sum + Math.max(0, -balances[account.id]), 0);
-  const totalAssets = state.accounts.filter(isAssetAccount).reduce((sum, account) => sum + balances[account.id], 0);
-  const cash = state.accounts.filter((account) => ["checking", "savings", "cash"].includes(account.type)).reduce((sum, account) => sum + balances[account.id], 0);
-  const netThisMonth = state.transactions.filter((transaction) => monthKeyOf(transaction.date) === currentMonthKey()).reduce((sum, transaction) => sum + (transaction.type === "income" ? transaction.amount : transaction.type === "expense" ? -transaction.amount : 0), 0);
+  const { netWorth, totalDebt, totalAssets, cash } = accountTotals(state.accounts, balances);
+  const netThisMonth = netForMonth(state.transactions, currentMonthKey());
   const footerMetrics = {
     netWorth: { label: "Net worth", value: netWorth },
     debt: { label: "Debt", value: totalDebt },
