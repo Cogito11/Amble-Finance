@@ -3,6 +3,8 @@ import {
   Trash2, Archive, RotateCcw, Receipt, AlertCircle, X
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkAccountForm } from "../../state/inputs";
 import { blurOnWheel, uid } from "../../utils/misc";
 import { isDebtAccount } from "../../state/accounts";
 import { fmt, fmtDate } from "../../utils/format";
@@ -28,7 +30,8 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
     if (error && bodyRef.current) bodyRef.current.scrollTop = 0;
   }, [error]);
 
-  const canSave = name.trim().length > 0 && balanceInput !== "";
+  const check = checkAccountForm({ name, balanceInput, interestRateInput });
+  const canSave = check.valid;
 
   // Most recent activity touching this account, either as the primary account
   // or the destination side of a transfer - newest first, capped at 5 so the
@@ -43,8 +46,8 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
 
   const submit = () => {
     if (!canSave) return;
-    const val = parseFloat(balanceInput) || 0;
-    const rateVal = interestRateInput === "" ? null : Math.max(0, parseFloat(interestRateInput) || 0);
+    const val = check.balance;
+    const rateVal = check.interestRate;
     onSave({
       id: initial.id || uid(),
       name: name.trim(),
@@ -144,6 +147,7 @@ export function AccountModal({ initial, onSave, onClose, onDelete, onCloseAccoun
             )}
           </div>
         )}
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

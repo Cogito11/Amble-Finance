@@ -12,7 +12,22 @@ export const toLocalDateStr = (d) => {
 
 export const todayStr = () => toLocalDateStr(new Date());
 
-export const monthKeyOf = (dateStr) => dateStr.slice(0, 7);
+// Tolerates a missing/blank date (returns "") instead of throwing, so one damaged record
+// can't take down every screen that groups transactions by month.
+export const monthKeyOf = (dateStr) => String(dateStr ?? "").slice(0, 7);
+
+// True only for a real calendar date written as YYYY-MM-DD (what <input type="date">
+// produces). Rejects blanks, impossible dates like 2026-02-30, and the 5+ digit years a date
+// input will happily emit if someone keeps typing in the year box (e.g. "20256-01-01"),
+// which would otherwise be saved and then break month grouping.
+export function isValidDateStr(value, { minYear = 1900, maxYear = 2200 } = {}) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const y = Number(value.slice(0, 4));
+  const m = Number(value.slice(5, 7));
+  const d = Number(value.slice(8, 10));
+  if (y < minYear || y > maxYear || m < 1 || m > 12 || d < 1) return false;
+  return d <= new Date(y, m, 0).getDate(); // day 0 of the next month = last day of month m
+}
 
 export const currentMonthKey = () => monthKeyOf(todayStr());
 

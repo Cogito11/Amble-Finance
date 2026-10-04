@@ -16,6 +16,7 @@ const RAW_MONEY_SUM_PATTERNS = [
   { name: "+= on an amount field", re: /\+=\s*\w+\.(?:amount|spent|allocated)\b/ },
   { name: "-= on an amount field", re: /-=\s*\w+\.(?:amount|spent|allocated)\b/ },
   { name: "(x || 0) + something.amount", re: /\|\|\s*0\)\s*\+\s*\w+\.amount\b/ },
+  { name: "(g.manualAmount || 0) + amount (goal contributions)", re: /manualAmount\s*\|\|\s*0\)\s*\+/ },
 ];
 
 function sourceFiles(dir) {
@@ -40,6 +41,7 @@ describe("money guard", () => {
       "total += bill.amount || 0;",
       "balance -= t.amount;",
       "byMonth[mk] = (byMonth[mk] || 0) + t.amount;",
+      "? { ...g, manualAmount: (g.manualAmount || 0) + amount }",
     ];
     for (const line of bad) {
       expect(RAW_MONEY_SUM_PATTERNS.some((p) => p.re.test(line)), line).toBe(true);

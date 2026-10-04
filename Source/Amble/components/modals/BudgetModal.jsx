@@ -3,6 +3,8 @@ import {
   Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info, GripVertical
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkBudgetForm, moneyOrZero } from "../../state/inputs";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
 import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../state/categories";
 import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays, formRepeatAnchors } from "../../state/budgets";
@@ -71,13 +73,15 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
   // end date itself.
   const repeatCutoffWarning = canRepeat && repeatOn && repeatFreq !== "match" && repeatPreview && repeatPreview.due < endDate;
 
-  const canSave = name.trim().length > 0;
+  // Every typed amount must be blank (= 0) or a usable non-negative amount, and any dates must be real.
+  const check = checkBudgetForm({ name, startDate, endDate, incomeItems, cats });
+  const canSave = check.valid;
   // Manual rows use whatever's typed in; rows tracked by category resolve to
   // a live total (money already logged against that category), the same
   // relationship categorySpend has to an expense category - so this can move
   // on its own as new income transactions come in, without editing the budget.
   const itemAmount = (it) => {
-    if (it.mode !== "category") return Number(it.amount) || 0;
+    if (it.mode !== "category") return moneyOrZero(it.amount);
     if (!it.categoryId) return 0;
     const cat = (categories || []).find((c) => c.id === it.categoryId);
     return cat ? categoryIncome(cat, transactions || [], budgets || [], categories || []) : 0;
@@ -220,14 +224,14 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
         categoryId: c.categoryId,
         name: c.name.trim() || "Untitled category",
         mode: c.mode === "items" ? "items" : "bulk",
-        bulkAmount: Number(c.bulkAmount) || 0,
+        bulkAmount: moneyOrZero(c.bulkAmount),
         date: c.date || null,
         // Only a not-yet-linked category needs a color here, to seed the real
         // Category record syncBudgetCategories is about to create for it. An
         // already-linked one just had its color applied above, so sending it
         // here again would just be a second, driftable copy.
         color: c.categoryId ? undefined : c.color,
-        items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
+        items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: moneyOrZero(i.amount), date: i.date || null })),
       })),
     });
   };
@@ -508,6 +512,7 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
           ))}
           <button type="button" className="btn btn-ghost btn-sm budget-add-category-btn" onClick={addCategory}><Plus size={14} /> Add category</button>
         </div>
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

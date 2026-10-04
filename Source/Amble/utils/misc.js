@@ -28,6 +28,6 @@ export const isTypingTarget = (el) => {
 export function sortTransactionsNewestFirst(list) {
   return list
     .map((t, i) => ({ t, i }))
-    .sort((a, b) => b.t.date.localeCompare(a.t.date) || b.i - a.i)
+    .sort((a, b) => String(b.t.date ?? "").localeCompare(String(a.t.date ?? "")) || b.i - a.i)
     .map(({ t }) => t);
 }

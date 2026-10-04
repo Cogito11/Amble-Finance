@@ -5,9 +5,10 @@ import {
 } from "lucide-react";
 import {
   addMonths, dayOfWeek, daysInMonth, firstOfMonth, generateBillOccurrences,
-  addDays, FREQUENCY_LABELS, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, sortedGoalsList,
+  addDays, FREQUENCY_LABELS, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, resolveBillCategoryId, sortedGoalsList,
 } from "../../state/planning";
 import { fmt, fmtDate } from "../../utils/format";
+import { parseContribution } from "../../state/inputs";
 import { sumMoney, sumMoneyBy } from "../../utils/money";
 import { todayStr } from "../../utils/dates";
 
@@ -37,7 +38,7 @@ const doneLabel = (bill) => (bill.type === "income" ? "Received" : "Paid");
 const markerTone = (status) => (status === "overdue" ? "tone-rust" : status === "paid" ? "tone-teal" : "tone-brass");
 
 export function PlanView({
-  bills, goals, accounts, categories, transactions, balances,
+  bills, goals, accounts, categories, transactions, balances, activeBudgetId,
   onAddBill, onEditBill,
   onAddGoal, onEditGoal, onAddContribution,
   onMarkPaid, onUnmarkPaid, onAssignTransaction, onLinkTransaction,
@@ -50,7 +51,13 @@ export function PlanView({
   const [linkOpenKey, setLinkOpenKey] = useState(null); // "billId:dateKey" of the bottom-list row whose link picker is open
 
   const accountName = (id) => accounts.find((a) => a.id === id)?.name || "Unknown account";
-  const categoryName = (id) => (id ? (categories.find((c) => c.id === id)?.name || "Uncategorized") : "Uncategorized");
+  // A bill's category may belong to an earlier budget cycle; show the category a transaction
+  // created from it would actually get today (see resolveBillCategoryId), so the label and the
+  // result always agree.
+  const billCategoryName = (bill) => {
+    const id = resolveBillCategoryId(bill, categories, activeBudgetId);
+    return id ? (categories.find((c) => c.id === id)?.name || "Uncategorized") : "Uncategorized";
+  };
 
   const monthStart = monthCursor;
   const monthEnd = `${monthCursor.slice(0, 7)}-${String(daysInMonth(monthCursor)).padStart(2, "0")}`;
@@ -212,7 +219,7 @@ export function PlanView({
             {bill.recurring && <span className="pill"><Repeat size={11} /> {FREQUENCY_LABELS[bill.frequency] || bill.frequency}</span>}
           </div>
           <div className="muted plan-row-sub">
-            {accountName(bill.accountId)} · {categoryName(bill.categoryId)}{linkedTx ? " · linked" : ""}
+            {accountName(bill.accountId)} · {billCategoryName(bill)}{linkedTx ? " · linked" : ""}
           </div>
         </div>
         <div className="plan-row-side">
@@ -301,8 +308,9 @@ export function PlanView({
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
-              const amt = parseFloat(contribInputs[goal.id]);
-              if (amt > 0) onAddContribution(goal.id, amt);
+              // Only a finite, positive amount (rounded to cents) is ever added.
+              const amt = parseContribution(contribInputs[goal.id]);
+              if (amt !== null) onAddContribution(goal.id, amt);
               setContribInputs((s) => ({ ...s, [goal.id]: "" }));
             }}
           >
@@ -338,7 +346,7 @@ export function PlanView({
             </span>
           </div>
           <div className="muted plan-occ-sub">
-            {accountName(bill.accountId)} · {categoryName(bill.categoryId)}
+            {accountName(bill.accountId)} · {billCategoryName(bill)}
             {linkedTx && <> · linked to “{linkedTx.description || bill.name}”</>}
           </div>
         </div>

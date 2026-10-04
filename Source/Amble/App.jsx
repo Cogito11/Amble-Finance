@@ -27,9 +27,11 @@ import { computeBalance, migrateAccountOrder, nextTopAccountOrder, sortedAccount
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
 import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
 import { accountTotals, netForMonth } from "./state/totals";
-import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, sanitizeBills, sanitizeGoals } from "./state/planning";
+import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, resolveBillCategoryId, sanitizeBills, sanitizeGoals } from "./state/planning";
+import { isSavableTransaction } from "./state/inputs";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, todayStr } from "./utils/dates";
+import { sumMoney } from "./utils/money";
 import { fmt, setActiveCurrency } from "./utils/format";
 import { isTypingTarget, uid } from "./utils/misc";
 
@@ -493,6 +495,9 @@ export default function App() {
   state.accounts.forEach((a) => { balances[a.id] = computeBalance(a, state.transactions); });
 
   const saveTransaction = (t) => {
+    // The form already validates, but nothing should ever be able to persist a transaction with
+    // a blank/invalid date or a non-finite amount (JSON turns Infinity into null), whatever calls this.
+    if (!isSavableTransaction(t)) return;
     setState((s) => {
       const exists = s.transactions.some((x) => x.id === t.id);
       const transactions = exists ? s.transactions.map((x) => x.id === t.id ? t : x) : [...s.transactions, t];
@@ -795,7 +800,10 @@ export default function App() {
   // and links the resulting transaction back onto this exact occurrence.
   const assignTransactionToBill = (bill, dateKey) => {
     setPendingBillLink({ billId: bill.id, dateKey });
-    setTxModal({ type: bill.type, date: dateKey, description: bill.name, amount: bill.amount, accountId: bill.accountId, categoryId: bill.categoryId });
+    // The bill's category may belong to a previous budget cycle; file the transaction under
+    // the same-named category of the budget that's active today, else leave it uncategorized.
+    const activeBudgetId = state.plans.find((b) => b.active)?.id;
+    setTxModal({ type: bill.type, date: dateKey, description: bill.name, amount: bill.amount, accountId: bill.accountId, categoryId: resolveBillCategoryId(bill, state.categories, activeBudgetId) });
   };
 
   /* ---------------------------------- plan: goals ---------------------------------- */
@@ -824,7 +832,7 @@ export default function App() {
     setState((s) => ({
       ...s,
       goals: s.goals.map((g) => (g.id === goalId && g.trackingMode === "manual"
-        ? { ...g, manualAmount: (g.manualAmount || 0) + amount }
+        ? { ...g, manualAmount: sumMoney([g.manualAmount || 0, amount]) }
         : g)),
     }));
   };
@@ -1216,6 +1224,7 @@ export default function App() {
             )}
             {effectiveView === "plan" && (
               <PlanView
+                activeBudgetId={state.plans.find((b) => b.active)?.id}
                 bills={state.bills}
                 goals={state.goals}
                 accounts={state.accounts}

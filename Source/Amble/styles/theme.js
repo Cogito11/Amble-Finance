@@ -279,6 +279,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .closed-acc-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .closed-acc-balance { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; flex-shrink:0; }
 
+.form-hint { font-size: 12.5px; margin: 6px 0 0; line-height: 1.4; }
 .inline-error { display:flex; align-items:center; gap:8px; background: rgba(193,84,74,0.1); border:1px solid var(--rust); color:#8a3327; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; }
 
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding: 70px 20px; color: var(--text-faint); text-align:center; }

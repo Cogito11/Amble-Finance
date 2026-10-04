@@ -199,6 +199,51 @@ export function sortedGoalsList(goals) {
   });
 }
 
+/* ---------------------------------- bill categories across budgets ---------------------------------- */
+// A budget's categories are real Category records that belong to that one budget (planId).
+// Every time a repeating budget rolls over, its categories are re-created with NEW ids, so a
+// bill saved against last month's "Groceries" keeps pointing at last month's record forever -
+// and a transaction created from that bill would be filed under the old budget, not counted
+// against the current one. Instead of rewriting bills at rollover, the category is resolved
+// at the moment it's needed (when a transaction is created from the bill): follow the NAME
+// into whichever budget is active right now, and if it isn't there, leave it uncategorized.
+
+const normName = (s) => String(s ?? "").trim().toLowerCase();
+
+// What to remember on a bill about its category, so it can still be found by name after the
+// budget it was picked from has rolled over or been deleted. Only budget-owned categories need
+// this: a general category keeps the same id for good.
+export function billCategorySnapshot(categoryId, categories) {
+  const list = categories || [];
+  const cat = categoryId ? list.find((c) => c.id === categoryId) : null;
+  if (!cat || !cat.planId) return { categoryName: null, categoryParentName: null };
+  const parent = cat.parentCategoryId ? list.find((c) => c.id === cat.parentCategoryId) : null;
+  return { categoryName: cat.name, categoryParentName: parent ? parent.name : null };
+}
+
+// The category id a transaction created from `bill` should get today (or null = uncategorized).
+//  - a general category, or one already in the active budget: used as is;
+//  - a category of some other budget (or one that no longer exists): the category with the same
+//    name in the ACTIVE budget (preferring one under the same parent for itemized expenses);
+//  - no such category, or no active budget: null.
+export function resolveBillCategoryId(bill, categories, activeBudgetId) {
+  if (!bill) return null;
+  const list = categories || [];
+  const cat = bill.categoryId ? list.find((c) => c.id === bill.categoryId) : null;
+  if (cat && (!cat.planId || cat.planId === activeBudgetId)) return cat.id;
+
+  const name = cat ? cat.name : bill.categoryName;
+  if (!name || !activeBudgetId) return null;
+  const parentName = cat
+    ? (cat.parentCategoryId ? list.find((c) => c.id === cat.parentCategoryId)?.name : null)
+    : bill.categoryParentName;
+  const type = cat ? cat.type : (bill.type === "income" ? "income" : "expense");
+
+  const candidates = list.filter((c) => c.planId === activeBudgetId && c.type === type && normName(c.name) === normName(name));
+  const sameParent = candidates.find((c) => normName(c.parentCategoryId ? list.find((p) => p.id === c.parentCategoryId)?.name : null) === normName(parentName));
+  return (sameParent || candidates[0])?.id || null;
+}
+
 /* ---------------------------------- referential cleanup ---------------------------------- */
 // Mirrors the pattern used in state/categories.js for transactions: when
 // something a bill points at goes away, the bill shouldn't keep a dangling
@@ -338,6 +383,7 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
   const fields = {
     name: values.name, type: values.type, amount: values.amount, accountId: values.accountId,
     categoryId: values.categoryId || null, notes: values.notes || "",
+    categoryName: values.categoryName || null, categoryParentName: values.categoryParentName || null,
   };
   const recurring2 = !!values.recurring;
   const freq2 = recurring2 ? values.frequency : null;
@@ -382,6 +428,8 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
     // Only the fields that were actually edited go to the other segments; the
     // rest (e.g. an amount that differs between versions) are left as they are.
     const edited = Object.fromEntries(SERIES_FIELDS.filter((k) => norm(B[k]) !== norm(fields[k])).map((k) => [k, fields[k]]));
+    // The remembered category name travels with the category it describes.
+    if ("categoryId" in edited) { edited.categoryName = fields.categoryName; edited.categoryParentName = fields.categoryParentName; }
     return { bills: bills.map((b) => (seriesOf(b) === sid ? { ...b, ...edited } : b)), savedId: B.id };
   }
 
