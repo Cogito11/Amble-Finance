@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import {
   addMonths, dayOfWeek, daysInMonth, firstOfMonth, generateBillOccurrences,
-  addDays, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, sortedGoalsList,
+  addDays, FREQUENCY_LABELS, goalProgress, linkableTransactions, monthLabel, occurrenceStatus, sortedGoalsList,
 } from "../../state/planning";
 import { fmt, fmtDate } from "../../utils/format";
 import { todayStr } from "../../utils/dates";
@@ -209,7 +209,7 @@ export function PlanView({
         <div className="plan-row-main">
           <div className="plan-row-name">
             <span className="plan-row-title">{bill.name}</span>
-            {bill.recurring && <span className="pill"><Repeat size={11} /> {bill.frequency}</span>}
+            {bill.recurring && <span className="pill"><Repeat size={11} /> {FREQUENCY_LABELS[bill.frequency] || bill.frequency}</span>}
           </div>
           <div className="muted plan-row-sub">
             {accountName(bill.accountId)} · {categoryName(bill.categoryId)}{linkedTx ? " · linked" : ""}
@@ -331,7 +331,7 @@ export function PlanView({
         <div className="plan-occ-main">
           <div className="plan-occ-name">
             {bill.name}
-            {bill.recurring && <span className="pill"><Repeat size={11} /> {bill.frequency}</span>}
+            {bill.recurring && <span className="pill"><Repeat size={11} /> {FREQUENCY_LABELS[bill.frequency] || bill.frequency}</span>}
             <span className={`pill ${status === "paid" ? "tone-teal" : status === "overdue" ? "tone-rust" : ""}`}>
               {status === "paid" ? <CheckCircle2 size={11} /> : status === "overdue" ? <AlertCircle size={11} /> : null}
               {status === "paid" ? doneLabel(bill) : status === "overdue" ? "Overdue" : "Upcoming"}

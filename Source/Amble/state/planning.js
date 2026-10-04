@@ -10,7 +10,7 @@ import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
 //     accountId, categoryId,               // both nullable, mirrors TransactionModal
 //     dueDate,                             // "YYYY-MM-DD" - first/only occurrence
 //     recurring: boolean,
-//     frequency: "weekly" | "biweekly" | "monthly" | "yearly",
+//     frequency: "weekly" | "biweekly" | "monthly" | "quarterly" | "semiannually" | "yearly",
 //     endDate,                             // "YYYY-MM-DD" or null - stop generating after this date
 //     notes,
 //     seriesId,                            // optional; shared by every segment of one recurring bill (falls back to id)
@@ -34,6 +34,8 @@ export const FREQUENCY_OPTIONS = [
   { value: "weekly", label: "Weekly" },
   { value: "biweekly", label: "Every 2 weeks" },
   { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "semiannually", label: "Semi-annually" },
   { value: "yearly", label: "Yearly" },
 ];
 export const FREQUENCY_LABELS = Object.fromEntries(FREQUENCY_OPTIONS.map((f) => [f.value, f.label]));
@@ -56,7 +58,7 @@ function toDate(dateStr) {
 }
 const toKey = toLocalDateStr;
 
-// Steps a date forward by one cycle of `frequency`. Monthly/yearly delegate to
+// Steps a date forward by one cycle of `frequency`. Monthly/quarterly/semi-annual/yearly delegate to
 // addMonthsClamped (utils/dates.js) - the same clamping budgets.js already
 // relies on for its own repeat logic - so a bill due the 31st doesn't silently
 // drift into early next month when it lands on a shorter one (Feb, Apr, etc.):
@@ -73,8 +75,15 @@ export function addFrequency(dateStr, frequency, anchorDay) {
   if (frequency === "weekly") return addDays(dateStr, 7);
   if (frequency === "biweekly") return addDays(dateStr, 14);
   if (frequency === "yearly") return addMonthsClamped(dateStr, 12, anchor);
+  if (frequency === "semiannually") return addMonthsClamped(dateStr, 6, anchor);
+  if (frequency === "quarterly") return addMonthsClamped(dateStr, 3, anchor);
   return addMonthsClamped(dateStr, 1, anchor); // monthly (default)
 }
+
+// Frequencies that step by whole calendar months, and so need an anchorDay to
+// keep a bill due on the 29th-31st from drifting after a short month.
+export const isMonthBasedFrequency = (frequency) =>
+  frequency === "monthly" || frequency === "quarterly" || frequency === "semiannually" || frequency === "yearly";
 export function daysBetween(fromStr, toStr) {
   const ms = toDate(toStr).getTime() - toDate(fromStr).getTime();
   return Math.round(ms / 86400000);
@@ -385,7 +394,7 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
 
   const base = { ...B, ...fields, dueDate: D2, recurring: recurring2, frequency: freq2, endDate: end2, seriesId: sid };
   delete base.anchorDay;
-  if (D2 === D && recurring2 && (freq2 === "monthly" || freq2 === "yearly")) {
+  if (D2 === D && recurring2 && isMonthBasedFrequency(freq2)) {
     const originalAnchor = B.anchorDay || toDate(B.dueDate).getDate();
     if (originalAnchor !== toDate(D2).getDate()) base.anchorDay = originalAnchor;
   }

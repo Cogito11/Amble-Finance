@@ -5,7 +5,7 @@ import { blurOnWheel } from "../../utils/misc";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import {
-  describeBillChanges, isSeries, linkableTransactions, nextSegmentStart, occurrenceStatus, pickOccurrence,
+  FREQUENCY_OPTIONS, describeBillChanges, isSeries, linkableTransactions, nextSegmentStart, occurrenceStatus, pickOccurrence,
 } from "../../state/planning";
 
 // Editing a recurring bill works like a repeating calendar event:
@@ -281,10 +281,7 @@ export function BillModal({
             <div className="form-group">
               <label>Frequency</label>
               <select className="select" value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Every 2 weeks</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
+                {FREQUENCY_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
             </div>
             <label className="checkbox-row">
