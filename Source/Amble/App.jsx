@@ -4,6 +4,8 @@ import {
 } from "lucide-react";
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { RecoveryScreen, ViewCrashCard } from "./components/common/RecoveryScreen";
 import { AccountModal } from "./components/modals/AccountModal";
 import { ClosedAccountsModal } from "./components/modals/ClosedAccountsModal";
 import { CategoryModal } from "./components/modals/CategoryModal";
@@ -23,12 +25,16 @@ import { BudgetsView } from "./components/views/BudgetsView";
 import { TransactionsView } from "./components/views/TransactionsView";
 import { PlanView } from "./components/views/PlanView";
 import { NAV_ITEMS, SIDEBAR_KEY, STATUS_KEY, STATUS_SECTIONS, STORAGE_KEY, THEME_KEY, VIEW_TITLES, WIDGETS_KEY, defaultStatusPrefs, defaultWidgetPrefs } from "./constants";
-import { computeBalance, migrateAccountOrder, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
+import { computeBalance, nextTopAccountOrder, sortedAccountsList } from "./state/accounts";
 import { clearRemovedCategoryRefs, recolorCategoryAndChildren, refreshCategoryColors as redistributeCategoryColors, syncBudgetCategories } from "./state/categories";
-import { defaultState, migrateBudgetOrder, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
+import { defaultState, nextTopBudgetOrder, rolloverDueBudgets, sortedBudgetsList } from "./state/budgets";
 import { accountTotals, netForMonth } from "./state/totals";
-import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, resolveBillCategoryId, sanitizeBills, sanitizeGoals } from "./state/planning";
+import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, resolveBillCategoryId } from "./state/planning";
 import { isSavableTransaction } from "./state/inputs";
+import { loadStoredState } from "./state/loader";
+import { appendQuarantine, clearQuarantine, quarantineExportText, readQuarantine } from "./state/quarantine";
+import { downloadTextFile } from "./state/recovery";
+import { BACKUP_APP_ID, BACKUP_VERSION, describeReport, parseBackupText, validateState } from "./state/validate";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, todayStr } from "./utils/dates";
 import { sumMoney } from "./utils/money";
@@ -39,6 +45,13 @@ export default function App() {
   const sidebarSections = [...NAV_ITEMS, { id: "more", label: "More", icon: MoreHorizontal }];
   const [state, setState] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  // Set when the saved data couldn't be read. While it's set the app shows the recovery screen and
+  // `loaded` stays false, so the auto-save below can never overwrite the data we couldn't read.
+  const [loadFailure, setLoadFailure] = useState(null);
+  // A dismissible banner: { tone: "info" | "warn" | "error", text, items? } (items = set-aside records)
+  const [notice, setNotice] = useState(null);
+  const [quarantineCount, setQuarantineCount] = useState(0);
+  const loadStartedRef = useRef(false);
   // Read the saved theme preference synchronously (rather than via an async
   // window.storage.get on mount) so the very first render already comes up in the
   // right theme. Doing this asynchronously used to cause two bugs: a visible flash
@@ -298,21 +311,27 @@ export default function App() {
   });
 
   useEffect(() => {
+    // React.StrictMode runs effects twice in development; loading (which may keep safety copies and
+    // save set-aside records) must only happen once.
+    if (loadStartedRef.current) return;
+    loadStartedRef.current = true;
     (async () => {
-      try {
-        const res = await window.storage.get(STORAGE_KEY, false);
-        const raw = res && res.value ? JSON.parse(res.value) : null;
-        setState(raw ? {
-          ...defaultState(),
-          ...raw,
-          plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
-          accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
-          bills: sanitizeBills(raw.bills),
-          goals: sanitizeGoals(raw.goals),
-        } : defaultState());
-      } catch (e) {
-        setState(defaultState());
+      const result = await loadStoredState(window.storage);
+      if (result.status === "unreadable") {
+        setLoadFailure(result);
+        return;
       }
+      setState(result.state);
+      if (result.status === "repaired") {
+        const { report } = result;
+        const parts = [
+          `Amble ${describeReport(report)} while opening your data.`,
+          report.quarantinedCount ? (result.quarantineSaved ? "The records that couldn't be read were saved - you can export them from More." : "The records that couldn't be read could NOT be saved (storage is full) - export them now.") : "",
+          result.safetyCopyKept ? "The original data was kept as a safety copy." : "A safety copy of the original couldn't be kept (storage is nearly full) - export a backup soon.",
+        ];
+        setNotice({ tone: report.quarantinedCount ? "warn" : "info", text: parts.filter(Boolean).join(" "), items: report.quarantined });
+      }
+      readQuarantine().then((items) => setQuarantineCount(items.length));
       setLoaded(true);
     })();
   }, []);
@@ -327,15 +346,10 @@ export default function App() {
     const handleStorageEvent = (e) => {
       if (e.key !== STORAGE_KEY || e.newValue == null) return;
       try {
-        const raw = JSON.parse(e.newValue);
-        setState({
-          ...defaultState(),
-          ...raw,
-          plans: migrateBudgetOrder(Array.isArray(raw.plans) ? raw.plans : []),
-          accounts: migrateAccountOrder(Array.isArray(raw.accounts) ? raw.accounts : []),
-          bills: sanitizeBills(raw.bills),
-          goals: sanitizeGoals(raw.goals),
-        });
+        // Same checks as loading: a malformed or half-written value from another window is rejected
+        // (ok: false) or repaired, never applied as-is.
+        const result = validateState(JSON.parse(e.newValue));
+        if (result.ok) setState(result.state);
       } catch (err) { /* ignore malformed/partial writes */ }
     };
     window.addEventListener("storage", handleStorageEvent);
@@ -477,6 +491,20 @@ export default function App() {
   useEffect(() => {
     if (editedBillMissing) setBillModal(null);
   }, [editedBillMissing]);
+
+  // Used when a dialog crashes: closes everything so the app is usable again.
+  const closeAllModals = () => {
+    setTxModal(null); setPendingBillLink(null); setAccModal(null); setAccError(""); setCatModal(null);
+    setBudgetModal(null); setBillModal(null); setGoalModal(null); setClosedAccountsOpen(false); setConfirmDialog(null);
+    setWidgetModalOpen(false); setSidebarModalOpen(false); setShortcutsOpen(false); setStatusModalOpen(false);
+  };
+  const openModalCount =
+    [txModal, accModal, catModal, budgetModal, billModal, goalModal, confirmDialog].filter((m) => m !== null && m !== undefined && m !== false).length +
+    [closedAccountsOpen, widgetModalOpen, sidebarModalOpen, shortcutsOpen, statusModalOpen].filter(Boolean).length;
+
+  // Saved data that couldn't be read: show the recovery screen rather than starting empty (which
+  // the auto-save would then write over the data we failed to read).
+  if (loadFailure) return <RecoveryScreen reason="unreadable" error={loadFailure.error} />;
 
   if (!loaded || !state) {
     return (
@@ -843,7 +871,7 @@ export default function App() {
 
   const exportJSON = async () => {
     const backedUpAt = new Date().toISOString();
-    const payload = { app: "amble-finance", version: 1, exportedAt: backedUpAt, data: { ...state, lastBackupAt: backedUpAt } };
+    const payload = { app: BACKUP_APP_ID, version: BACKUP_VERSION, exportedAt: backedUpAt, data: { ...state, lastBackupAt: backedUpAt } };
     const json = JSON.stringify(payload, null, 2);
 
     // Prefer the File System Access API's save picker when it's available (Electron's
@@ -882,45 +910,58 @@ export default function App() {
     setState((s) => ({ ...s, lastBackupAt: backedUpAt }));
   };
 
+  const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
   const requestImportJSON = (file) => {
     (async () => {
-      try {
-        const text = await file.text();
-        const parsed = JSON.parse(text);
-        const data = parsed && typeof parsed === "object" && parsed.data ? parsed.data : parsed;
-        const valid = data && Array.isArray(data.accounts) && Array.isArray(data.categories) && Array.isArray(data.transactions);
-        if (!valid) throw new Error("bad shape");
-        setConfirmDialog({
-          title: "Import backup?",
-          message: `This will replace all current accounts, categories, transactions, budgets, bills, and goals with the contents of “${file.name}”. This can't be undone.`,
-          confirmLabel: "Import & replace",
-          onConfirm: () => {
-            setState({
-              ...defaultState(),
-              accounts: migrateAccountOrder(data.accounts),
-              categories: data.categories,
-              transactions: data.transactions,
-              plans: migrateBudgetOrder(Array.isArray(data.plans) ? data.plans : []),
-              bills: sanitizeBills(data.bills),
-              goals: sanitizeGoals(data.goals),
-              ...(data.currency ? { currency: data.currency } : {}),
-              ...(data.lastBackupAt ? { lastBackupAt: data.lastBackupAt } : {}),
+      const failed = (text) => setConfirmDialog({
+        title: "Import failed",
+        message: `${text} No changes were made.`,
+        confirmLabel: "OK",
+        tone: "primary",
+        hideCancel: true,
+        onConfirm: () => setConfirmDialog(null),
+      });
+      let parsed;
+      try { parsed = parseBackupText(await file.text()); } catch (e) { return failed("That file couldn't be read."); }
+      if (!parsed.ok) return failed(parsed.error);
+
+      // Nothing has been applied yet: the file was fully checked first, and the person is told what's in it
+      // (and anything that had to be repaired or set aside) before they decide to replace their data.
+      const { counts } = parsed.report;
+      const contents = `${plural(counts.accounts, "account")}, ${plural(counts.transactions, "transaction")}, ${plural(counts.budgets, "budget")}, ${plural(counts.bills, "bill")} and ${plural(counts.goals, "goal")}`;
+      const issues = describeReport(parsed.report);
+      setConfirmDialog({
+        title: "Import backup?",
+        message: `“${file.name}” contains ${contents}.${issues ? ` While checking it, Amble ${issues} (records that couldn't be read are saved so you can export them later).` : ""} Importing will replace all current accounts, categories, transactions, budgets, bills, and goals. This can't be undone.`,
+        confirmLabel: "Import & replace",
+        onConfirm: async () => {
+          setConfirmDialog(null);
+          const saved = await appendQuarantine(parsed.report.quarantined, "import");
+          setState(parsed.state);
+          if (issues) {
+            setNotice({
+              tone: parsed.report.quarantinedCount ? "warn" : "info",
+              text: `Backup imported. Amble ${issues}.${parsed.report.quarantinedCount ? (saved.ok ? " The records that couldn't be read were saved - you can export them from More." : " The records that couldn't be read could NOT be saved (storage is full) - export them now.") : ""}`,
+              items: parsed.report.quarantined,
             });
-            setConfirmDialog(null);
-          },
-        });
-      } catch (e) {
-        setConfirmDialog({
-          title: "Import failed",
-          message: "That file doesn't look like a valid Amble backup (.json). No changes were made.",
-          confirmLabel: "OK",
-          tone: "primary",
-          hideCancel: true,
-          onConfirm: () => setConfirmDialog(null),
-        });
-      }
+          }
+          readQuarantine().then((items) => setQuarantineCount(items.length));
+        },
+      });
     })();
   };
+
+  const exportQuarantineItems = (items) => {
+    downloadTextFile(`amble-set-aside-${todayStr()}.json`, quarantineExportText(items));
+  };
+  const exportStoredQuarantine = async () => exportQuarantineItems(await readQuarantine());
+  const requestClearQuarantine = () => setConfirmDialog({
+    title: "Delete set-aside records?",
+    message: "These are records Amble couldn't read when opening or importing your data. Deleting them can't be undone - export them first if you might want them.",
+    confirmLabel: "Delete",
+    onConfirm: async () => { await clearQuarantine(); setQuarantineCount(0); setConfirmDialog(null); },
+  });
 
   const exportTransactionsCSV = () => {
     const accName = (id) => state.accounts.find((a) => a.id === id)?.name || "";
@@ -1174,7 +1215,21 @@ export default function App() {
               )}
             </div>
           </header>
+          {notice && (
+            <div className={notice.tone === "info" ? "recovery-ok" : "inline-error"} role="status" style={{ margin: "12px 24px 0", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1 }}>{notice.text}</span>
+              {notice.items && notice.items.length > 0 && (
+                <button className="btn btn-ghost btn-sm" onClick={() => exportQuarantineItems(notice.items)}>Export set-aside records</button>
+              )}
+              <button className="btn btn-ghost btn-sm" onClick={() => setNotice(null)}>Dismiss</button>
+            </div>
+          )}
           <div className="content" ref={contentRef}>
+            <ErrorBoundary
+              name="screen"
+              resetKey={effectiveView}
+              fallback={({ error, reset }) => <ViewCrashCard error={error} onRetry={reset} onGoHome={popoutView ? undefined : () => setView("dashboard")} />}
+            >
             {effectiveView === "dashboard" && (
               <Dashboard
                 accounts={state.accounts}
@@ -1264,14 +1319,24 @@ export default function App() {
                 onDeleteAllCategories={requestDeleteAllCategories}
                 onResetSampleData={requestResetSampleData}
                 onFactoryReset={requestFactoryReset}
+                quarantineCount={quarantineCount}
+                onExportQuarantine={exportStoredQuarantine}
+                onClearQuarantine={requestClearQuarantine}
                 dashboardWidgets={dashboardWidgets}
                 onToggleWidget={toggleWidget}
               />
             )}
+            </ErrorBoundary>
           </div>
         </main>
       </div>
 
+      <ErrorBoundary
+        name="dialog"
+        resetKey={openModalCount}
+        onError={() => { closeAllModals(); setNotice({ tone: "error", text: "That window ran into a problem and was closed. Your data was not changed." }); }}
+        fallback={null}
+      >
       {txModal !== null && (
         <TransactionModal
           initial={txModal}
@@ -1387,6 +1452,7 @@ export default function App() {
           onCancel={() => setConfirmDialog(null)}
         />
       )}
+      </ErrorBoundary>
     </div>
   );
 }

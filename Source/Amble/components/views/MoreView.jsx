@@ -220,6 +220,7 @@ export function MoreView({
   currency, onChangeCurrency, accountCount, budgetCount, categoryCount, onRefreshCategoryColors,
   dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
+  quarantineCount = 0, onExportQuarantine, onClearQuarantine,
   dashboardWidgets, onToggleWidget,
 }) {
   const [tab, setTab] = useState("settings");
@@ -393,6 +394,20 @@ export function MoreView({
               </button>
             </div>
           </div>
+          {quarantineCount > 0 && (
+            <div className="card">
+              <div className="card-title">Set-aside records</div>
+              <p className="settings-desc">
+                Amble found {quarantineCount} record{quarantineCount === 1 ? "" : "s"} it couldn't read when opening or
+                importing your data. Nothing was thrown away: they're saved here so you can export them (for example, to
+                recover an amount by hand) or delete them once you're done.
+              </p>
+              <div className="settings-actions">
+                <button className="btn btn-ghost" onClick={onExportQuarantine}><Download size={14} /> Export set-aside records (.json)</button>
+                <button className="btn btn-ghost tone-rust" onClick={onClearQuarantine}><Trash2 size={14} /> Delete them</button>
+              </div>
+            </div>
+          )}
           <div className="card">
             <div className="card-title">Data cleanup</div>
             <p className="settings-desc">
