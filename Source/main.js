@@ -1,5 +1,7 @@
 const { app, BrowserWindow, shell, screen, ipcMain } = require("electron");
 const path = require("path");
+const { createFileStore } = require("./store/fileStore");
+const { registerStoreIpc } = require("./store/ipc");
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
@@ -14,6 +16,23 @@ function getIconPath() {
 }
 
 let mainWindow = null;
+
+// The durable data store (see store/fileStore.js): atomic writes, automatic backups, and safe
+// multi-window access. If the data folder can't be opened, the handlers still register and report
+// the real reason to the renderer, which shows it, rather than the app silently losing its data.
+function setupDataStore() {
+  const dir = path.join(app.getPath("userData"), "data");
+  let store = null;
+  let unavailableReason;
+  try {
+    store = createFileStore({ dir, log: (...args) => console.error("[store]", ...args) });
+  } catch (e) {
+    console.error("[store] could not open the data folder", dir, e);
+    unavailableReason = `Amble's data folder couldn't be opened (${e && e.code ? e.code : "error"}): ${dir}`;
+  }
+  registerStoreIpc({ ipcMain, BrowserWindow, shell, store, unavailableReason });
+}
+setupDataStore();
 
 // Popped-out views (e.g. Transactions in its own window) are tracked here by
 // the view id they were opened for, so clicking "pop out" again for a view

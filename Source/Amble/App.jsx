@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import {
   Plus, Loader2, MoreHorizontal, Sliders, ExternalLink, ArrowLeft
 } from "lucide-react";
@@ -32,9 +32,11 @@ import { accountTotals, netForMonth } from "./state/totals";
 import { applyBillEdit, clearRemovedCategoryFromBills, clearRemovedTransactionFromBills, removeBillScope, resolveBillCategoryId } from "./state/planning";
 import { isSavableTransaction } from "./state/inputs";
 import { loadStoredState } from "./state/loader";
+import { migrateLegacyStorage } from "./state/migration";
+import { createPersistence } from "./state/persistence";
 import { appendQuarantine, clearQuarantine, quarantineExportText, readQuarantine } from "./state/quarantine";
 import { downloadTextFile } from "./state/recovery";
-import { BACKUP_APP_ID, BACKUP_VERSION, describeReport, parseBackupText, validateState } from "./state/validate";
+import { BACKUP_APP_ID, BACKUP_VERSION, describeReport, parseBackupText } from "./state/validate";
 import { CSS } from "./styles/theme";
 import { currentMonthKey, todayStr } from "./utils/dates";
 import { sumMoney } from "./utils/money";
@@ -52,6 +54,15 @@ export default function App() {
   const [notice, setNotice] = useState(null);
   const [quarantineCount, setQuarantineCount] = useState(0);
   const loadStartedRef = useRef(false);
+  // Owns saving (see state/persistence.js): queued compare-and-set saves, merging with other windows,
+  // retry on failure. `saveStatus` drives the "couldn't save" banner.
+  const persistenceRef = useRef(null);
+  const [saveStatus, setSaveStatus] = useState({ state: "idle" });
+  // Where the data lives and its automatic backups (only available in the desktop app's file store).
+  const [dataInfo, setDataInfo] = useState(null);
+  const [backups, setBackups] = useState([]);
+  // Asks the store to keep a backup of what the NEXT save is about to replace.
+  const snapshotFirst = (reason) => { if (persistenceRef.current) persistenceRef.current.requestBackup(reason); };
   // Read the saved theme preference synchronously (rather than via an async
   // window.storage.get on mount) so the very first render already comes up in the
   // right theme. Doing this asynchronously used to cause two bugs: a visible flash
@@ -316,11 +327,41 @@ export default function App() {
     if (loadStartedRef.current) return;
     loadStartedRef.current = true;
     (async () => {
+      // 1. Existing users' data lives in the old browser storage; copy it into the file store, once.
+      //    If that fails we must NOT carry on as a "fresh install": the file store would look empty, a blank
+      //    state would be saved, and the old data would be stranded. Stop and say so instead (nothing is lost:
+      //    the old copy is never touched, and the next launch retries).
+      const migration = await migrateLegacyStorage(window.storage);
+      const migrationBlocker = migration.error || (migration.problems || []).find((p) => p.key === STORAGE_KEY);
+      if (migrationBlocker) {
+        const why = (migrationBlocker.error && migrationBlocker.error.message) || migrationBlocker.message || "unknown error";
+        setLoadFailure({ error: new Error(`Amble couldn't move your saved data into its new storage location (${why}). Your data has not been changed or deleted - it is still where it was. Try again; if this keeps happening, update Amble or contact support.`) });
+        return;
+      }
+
+      // 2. Read it.
       const result = await loadStoredState(window.storage);
       if (result.status === "unreadable") {
         setLoadFailure(result);
         return;
       }
+
+      // 3. From here on, saving goes through the persistence controller.
+      const persistence = createPersistence({
+        storage: window.storage,
+        key: STORAGE_KEY,
+        onStatus: (status) => {
+          setSaveStatus(status);
+          if (status.backupError) {
+            setNotice((prev) => prev || { tone: "warn", text: `Amble's automatic backup couldn't be written (${status.backupError.message}). Your data is still being saved normally, but consider exporting a backup from More.` });
+          }
+        },
+        // Another window changed the data (or a save had to be merged with its changes): adopt the result.
+        onRemoteState: (remoteState) => setState(remoteState),
+      });
+      persistence.init({ state: result.state, rawText: result.rawText, rev: result.rev });
+      persistenceRef.current = persistence;
+
       setState(result.state);
       if (result.status === "repaired") {
         const { report } = result;
@@ -332,29 +373,26 @@ export default function App() {
         setNotice({ tone: report.quarantinedCount ? "warn" : "info", text: parts.filter(Boolean).join(" "), items: report.quarantined });
       }
       readQuarantine().then((items) => setQuarantineCount(items.length));
+      if (window.storage.getInfo) window.storage.getInfo().then((info) => { if (info && info.ok) setDataInfo(info); });
       setLoaded(true);
     })();
   }, []);
 
-  // Cross-window live sync: every state change is already persisted to
-  // localStorage below (see the STORAGE_KEY effect), and the browser fires a
-  // native "storage" event in every *other* same-origin window whenever that
-  // happens (never in the window that made the change, so this can't loop).
-  // That's exactly what makes edits in a popped-out view show up instantly in
-  // the main window, and vice versa, without any extra sync channel.
+  // Cross-window live sync. The main process tells every OTHER window when the data changed; the controller
+  // re-reads the stored value and either adopts it or, if this window has unsaved changes, merges.
   useEffect(() => {
-    const handleStorageEvent = (e) => {
-      if (e.key !== STORAGE_KEY || e.newValue == null) return;
-      try {
-        // Same checks as loading: a malformed or half-written value from another window is rejected
-        // (ok: false) or repaired, never applied as-is.
-        const result = validateState(JSON.parse(e.newValue));
-        if (result.ok) setState(result.state);
-      } catch (err) { /* ignore malformed/partial writes */ }
-    };
-    window.addEventListener("storage", handleStorageEvent);
-    return () => window.removeEventListener("storage", handleStorageEvent);
-  }, []);
+    if (!loaded || !persistenceRef.current) return undefined;
+    return window.storage.onChange((change) => { if (persistenceRef.current) persistenceRef.current.receive(change); });
+  }, [loaded]);
+
+  // Last chance to save: when the window is closing, an async save might not finish, so write synchronously.
+  useEffect(() => {
+    if (!loaded) return undefined;
+    const flush = () => { if (persistenceRef.current) persistenceRef.current.flushSync(); };
+    window.addEventListener("beforeunload", flush);
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("beforeunload", flush); window.removeEventListener("pagehide", flush); };
+  }, [loaded]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -386,12 +424,13 @@ export default function App() {
     });
   }, [loaded]);
 
-  useEffect(() => {
-    if (!loaded || !state) return;
-    (async () => {
-      try { await window.storage.set(STORAGE_KEY, JSON.stringify(state), false); }
-      catch (e) { /* silent - keeps working in-memory */ }
-    })();
+  // Report every change to the controller, which saves it. This is a LAYOUT effect on purpose: it runs inside
+  // the same task as the React commit, so a change notification from another window can never slip in between
+  // "this state was committed" and "the saver was told about it" (with a delayed effect, a stale report could
+  // briefly overwrite a merge that had just been applied).
+  useLayoutEffect(() => {
+    if (!loaded || !state || !persistenceRef.current) return;
+    persistenceRef.current.update(state);
   }, [state, loaded]);
 
   // True whenever some overlay already has the user's attention - shortcuts other
@@ -491,6 +530,11 @@ export default function App() {
   useEffect(() => {
     if (editedBillMissing) setBillModal(null);
   }, [editedBillMissing]);
+
+  // The backup list changes as Amble saves; refresh it when the More screen (which lists it) is opened.
+  useEffect(() => {
+    if (loaded && effectiveView === "more") refreshBackups();
+  }, [loaded, effectiveView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Used when a dialog crashes: closes everything so the app is usable again.
   const closeAllModals = () => {
@@ -912,44 +956,68 @@ export default function App() {
 
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+  const failedDialog = (title, text) => setConfirmDialog({
+    title,
+    message: `${text} No changes were made.`,
+    confirmLabel: "OK",
+    tone: "primary",
+    hideCancel: true,
+    onConfirm: () => setConfirmDialog(null),
+  });
+
+  // Shared by "Import backup" (a file the person chose) and "Restore" (one of Amble's automatic backups).
+  // `text` is checked completely before anything is applied, the person is told what's in it (and anything that
+  // had to be repaired or set aside), and the store keeps a backup of the current data before it's replaced.
+  const offerReplaceFromText = (text, { title, label, noun, backupReason, source }) => {
+    const parsed = parseBackupText(text);
+    if (!parsed.ok) return failedDialog(`${noun} failed`, parsed.error);
+    const { counts } = parsed.report;
+    const contents = `${plural(counts.accounts, "account")}, ${plural(counts.transactions, "transaction")}, ${plural(counts.budgets, "budget")}, ${plural(counts.bills, "bill")} and ${plural(counts.goals, "goal")}`;
+    const issues = describeReport(parsed.report);
+    setConfirmDialog({
+      title,
+      message: `${label} contains ${contents}.${issues ? ` While checking it, Amble ${issues} (records that couldn't be read are saved so you can export them later).` : ""} ${noun === "Restore" ? "Restoring" : "Importing"} will replace all current accounts, categories, transactions, budgets, bills, and goals. ${dataInfo ? "A backup of your current data is kept first." : "This can't be undone."}`,
+      confirmLabel: noun === "Restore" ? "Restore & replace" : "Import & replace",
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        const saved = await appendQuarantine(parsed.report.quarantined, source);
+        snapshotFirst(backupReason);
+        setState(parsed.state);
+        setNotice({
+          tone: parsed.report.quarantinedCount ? "warn" : "info",
+          text: `${noun === "Restore" ? "Backup restored" : "Backup imported"}.${issues ? ` Amble ${issues}.` : ""}${parsed.report.quarantinedCount ? (saved.ok ? " The records that couldn't be read were saved - you can export them from More." : " The records that couldn't be read could NOT be saved (storage is full) - export them now.") : ""}`,
+          items: parsed.report.quarantined,
+        });
+        readQuarantine().then((items) => setQuarantineCount(items.length));
+      },
+    });
+  };
+
   const requestImportJSON = (file) => {
     (async () => {
-      const failed = (text) => setConfirmDialog({
-        title: "Import failed",
-        message: `${text} No changes were made.`,
-        confirmLabel: "OK",
-        tone: "primary",
-        hideCancel: true,
-        onConfirm: () => setConfirmDialog(null),
-      });
-      let parsed;
-      try { parsed = parseBackupText(await file.text()); } catch (e) { return failed("That file couldn't be read."); }
-      if (!parsed.ok) return failed(parsed.error);
-
-      // Nothing has been applied yet: the file was fully checked first, and the person is told what's in it
-      // (and anything that had to be repaired or set aside) before they decide to replace their data.
-      const { counts } = parsed.report;
-      const contents = `${plural(counts.accounts, "account")}, ${plural(counts.transactions, "transaction")}, ${plural(counts.budgets, "budget")}, ${plural(counts.bills, "bill")} and ${plural(counts.goals, "goal")}`;
-      const issues = describeReport(parsed.report);
-      setConfirmDialog({
-        title: "Import backup?",
-        message: `“${file.name}” contains ${contents}.${issues ? ` While checking it, Amble ${issues} (records that couldn't be read are saved so you can export them later).` : ""} Importing will replace all current accounts, categories, transactions, budgets, bills, and goals. This can't be undone.`,
-        confirmLabel: "Import & replace",
-        onConfirm: async () => {
-          setConfirmDialog(null);
-          const saved = await appendQuarantine(parsed.report.quarantined, "import");
-          setState(parsed.state);
-          if (issues) {
-            setNotice({
-              tone: parsed.report.quarantinedCount ? "warn" : "info",
-              text: `Backup imported. Amble ${issues}.${parsed.report.quarantinedCount ? (saved.ok ? " The records that couldn't be read were saved - you can export them from More." : " The records that couldn't be read could NOT be saved (storage is full) - export them now.") : ""}`,
-              items: parsed.report.quarantined,
-            });
-          }
-          readQuarantine().then((items) => setQuarantineCount(items.length));
-        },
-      });
+      let text;
+      try { text = await file.text(); } catch (e) { return failedDialog("Import failed", "That file couldn't be read."); }
+      offerReplaceFromText(text, { title: "Import backup?", label: `“${file.name}”`, noun: "Import", backupReason: "before-import", source: "import" });
     })();
+  };
+
+  const refreshBackups = async () => {
+    if (!window.storage.listBackups) return;
+    const res = await window.storage.listBackups();
+    if (res && res.ok) setBackups(res.backups);
+  };
+
+  const requestRestoreBackup = (backup) => {
+    (async () => {
+      const res = await window.storage.readBackup(backup.name);
+      if (!res || !res.ok) return failedDialog("Restore failed", (res && res.error && res.error.message) || "That backup couldn't be read.");
+      offerReplaceFromText(res.value, { title: "Restore automatic backup?", label: `The backup from ${new Date(backup.modifiedMs).toLocaleString()}`, noun: "Restore", backupReason: "before-restore", source: "restore" });
+    })();
+  };
+
+  const openDataFolder = async () => {
+    const res = await window.storage.openDataFolder();
+    if (res && !res.ok) setNotice({ tone: "error", text: `Couldn't open the data folder: ${(res.error && res.error.message) || "unknown error"}` });
   };
 
   const exportQuarantineItems = (items) => {
@@ -1000,6 +1068,7 @@ export default function App() {
       title: "Delete all transactions?",
       message: `This will permanently delete all ${n} transaction${n === 1 ? "" : "s"}. Accounts, categories, and budgets will be left in place. This can't be undone.`,
       onConfirm: () => {
+        snapshotFirst("before-delete");
         setState((s) => ({ ...s, transactions: [] }));
         setConfirmDialog(null);
       },
@@ -1012,6 +1081,7 @@ export default function App() {
       title: "Delete all budgets?",
       message: `This will permanently delete all ${n} budget${n === 1 ? "" : "s"} and their categories. Transactions assigned to those categories will become uncategorized. This can't be undone.`,
       onConfirm: () => {
+        snapshotFirst("before-delete");
         setState((s) => {
           const deletedCategoryIds = s.categories.filter((c) => c.planId).map((c) => c.id);
           return {
@@ -1032,6 +1102,7 @@ export default function App() {
       title: "Delete all categories?",
       message: `This will permanently delete all ${n} categor${n === 1 ? "y" : "ies"}, including any tied to your budgets. Transactions using them will become uncategorized. This can't be undone.`,
       onConfirm: () => {
+        snapshotFirst("before-delete");
         setState((s) => {
           const transactions = s.transactions.map((t) => (t.categoryId ? { ...t, categoryId: null } : t));
           // Strip the links from every budget's categories/items so they're treated as
@@ -1082,6 +1153,7 @@ export default function App() {
       message: "This will permanently delete all of your accounts, transactions, categories, budgets, bills, and goals, replacing them with Amble's starter data. Your appearance and currency preferences are kept. This can't be undone.",
       confirmLabel: "Reset data",
       onConfirm: () => {
+        snapshotFirst("before-reset");
         setState((s) => ({ ...defaultState(), currency: s.currency }));
         setConfirmDialog(null);
       },
@@ -1094,6 +1166,7 @@ export default function App() {
       message: "This will permanently erase everything, including all accounts, transactions, categories, budgets, bills, and goals, and reset your appearance and currency preferences, returning Amble to a fresh install. This can't be undone.",
       confirmLabel: "Factory reset",
       onConfirm: () => {
+        snapshotFirst("before-reset");
         setState(defaultState());
         setThemeMode("system");
         setView("dashboard");
@@ -1215,6 +1288,15 @@ export default function App() {
               )}
             </div>
           </header>
+          {saveStatus.state === "error" && (
+            <div className="inline-error" role="alert" style={{ margin: "12px 24px 0", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1 }}>
+                <strong>Amble couldn't save your latest changes</strong> because {saveStatus.message}. Your data is still safe on screen - keep Amble open and export a backup now. It keeps retrying automatically.
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => persistenceRef.current && persistenceRef.current.retry()}>Retry now</button>
+              <button className="btn btn-ghost btn-sm" onClick={exportJSON}>Export backup</button>
+            </div>
+          )}
           {notice && (
             <div className={notice.tone === "info" ? "recovery-ok" : "inline-error"} role="status" style={{ margin: "12px 24px 0", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ flex: 1 }}>{notice.text}</span>
@@ -1319,6 +1401,10 @@ export default function App() {
                 onDeleteAllCategories={requestDeleteAllCategories}
                 onResetSampleData={requestResetSampleData}
                 onFactoryReset={requestFactoryReset}
+                dataInfo={dataInfo}
+                backups={backups}
+                onOpenDataFolder={openDataFolder}
+                onRestoreBackup={requestRestoreBackup}
                 quarantineCount={quarantineCount}
                 onExportQuarantine={exportStoredQuarantine}
                 onClearQuarantine={requestClearQuarantine}

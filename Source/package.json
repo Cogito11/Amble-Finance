@@ -51,6 +51,7 @@
       "!dist/mac*{,/**/*}",
       "main.js",
       "preload.js",
+      "store/**/*",
       "Amble/assets/**/*"
     ],
     "win": {

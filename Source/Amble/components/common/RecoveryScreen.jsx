@@ -1,4 +1,5 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { BackupList } from "./BackupList";
 import { CSS } from "../../styles/theme";
 import { THEME_KEY } from "../../constants";
 import { downloadTextFile, exportRawData, restoreFromBackupText, startFresh } from "../../state/recovery";
@@ -31,7 +32,22 @@ export function RecoveryScreen({ reason, error }) {
   const [restored, setRestored] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const [backups, setBackups] = useState([]);
   const unreadable = reason === "unreadable";
+
+  // The desktop app keeps automatic backups; offer them here, where they matter most.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (window.storage && window.storage.listBackups) {
+          const res = await window.storage.listBackups();
+          if (alive && res && res.ok) setBackups(res.backups);
+        }
+      } catch (e) { /* no backups to offer */ }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const reload = () => window.location.reload();
 
@@ -40,20 +56,35 @@ export function RecoveryScreen({ reason, error }) {
     setMessage(res.ok ? { tone: "ok", text: "Your data was saved to a file." } : { tone: "error", text: res.empty ? "There's no saved data on this computer to export." : "The file couldn't be saved." });
   };
 
+  const showRestoreResult = (res) => {
+    if (res.ok) {
+      const extra = describeReport(res.report);
+      setRestored(true);
+      setMessage({ tone: "ok", text: `Backup restored${extra ? ` (${extra})` : ""}. Your previous data was kept as a safety copy. Open Amble to continue.` });
+    } else {
+      setMessage({ tone: "error", text: `${res.error} Nothing was changed.` });
+    }
+  };
+
   const doRestore = async (file) => {
     if (!file) return;
     setBusy(true);
     try {
-      const res = await restoreFromBackupText(await file.text());
-      if (res.ok) {
-        const extra = describeReport(res.report);
-        setRestored(true);
-        setMessage({ tone: "ok", text: `Backup restored${extra ? ` (${extra})` : ""}. Your previous data was kept as a safety copy. Open Amble to continue.` });
-      } else {
-        setMessage({ tone: "error", text: `${res.error} Nothing was changed.` });
-      }
+      showRestoreResult(await restoreFromBackupText(await file.text()));
     } catch (e) {
       setMessage({ tone: "error", text: "That file couldn't be read. Nothing was changed." });
+    }
+    setBusy(false);
+  };
+
+  const doRestoreAutomatic = async (backup) => {
+    setBusy(true);
+    try {
+      const read = await window.storage.readBackup(backup.name);
+      if (!read || !read.ok) setMessage({ tone: "error", text: `That backup couldn't be read${read && read.error ? ` (${read.error.message})` : ""}. Nothing was changed.` });
+      else showRestoreResult(await restoreFromBackupText(read.value));
+    } catch (e) {
+      setMessage({ tone: "error", text: "That backup couldn't be restored. Nothing was changed." });
     }
     setBusy(false);
   };
@@ -87,6 +118,13 @@ export function RecoveryScreen({ reason, error }) {
           <button className="btn btn-ghost" onClick={() => fileRef.current && fileRef.current.click()} disabled={busy}>Import a backup file…</button>
           <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; doRestore(f); }} />
         </div>
+
+        {backups.length > 0 && !restored && (
+          <div style={{ margin: "18px 0" }}>
+            <div className="recovery-text" style={{ marginBottom: 8 }}><strong>Restore an automatic backup</strong> - Amble keeps these on your computer. Your current data is kept as a safety copy first.</div>
+            <BackupList backups={backups} onRestore={doRestoreAutomatic} disabled={busy} />
+          </div>
+        )}
 
         <div className="recovery-danger">
           {!confirmingFresh ? (

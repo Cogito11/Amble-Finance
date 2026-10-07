@@ -1,8 +1,9 @@
 import React, { useState, useRef } from "react";
 import {
-  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe, X, ScrollText
+  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe, X, ScrollText, ExternalLink
 } from "lucide-react";
 import { ShortcutsList } from "../common/Shortcuts";
+import { BackupList } from "../common/BackupList";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
 import { checkForUpdate } from "../../utils/updates";
@@ -220,6 +221,7 @@ export function MoreView({
   currency, onChangeCurrency, accountCount, budgetCount, categoryCount, onRefreshCategoryColors,
   dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
+  dataInfo = null, backups = [], onOpenDataFolder, onRestoreBackup,
   quarantineCount = 0, onExportQuarantine, onClearQuarantine,
   dashboardWidgets, onToggleWidget,
 }) {
@@ -394,6 +396,20 @@ export function MoreView({
               </button>
             </div>
           </div>
+          {dataInfo && (
+            <div className="card">
+              <div className="card-title">Data location &amp; automatic backups</div>
+              <p className="settings-desc">
+                Your data is stored as ordinary files in <code style={{ wordBreak: "break-all" }}>{dataInfo.dir}</code>. Amble keeps
+                automatic backups there too, so a bad import, a mistake, or a damaged file can be undone. Restoring one never
+                deletes anything: your current data is backed up first.
+              </p>
+              <div className="settings-actions" style={{ marginBottom: 14 }}>
+                <button className="btn btn-ghost" onClick={onOpenDataFolder}><ExternalLink size={14} /> Open data folder</button>
+              </div>
+              <BackupList backups={backups} onRestore={onRestoreBackup} />
+            </div>
+          )}
           {quarantineCount > 0 && (
             <div className="card">
               <div className="card-title">Set-aside records</div>

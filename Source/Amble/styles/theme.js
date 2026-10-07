@@ -279,6 +279,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .closed-acc-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .closed-acc-balance { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; flex-shrink:0; }
 
+.backup-list { display: flex; flex-direction: column; gap: 8px; }
+.backup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.backup-when { font-size: 13.5px; font-weight: 500; }
 .recovery-screen { padding: 24px; align-items: center; justify-content: center; }
 .recovery-card { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; color: var(--text); }
 .recovery-title { margin: 0 0 10px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; }
