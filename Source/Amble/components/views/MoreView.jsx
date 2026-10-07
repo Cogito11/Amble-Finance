@@ -11,6 +11,21 @@ import { checkForUpdate } from "../../utils/updates";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.7.2",
+    items: [
+      "Added the option for quarterly and semi annually repeating bills.",
+      "Added automatic backups of user data, which can be restored or found from the **Data** tab in More.",
+      "Data is now saved more safely, and Amble warns if a change can't be saved and keeps trying.",
+      "Changes made in a popped-out window and the main window are now combined instead of overwriting each other.",
+      "Damaged or unreadable data no longer crashes the app or gets overwritten, and a recovery screen lets you restore a backup.",
+      "Importing a backup now checks the file and tells you what it contains before replacing anything.",
+      "Fixed small rounding errors that could leave a paid-off card showing debt or stop a fully funded goal from completing.",
+      "Fixed monthly repeating budgets ending on the wrong day, or keeping an old repeat day after the start date was changed.",
+      "Fixed bills adding transactions to last month's budget category after a budget repeats.",
+      "Transactions can no longer be saved without a date, and any existing ones are flagged at the top of the transactions list.",
+    ],
+  },
+  {
     version: "1.7.1",
     items: [
       "Fixed a bug causing the add account button to be shorter than all other accounts.",
