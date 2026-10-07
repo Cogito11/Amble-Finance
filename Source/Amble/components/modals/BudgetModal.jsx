@@ -3,12 +3,15 @@ import {
   Plus, X, Trash2, Repeat, ChevronUp, ChevronDown, Info, GripVertical
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkBudgetForm, moneyOrZero } from "../../state/inputs";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
 import { categoryIncome, nextCategoryColor, budgetCategoryTotal } from "../../state/categories";
-import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays } from "../../state/budgets";
+import { REPEAT_DUE_PHRASES, nextBudgetDates, budgetDueDate, budgetMatchDurationDays, formRepeatAnchors } from "../../state/budgets";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
-import { blurOnWheel, roundMoney, sortTransactionsNewestFirst, uid } from "../../utils/misc";
+import { blurOnWheel, sortTransactionsNewestFirst, uid } from "../../utils/misc";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
 
 /* ---------------------------------- budget modal ---------------------------------- */
 export function BudgetModal({ initial, transactions, budgets, categories, onSave, onClose, onDelete, onRecolorCategory }) {
@@ -46,18 +49,19 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
 
   const canRepeat = !!(startDate && endDate);
   const matchDays = budgetMatchDurationDays({ startDate, endDate });
-  // The day-of-month a monthly repeat should keep aiming for. Preserved from the
-  // budget being edited so an already-repeating budget doesn't lose its original
-  // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date;
-  // only defaults from the current startDate for budgets that haven't repeated yet.
-  const repeatAnchorDay = (initial.repeat && initial.repeat.anchorDay) || (startDate ? new Date(startDate + "T00:00:00").getDate() : null);
+  // The days-of-month a monthly repeat should keep aiming for (start and end). Preserved
+  // from the budget being edited so an already-repeating budget doesn't lose its original
+  // anchor (e.g. the 31st) just because a prior cycle landed on a clamped date - but only
+  // while the date it came from is unchanged; edit the start/end and it re-derives.
+  const { anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay } = formRepeatAnchors(initial, startDate, endDate);
   // Live preview, in the Edit budget menu, of when this cycle becomes due to
   // repeat and what dates the next cycle would have - mirrors budgetDueDate /
   // nextBudgetDates exactly, using the form's current (possibly unsaved) values.
   const repeatPreview = canRepeat
     ? (() => {
-        const due = budgetDueDate({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
-        const next = nextBudgetDates({ startDate, endDate, repeat: { frequency: repeatFreq, anchorDay: repeatAnchorDay } });
+        const previewRepeat = { frequency: repeatFreq, anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay };
+        const due = budgetDueDate({ startDate, endDate, repeat: previewRepeat });
+        const next = nextBudgetDates({ startDate, endDate, repeat: previewRepeat });
         return due && next ? { due, next } : null;
       })()
     : null;
@@ -69,13 +73,15 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
   // end date itself.
   const repeatCutoffWarning = canRepeat && repeatOn && repeatFreq !== "match" && repeatPreview && repeatPreview.due < endDate;
 
-  const canSave = name.trim().length > 0;
+  // Every typed amount must be blank (= 0) or a usable non-negative amount, and any dates must be real.
+  const check = checkBudgetForm({ name, startDate, endDate, incomeItems, cats });
+  const canSave = check.valid;
   // Manual rows use whatever's typed in; rows tracked by category resolve to
   // a live total (money already logged against that category), the same
   // relationship categorySpend has to an expense category - so this can move
   // on its own as new income transactions come in, without editing the budget.
   const itemAmount = (it) => {
-    if (it.mode !== "category") return Number(it.amount) || 0;
+    if (it.mode !== "category") return moneyOrZero(it.amount);
     if (!it.categoryId) return 0;
     const cat = (categories || []).find((c) => c.id === it.categoryId);
     return cat ? categoryIncome(cat, transactions || [], budgets || [], categories || []) : 0;
@@ -207,25 +213,25 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
       name: name.trim(),
       startDate: startDate || null,
       endDate: endDate || null,
-      income: cleanedIncomeItems.reduce((s, it) => s + it.amount, 0),
+      income: sumMoneyBy(cleanedIncomeItems, (it) => it.amount),
       incomeItems: cleanedIncomeItems,
       dateCreated: initial.dateCreated || todayStr(),
       order: typeof initial.order === "number" ? initial.order : undefined,
       active: initial.active || false,
-      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay },
+      repeat: { enabled: canRepeat && repeatOn, frequency: repeatFreq, anchorDay: repeatAnchorDay, endAnchorDay: repeatEndAnchorDay },
       categories: cats.map((c) => ({
         id: c.id,
         categoryId: c.categoryId,
         name: c.name.trim() || "Untitled category",
         mode: c.mode === "items" ? "items" : "bulk",
-        bulkAmount: Number(c.bulkAmount) || 0,
+        bulkAmount: moneyOrZero(c.bulkAmount),
         date: c.date || null,
         // Only a not-yet-linked category needs a color here, to seed the real
         // Category record syncBudgetCategories is about to create for it. An
         // already-linked one just had its color applied above, so sending it
         // here again would just be a second, driftable copy.
         color: c.categoryId ? undefined : c.color,
-        items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: Number(i.amount) || 0, date: i.date || null })),
+        items: (c.items || []).map((i) => ({ id: i.id, categoryId: i.categoryId, name: i.name.trim() || "Untitled expense", amount: moneyOrZero(i.amount), date: i.date || null })),
       })),
     });
   };
@@ -277,7 +283,10 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
               {repeatFreq === "match"
                 ? `The budget will repeat once it's set to end, on ${fmtDate(endDate)}. `
                 : `The budget will repeat ${REPEAT_DUE_PHRASES[repeatFreq]} its start date, on ${fmtDate(repeatPreview.due)}. `}
-              When it repeats, the new budget will run for the same length of time as this one ({matchDays} day{matchDays === 1 ? "" : "s"}), starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new budget.
+              {repeatFreq === "monthly"
+                ? "When it repeats, the new budget will cover the same days of the month as this one (ending on the last day of the month if this one does), "
+                : `When it repeats, the new budget will run for the same length of time as this one (${matchDays} day${matchDays === 1 ? "" : "s"}), `}
+              starting {fmtDate(repeatPreview.next.startDate)} and ending {fmtDate(repeatPreview.next.endDate)}, carrying forward the same income and categories as a new budget.
             </p>
           )}
           {repeatCutoffWarning && (
@@ -503,6 +512,7 @@ export function BudgetModal({ initial, transactions, budgets, categories, onSave
           ))}
           <button type="button" className="btn btn-ghost btn-sm budget-add-category-btn" onClick={addCategory}><Plus size={14} /> Add category</button>
         </div>
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

@@ -1,6 +1,7 @@
 // state/planning.js
 //
 import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
+import { moneyAtLeast, roundMoney, toCents } from "../utils/money";
 
 // Data model added by the "Plan" tab:
 //
@@ -10,7 +11,7 @@ import { addMonthsClamped, toLocalDateStr } from "../utils/dates";
 //     accountId, categoryId,               // both nullable, mirrors TransactionModal
 //     dueDate,                             // "YYYY-MM-DD" - first/only occurrence
 //     recurring: boolean,
-//     frequency: "weekly" | "biweekly" | "monthly" | "yearly",
+//     frequency: "weekly" | "biweekly" | "monthly" | "quarterly" | "semiannually" | "yearly",
 //     endDate,                             // "YYYY-MM-DD" or null - stop generating after this date
 //     notes,
 //     seriesId,                            // optional; shared by every segment of one recurring bill (falls back to id)
@@ -34,6 +35,8 @@ export const FREQUENCY_OPTIONS = [
   { value: "weekly", label: "Weekly" },
   { value: "biweekly", label: "Every 2 weeks" },
   { value: "monthly", label: "Monthly" },
+  { value: "quarterly", label: "Quarterly" },
+  { value: "semiannually", label: "Semi-annually" },
   { value: "yearly", label: "Yearly" },
 ];
 export const FREQUENCY_LABELS = Object.fromEntries(FREQUENCY_OPTIONS.map((f) => [f.value, f.label]));
@@ -56,7 +59,7 @@ function toDate(dateStr) {
 }
 const toKey = toLocalDateStr;
 
-// Steps a date forward by one cycle of `frequency`. Monthly/yearly delegate to
+// Steps a date forward by one cycle of `frequency`. Monthly/quarterly/semi-annual/yearly delegate to
 // addMonthsClamped (utils/dates.js) - the same clamping budgets.js already
 // relies on for its own repeat logic - so a bill due the 31st doesn't silently
 // drift into early next month when it lands on a shorter one (Feb, Apr, etc.):
@@ -73,8 +76,15 @@ export function addFrequency(dateStr, frequency, anchorDay) {
   if (frequency === "weekly") return addDays(dateStr, 7);
   if (frequency === "biweekly") return addDays(dateStr, 14);
   if (frequency === "yearly") return addMonthsClamped(dateStr, 12, anchor);
+  if (frequency === "semiannually") return addMonthsClamped(dateStr, 6, anchor);
+  if (frequency === "quarterly") return addMonthsClamped(dateStr, 3, anchor);
   return addMonthsClamped(dateStr, 1, anchor); // monthly (default)
 }
+
+// Frequencies that step by whole calendar months, and so need an anchorDay to
+// keep a bill due on the 29th-31st from drifting after a short month.
+export const isMonthBasedFrequency = (frequency) =>
+  frequency === "monthly" || frequency === "quarterly" || frequency === "semiannually" || frequency === "yearly";
 export function daysBetween(fromStr, toStr) {
   const ms = toDate(toStr).getTime() - toDate(fromStr).getTime();
   return Math.round(ms / 86400000);
@@ -166,13 +176,16 @@ export function sortedBillsList(bills, today) {
 
 /* ---------------------------------- goals ---------------------------------- */
 
+// Everything is compared in whole cents (see utils/money.js): an account funded to exactly
+// the target can sum to 999.9999999999999 in floating point, which used to leave a
+// finished goal stuck at 99.99...% and never marked achieved.
 export function goalProgress(goal, balances, today) {
-  const target = goal.targetAmount || 0;
-  const current = goal.trackingMode === "account"
+  const target = roundMoney(goal.targetAmount);
+  const current = roundMoney(goal.trackingMode === "account"
     ? (goal.accountId ? (balances[goal.accountId] || 0) : 0)
-    : (goal.manualAmount || 0);
-  const pct = target > 0 ? Math.max(0, Math.min(100, (current / target) * 100)) : 0;
-  const achieved = target > 0 && current >= target;
+    : (goal.manualAmount || 0));
+  const pct = target > 0 ? Math.max(0, Math.min(100, (toCents(current) / toCents(target)) * 100)) : 0;
+  const achieved = target > 0 && moneyAtLeast(current, target);
   const daysLeft = goal.targetDate ? daysBetween(today, goal.targetDate) : null;
   return { current, target, pct, achieved, daysLeft, overdue: !achieved && daysLeft != null && daysLeft < 0 };
 }
@@ -184,6 +197,51 @@ export function sortedGoalsList(goals) {
     if (da !== db) return da < db ? -1 : 1;
     return (a.name || "").localeCompare(b.name || "");
   });
+}
+
+/* ---------------------------------- bill categories across budgets ---------------------------------- */
+// A budget's categories are real Category records that belong to that one budget (planId).
+// Every time a repeating budget rolls over, its categories are re-created with NEW ids, so a
+// bill saved against last month's "Groceries" keeps pointing at last month's record forever -
+// and a transaction created from that bill would be filed under the old budget, not counted
+// against the current one. Instead of rewriting bills at rollover, the category is resolved
+// at the moment it's needed (when a transaction is created from the bill): follow the NAME
+// into whichever budget is active right now, and if it isn't there, leave it uncategorized.
+
+const normName = (s) => String(s ?? "").trim().toLowerCase();
+
+// What to remember on a bill about its category, so it can still be found by name after the
+// budget it was picked from has rolled over or been deleted. Only budget-owned categories need
+// this: a general category keeps the same id for good.
+export function billCategorySnapshot(categoryId, categories) {
+  const list = categories || [];
+  const cat = categoryId ? list.find((c) => c.id === categoryId) : null;
+  if (!cat || !cat.planId) return { categoryName: null, categoryParentName: null };
+  const parent = cat.parentCategoryId ? list.find((c) => c.id === cat.parentCategoryId) : null;
+  return { categoryName: cat.name, categoryParentName: parent ? parent.name : null };
+}
+
+// The category id a transaction created from `bill` should get today (or null = uncategorized).
+//  - a general category, or one already in the active budget: used as is;
+//  - a category of some other budget (or one that no longer exists): the category with the same
+//    name in the ACTIVE budget (preferring one under the same parent for itemized expenses);
+//  - no such category, or no active budget: null.
+export function resolveBillCategoryId(bill, categories, activeBudgetId) {
+  if (!bill) return null;
+  const list = categories || [];
+  const cat = bill.categoryId ? list.find((c) => c.id === bill.categoryId) : null;
+  if (cat && (!cat.planId || cat.planId === activeBudgetId)) return cat.id;
+
+  const name = cat ? cat.name : bill.categoryName;
+  if (!name || !activeBudgetId) return null;
+  const parentName = cat
+    ? (cat.parentCategoryId ? list.find((c) => c.id === cat.parentCategoryId)?.name : null)
+    : bill.categoryParentName;
+  const type = cat ? cat.type : (bill.type === "income" ? "income" : "expense");
+
+  const candidates = list.filter((c) => c.planId === activeBudgetId && c.type === type && normName(c.name) === normName(name));
+  const sameParent = candidates.find((c) => normName(c.parentCategoryId ? list.find((p) => p.id === c.parentCategoryId)?.name : null) === normName(parentName));
+  return (sameParent || candidates[0])?.id || null;
 }
 
 /* ---------------------------------- referential cleanup ---------------------------------- */
@@ -207,24 +265,8 @@ export function clearRemovedCategoryFromBills(bills, removedCategoryIds) {
   return bills.map((b) => (removedCategoryIds.includes(b.categoryId) ? { ...b, categoryId: null } : b));
 }
 
-/* ---------------------------------- load / import sanitizing ---------------------------------- */
-// Bills and goals come from JSON (localStorage, another window, or a backup
-// file), so don't trust their shape: anything that isn't an object with an id
-// is dropped, and a bill's completions is always a plain object.
-const isRecord = (x) => x && typeof x === "object" && !Array.isArray(x) && typeof x.id === "string" && x.id !== "";
-
-export function sanitizeBills(list) {
-  if (!Array.isArray(list)) return [];
-  return list.filter(isRecord).map((b) => ({
-    ...b,
-    completions: b.completions && typeof b.completions === "object" && !Array.isArray(b.completions) ? b.completions : {},
-  }));
-}
-
-export function sanitizeGoals(list) {
-  if (!Array.isArray(list)) return [];
-  return list.filter(isRecord);
-}
+// (Loading/import sanitizing of bills and goals lives in state/validate.js, which repairs or sets aside
+// records instead of silently dropping them.)
 
 /* ---------------------------------- recurring series ---------------------------------- */
 // A recurring bill behaves like a repeating calendar event. Paid / linked state
@@ -325,6 +367,7 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
   const fields = {
     name: values.name, type: values.type, amount: values.amount, accountId: values.accountId,
     categoryId: values.categoryId || null, notes: values.notes || "",
+    categoryName: values.categoryName || null, categoryParentName: values.categoryParentName || null,
   };
   const recurring2 = !!values.recurring;
   const freq2 = recurring2 ? values.frequency : null;
@@ -369,6 +412,8 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
     // Only the fields that were actually edited go to the other segments; the
     // rest (e.g. an amount that differs between versions) are left as they are.
     const edited = Object.fromEntries(SERIES_FIELDS.filter((k) => norm(B[k]) !== norm(fields[k])).map((k) => [k, fields[k]]));
+    // The remembered category name travels with the category it describes.
+    if ("categoryId" in edited) { edited.categoryName = fields.categoryName; edited.categoryParentName = fields.categoryParentName; }
     return { bills: bills.map((b) => (seriesOf(b) === sid ? { ...b, ...edited } : b)), savedId: B.id };
   }
 
@@ -385,7 +430,7 @@ export function applyBillEdit(bills, { billId, dateKey, values, scope = "followi
 
   const base = { ...B, ...fields, dueDate: D2, recurring: recurring2, frequency: freq2, endDate: end2, seriesId: sid };
   delete base.anchorDay;
-  if (D2 === D && recurring2 && (freq2 === "monthly" || freq2 === "yearly")) {
+  if (D2 === D && recurring2 && isMonthBasedFrequency(freq2)) {
     const originalAnchor = B.anchorDay || toDate(B.dueDate).getDate();
     if (originalAnchor !== toDate(D2).getDate()) base.anchorDay = originalAnchor;
   }

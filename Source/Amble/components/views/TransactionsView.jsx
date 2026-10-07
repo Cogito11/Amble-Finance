@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import {
-  Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X
+  Receipt, Trash2, ArrowRightLeft, Search, ListFilter, X, AlertCircle
 } from "lucide-react";
 import { EmptyState } from "../common/EmptyState";
 import { fmt, fmtDate } from "../../utils/format";
+import { isValidDateStr } from "../../utils/dates";
 
 const SEARCH_DEBOUNCE_MS = 200;
 const DEFAULT_ROW_HEIGHT = 49; // px - only used until real rows have been measured; after that the running average of measured rows stands in for unmeasured ones
@@ -133,6 +134,13 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [sort, setSort] = useState({ column: "date", direction: "desc" });
 
+  // Transactions saved before dates were validated can have a blank/invalid date. They're missing
+  // from every month-based total and chart, and sort to the very bottom where they'd never be
+  // noticed - so say so up here, and let the person isolate them. Gone as soon as they're fixed.
+  const undatedCount = useMemo(() => transactions.filter((t) => !isValidDateStr(t.date)).length, [transactions]);
+  const [undatedOnly, setUndatedOnly] = useState(false);
+  useEffect(() => { if (undatedCount === 0 && undatedOnly) setUndatedOnly(false); }, [undatedCount, undatedOnly]);
+
   // The mounted window into `filtered`: rows [windowStart, windowEnd) are
   // the only ones actually rendered as <tr> elements. Unlike the previous
   // batch/sentinel version, this is recomputed directly from scroll
@@ -197,6 +205,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
     // the constant factor on the O(n) work that's unavoidable on every
     // mount/tab-switch no matter how few rows end up rendered.
     const rows = transactions.filter((transaction) => {
+      if (undatedOnly && isValidDateStr(transaction.date)) return false;
       if (hasDateFrom && transaction.date < filters.dateFrom) return false;
       if (hasDateTo && transaction.date > filters.dateTo) return false;
       if (hasDescription && !(transaction.description || "").toLowerCase().includes(descriptionTerm)) return false;
@@ -237,7 +246,7 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
       // rather than relying on sort stability (which would push it last).
       return orderById.get(b.id) - orderById.get(a.id);
     });
-  }, [transactions, filters, debouncedSearch, sort, catName, accName, orderById]);
+  }, [transactions, filters, debouncedSearch, sort, catName, accName, orderById, undatedOnly]);
 
   // ---- variable-height windowing -------------------------------------------
   // Real row heights are measured after render and cached by transaction id.
@@ -468,6 +477,15 @@ export function TransactionsView({ accounts, categories, transactions, onEdit, o
 
   return (
     <div className="tx-view">
+      {undatedCount > 0 && (
+        <div className="inline-error" role="alert">
+          <AlertCircle size={14} />
+          <span style={{ flex: 1 }}>
+            {undatedCount} transaction{undatedCount === 1 ? " has" : "s have"} no valid date, so {undatedCount === 1 ? "it's" : "they're"} missing from monthly totals and charts (account balances still include {undatedCount === 1 ? "it" : "them"}). Open {undatedCount === 1 ? "it" : "each one"} and choose a date to fix {undatedCount === 1 ? "it" : "them"}.
+          </span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setUndatedOnly((v) => !v)}>{undatedOnly ? "Show all" : "Show them"}</button>
+        </div>
+      )}
       <div className="filter-bar">
         <div className="search-input">
           <Search size={15} />

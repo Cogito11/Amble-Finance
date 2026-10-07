@@ -8,7 +8,8 @@ import { STATUS_SECTIONS, defaultStatusPrefs } from "../../constants";
 import { categorySpend, categorySpendTransactions, budgetAllocated, budgetCategoryTotal } from "../../state/categories";
 import { budgetIncomeTotal } from "../../state/budgets";
 import { isWithinRolling30Days } from "../../utils/dates";
-import { roundMoney } from "../../utils/misc";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
+import { sumAmounts } from "../../state/totals";
 import { fmt, fmtDate } from "../../utils/format";
 
 // Combines spending-breakdown rows that share the same category name into a
@@ -25,7 +26,7 @@ function mergeBreakdownRowsByName(rows) {
   rows.forEach((r) => {
     if (indexByName.has(r.name)) {
       const target = merged[indexByName.get(r.name)];
-      target.spent += r.spent;
+      target.spent = roundMoney(target.spent + r.spent);
       if (r.sourceIds) target.sourceIds = [...(target.sourceIds || []), ...r.sourceIds];
     } else {
       indexByName.set(r.name, merged.length);
@@ -119,8 +120,8 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   // "Uncategorized" isn't tied to any budget, so - like any category with no time
   // frame - it's scoped to a rolling 30 days rather than the calendar month.
   const rolling30Tx = transactions.filter((t) => t.type === "expense" && isWithinRolling30Days(t.date));
-  const uncategorizedSpent = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
-  const totalRollingSpent = rolling30Tx.reduce((s, t) => s + t.amount, 0);
+  const uncategorizedSpent = sumAmounts(rolling30Tx.filter((t) => !t.categoryId));
+  const totalRollingSpent = sumAmounts(rolling30Tx);
 
   // Spending breakdown card: defaults to the active budget if one's set, else
   // falls back to the rolling 30-day view, but can be toggled either way.
@@ -131,7 +132,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   // categories - nothing outside those categories counts toward it - so the
   // rows always add up to exactly 100% of the total shown above them.
   const budgetBreakdownRows = budgetCats.map((c) => ({ key: c.id, name: c.name, color: c.color, spent: c.spent, sourceIds: [c.id] }));
-  const budgetBreakdownTotal = budgetBreakdownRows.reduce((s, r) => s + r.spent, 0);
+  const budgetBreakdownTotal = sumMoneyBy(budgetBreakdownRows, (r) => r.spent);
 
   // Month view: every rolling-30-day expense, grouped by its top-level category
   // (an itemized sub-expense rolls its spend up into its parent, same as the
@@ -143,7 +144,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
     const cat = categories.find((c) => c.id === t.categoryId);
     const top = cat ? (cat.parentCategoryId ? categories.find((c) => c.id === cat.parentCategoryId) : cat) : null;
     if (!top) return;
-    monthByTopCategory[top.id] = (monthByTopCategory[top.id] || 0) + t.amount;
+    monthByTopCategory[top.id] = roundMoney((monthByTopCategory[top.id] || 0) + t.amount);
   });
   const monthBreakdownRows = Object.entries(monthByTopCategory).map(([id, spent]) => {
     const cat = categories.find((c) => c.id === id);
@@ -192,7 +193,7 @@ export function StatusView({ categories, transactions, onAdd, onEdit, onDelete, 
   const allocationRows = budgetCats
     .map((c) => ({ key: c.id, name: c.name, color: c.color, allocated: c.limit || 0, spent: c.spent }))
     .sort((a, b) => b.allocated - a.allocated);
-  const allocationTotal = allocationRows.reduce((s, r) => s + r.allocated, 0);
+  const allocationTotal = sumMoneyBy(allocationRows, (r) => r.allocated);
   const allocationRowsWithPct = allocationRows.map((r) => {
     const allocPct = allocationTotal > 0 ? Math.round((r.allocated / allocationTotal) * 100) : 0;
     const spentPct = r.allocated > 0 ? (r.spent / r.allocated) * 100 : 0;

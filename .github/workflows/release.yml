@@ -39,6 +39,10 @@ jobs:
         working-directory: Source
         run: npm ci
 
+      - name: Run tests
+        working-directory: Source
+        run: npm test
+
       - name: Build
         working-directory: Source
         env:

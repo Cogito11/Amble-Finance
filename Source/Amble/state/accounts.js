@@ -1,3 +1,5 @@
+import { fromCents, toCents } from "../utils/money";
+
 export function isDebtAccount(account) {
   return account.type === "credit" || account.type === "loan";
 }
@@ -14,17 +16,19 @@ export function isOpenAccount(account) {
   return !account.closed;
 }
 
+// Accumulates in whole cents (see utils/money.js) so the result is exact: a card paid
+// off to the cent comes out as exactly 0, never 5.5e-17.
 export function computeBalance(account, transactions) {
-  let balance = account.startingBalance || 0;
+  let cents = toCents(account.startingBalance);
   transactions.forEach((t) => {
-    if (t.type === "income" && t.accountId === account.id) balance += t.amount;
-    else if (t.type === "expense" && t.accountId === account.id) balance -= t.amount;
+    if (t.type === "income" && t.accountId === account.id) cents += toCents(t.amount);
+    else if (t.type === "expense" && t.accountId === account.id) cents -= toCents(t.amount);
     else if (t.type === "transfer") {
-      if (t.accountId === account.id) balance -= t.amount;
-      if (t.toAccountId === account.id) balance += t.amount;
+      if (t.accountId === account.id) cents -= toCents(t.amount);
+      if (t.toAccountId === account.id) cents += toCents(t.amount);
     }
   });
-  return balance;
+  return fromCents(cents);
 }
 
 /* ---------------------------------- accounts view ---------------------------------- */

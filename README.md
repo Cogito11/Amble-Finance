@@ -69,6 +69,25 @@ Amble doesn't have a server, an account system, or any analytics. All of your da
 transactions, categories, and budget plans are stored locally on your device. Use the built-in
 **Data** export in the app's **More** tab any time you want a portable JSON backup.
 
+### Where your data lives, and how it's protected
+
+In the desktop app your data is saved as ordinary files in the app's data folder (**More → Data**
+shows the exact location and has an **Open data folder** button). The main file is plain JSON you can
+open yourself. It is written safely, so a crash, power cut or full disk can't leave a half-written file:
+
+- **Atomic saves.** A change is written to a temporary file, flushed to disk, and only then swapped in.
+  If a save fails, Amble keeps your changes in memory, tells you why, and keeps retrying.
+- **Automatic backups.** Amble keeps backups next to your data: one the first time you change something
+  in each session, then at most every 30 minutes, plus one before every import, restore, reset or delete.
+  Restore any of them from **More → Data**, or from the recovery screen if the data file is ever damaged.
+- **Several windows are safe.** Edits made in a popped-out window and the main window are merged, not
+  overwritten.
+- **Damaged data is never overwritten.** If something in your data can't be read, Amble tells you, keeps
+  the original untouched, and sets unreadable records aside so they can be exported instead of being lost.
+
+If you used an earlier version, your data is copied into this location the first time you open the new
+version. The old copy is left where it was.
+
 ## Contributing
 
 Issues and pull requests are welcome. If you're proposing a larger change, opening an issue

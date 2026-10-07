@@ -1,14 +1,30 @@
 import React, { useState, useRef } from "react";
 import {
-  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe, X, ScrollText
+  Trash2, AlertCircle, Download, Upload, FileSpreadsheet, Repeat, RefreshCw, Check, Database, Github, Globe, X, ScrollText, ExternalLink
 } from "lucide-react";
 import { ShortcutsList } from "../common/Shortcuts";
+import { BackupList } from "../common/BackupList";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
 import { checkForUpdate } from "../../utils/updates";
 
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
+  {
+    version: "1.7.2",
+    items: [
+      "Added the option for quarterly and semi annually repeating bills.",
+      "Added automatic backups of user data, which can be restored or found from the **Data** tab in More.",
+      "Data is now saved more safely, and Amble warns if a change can't be saved and keeps trying.",
+      "Changes made in a popped-out window and the main window are now combined instead of overwriting each other.",
+      "Damaged or unreadable data no longer crashes the app or gets overwritten, and a recovery screen lets you restore a backup.",
+      "Importing a backup now checks the file and tells you what it contains before replacing anything.",
+      "Fixed small rounding errors that could leave a paid-off card showing debt or stop a fully funded goal from completing.",
+      "Fixed monthly repeating budgets ending on the wrong day, or keeping an old repeat day after the start date was changed.",
+      "Fixed bills adding transactions to last month's budget category after a budget repeats.",
+      "Transactions can no longer be saved without a date, and any existing ones are flagged at the top of the transactions list.",
+    ],
+  },
   {
     version: "1.7.1",
     items: [
@@ -220,6 +236,8 @@ export function MoreView({
   currency, onChangeCurrency, accountCount, budgetCount, categoryCount, onRefreshCategoryColors,
   dbSizeBytes, lastBackupAt,
   onDeleteAllTransactions, onDeleteAllBudgets, onDeleteAllCategories, onResetSampleData, onFactoryReset,
+  dataInfo = null, backups = [], onOpenDataFolder, onRestoreBackup,
+  quarantineCount = 0, onExportQuarantine, onClearQuarantine,
   dashboardWidgets, onToggleWidget,
 }) {
   const [tab, setTab] = useState("settings");
@@ -393,6 +411,34 @@ export function MoreView({
               </button>
             </div>
           </div>
+          {dataInfo && (
+            <div className="card">
+              <div className="card-title">Data location &amp; automatic backups</div>
+              <p className="settings-desc">
+                Your data is stored as ordinary files in <code style={{ wordBreak: "break-all" }}>{dataInfo.dir}</code>. Amble keeps
+                automatic backups there too, so a bad import, a mistake, or a damaged file can be undone. Restoring one never
+                deletes anything: your current data is backed up first.
+              </p>
+              <div className="settings-actions" style={{ marginBottom: 14 }}>
+                <button className="btn btn-ghost" onClick={onOpenDataFolder}><ExternalLink size={14} /> Open data folder</button>
+              </div>
+              <BackupList backups={backups} onRestore={onRestoreBackup} />
+            </div>
+          )}
+          {quarantineCount > 0 && (
+            <div className="card">
+              <div className="card-title">Set-aside records</div>
+              <p className="settings-desc">
+                Amble found {quarantineCount} record{quarantineCount === 1 ? "" : "s"} it couldn't read when opening or
+                importing your data. Nothing was thrown away: they're saved here so you can export them (for example, to
+                recover an amount by hand) or delete them once you're done.
+              </p>
+              <div className="settings-actions">
+                <button className="btn btn-ghost" onClick={onExportQuarantine}><Download size={14} /> Export set-aside records (.json)</button>
+                <button className="btn btn-ghost tone-rust" onClick={onClearQuarantine}><Trash2 size={14} /> Delete them</button>
+              </div>
+            </div>
+          )}
           <div className="card">
             <div className="card-title">Data cleanup</div>
             <p className="settings-desc">

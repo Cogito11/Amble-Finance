@@ -279,6 +279,19 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .closed-acc-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .closed-acc-balance { font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:600; flex-shrink:0; }
 
+.backup-list { display: flex; flex-direction: column; gap: 8px; }
+.backup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.backup-when { font-size: 13.5px; font-weight: 500; }
+.recovery-screen { padding: 24px; align-items: center; justify-content: center; }
+.recovery-card { width: 100%; max-width: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; color: var(--text); }
+.recovery-title { margin: 0 0 10px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 24px; }
+.recovery-text { margin: 0 0 16px; color: var(--text-muted); line-height: 1.5; font-size: 14px; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.recovery-danger { margin-top: 4px; }
+.recovery-ok { padding: 10px 12px; border-radius: 8px; background: var(--brass-soft); color: var(--text); font-size: 13.5px; line-height: 1.45; }
+.recovery-details { margin-top: 18px; font-size: 12.5px; color: var(--text-muted); }
+.recovery-details pre { white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; background: var(--surface-2); padding: 10px; border-radius: 8px; }
+.form-hint { font-size: 12.5px; margin: 6px 0 0; line-height: 1.4; }
 .inline-error { display:flex; align-items:center; gap:8px; background: rgba(193,84,74,0.1); border:1px solid var(--rust); color:#8a3327; padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px; }
 
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding: 70px 20px; color: var(--text-faint); text-align:center; }

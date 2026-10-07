@@ -7,6 +7,7 @@ import { useAccountAmountField } from "../../hooks/useAccountAmountField";
 import { currentMonthKey, monthKeyOf, shiftMonthKey } from "../../utils/dates";
 import { fmt } from "../../utils/format";
 import { blurOnWheel } from "../../utils/misc";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
 
 export function EmergencyFundCalculator({ onBack, accounts, balances, transactions }) {
   const [expenses, setExpenses] = useState(2500);
@@ -20,12 +21,12 @@ export function EmergencyFundCalculator({ onBack, accounts, balances, transactio
     const byMonth = {};
     (transactions || []).filter((t) => t.type === "expense").forEach((t) => {
       const mk = monthKeyOf(t.date);
-      byMonth[mk] = (byMonth[mk] || 0) + t.amount;
+      byMonth[mk] = roundMoney((byMonth[mk] || 0) + t.amount);
     });
     const thisMonth = currentMonthKey();
     const lastMonthKey = shiftMonthKey(thisMonth, -1);
     const priorMonthKeys = Object.keys(byMonth).filter((mk) => mk !== thisMonth).sort().reverse().slice(0, 6);
-    const avgTotal = priorMonthKeys.reduce((s, mk) => s + byMonth[mk], 0);
+    const avgTotal = sumMoneyBy(priorMonthKeys, (mk) => byMonth[mk]);
     return {
       lastMonthAmount: byMonth[lastMonthKey] || 0,
       hasLastMonth: byMonth[lastMonthKey] !== undefined,

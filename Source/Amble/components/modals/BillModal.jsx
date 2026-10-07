@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Trash2, CheckCircle2, Undo2, AlertCircle, X } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkBillForm } from "../../state/inputs";
 import { blurOnWheel } from "../../utils/misc";
 import { todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import {
-  describeBillChanges, isSeries, linkableTransactions, nextSegmentStart, occurrenceStatus, pickOccurrence,
+  FREQUENCY_OPTIONS, billCategorySnapshot, describeBillChanges, isSeries, linkableTransactions, nextSegmentStart, occurrenceStatus, pickOccurrence,
 } from "../../state/planning";
 
 // Editing a recurring bill works like a repeating calendar event:
@@ -64,15 +66,18 @@ export function BillModal({
   const isSelectable = (c) => !c.planId || c.planId === activeBudgetId;
   const parentCategories = categories.filter((c) => c.type === type && !c.parentCategoryId && (isSelectable(c) || c.id === categoryId));
 
-  const canSave = name.trim().length > 0 && amount && parseFloat(amount) > 0 && accountId && dueDate;
+  const check = checkBillForm({ name, amount, accountId, dueDate, recurring, hasEndDate, endDate });
+  const canSave = check.valid;
   const wasRecurring = isEdit && !!original.recurring;
 
   const buildValues = () => ({
     name: name.trim(),
     type,
-    amount: Math.abs(parseFloat(amount)),
+    amount: check.amount ?? 0,
     accountId,
     categoryId: categoryId || null,
+    // Remembered so the category can be found by name after its budget rolls over (see resolveBillCategoryId).
+    ...billCategorySnapshot(categoryId, categories),
     dueDate,
     recurring,
     frequency: recurring ? frequency : null,
@@ -281,10 +286,7 @@ export function BillModal({
             <div className="form-group">
               <label>Frequency</label>
               <select className="select" value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Every 2 weeks</option>
-                <option value="monthly">Monthly</option>
-                <option value="yearly">Yearly</option>
+                {FREQUENCY_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
               </select>
             </div>
             <label className="checkbox-row">
@@ -308,6 +310,7 @@ export function BillModal({
           <label>Notes <span className="muted">· optional</span></label>
           <input className="input" placeholder="e.g. Autopay on the 3rd" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={startDelete}><Trash2 size={14} /> Delete</button> : <span />}

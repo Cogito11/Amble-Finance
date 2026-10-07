@@ -1,6 +1,7 @@
 import { categoryIncome, clearRemovedCategoryRefs, seedCategories, syncBudgetCategories } from "./categories";
 import { addMonthsClamped, currentMonthRange, toLocalDateStr, todayStr } from "../utils/dates";
-import { uid, roundMoney } from "../utils/misc";
+import { uid } from "../utils/misc";
+import { roundMoney, sumMoneyBy } from "../utils/money";
 
 export const DEFAULT_BUDGET_CATEGORIES = [
   ["Groceries", 500], ["Dining Out", 200], ["Transportation", 200],
@@ -17,7 +18,7 @@ export function seedDefaultBudget() {
     name: "Default Budget",
     startDate,
     endDate,
-    income: DEFAULT_BUDGET_CATEGORIES.reduce((s, [, limit]) => s + limit, 0),
+    income: sumMoneyBy(DEFAULT_BUDGET_CATEGORIES, ([, limit]) => limit),
     dateCreated: todayStr(),
     order: 0,
     active: true,
@@ -79,6 +80,50 @@ export function budgetMatchDurationDays(budget) {
 // instead count forward from the budget's start date, so a budget set to repeat
 // weekly becomes due a week after it started, 2 weeks becomes due two weeks
 // after it started, and so on - independent of how long the budget itself runs.
+// --- Month-based repeat anchors -------------------------------------------------
+// A monthly repeat has to keep two "days of the month" alive across short months:
+//   - the START anchor (repeat.anchorDay): a budget starting on the 31st should start
+//     on the 31st again whenever the month has one, and on the last day otherwise;
+//   - the END anchor (repeat.endAnchorDay): same idea for the end date. A budget that
+//     ends on the last day of its month (Oct 31, Sep 30, Feb 28...) is treated as
+//     "ends on the last day of the month", so it follows the calendar (Nov 30, Dec 31,
+//     Feb 28/29) instead of drifting. Any other end day (e.g. the 14th, or an explicit
+//     30th) keeps that day number, clamped on months too short to have it.
+// Both are stored on `repeat` the first time repeating is set up and carried forward by
+// every rolled-over cycle, because a cycle that had to clamp (Feb 28) can no longer tell
+// what day the budget was originally aiming for. Budgets saved before endAnchorDay existed
+// derive it from their current end date.
+const dayOfMonth = (dateStr) => Number(dateStr.slice(8, 10));
+const monthIndex = (dateStr) => Number(dateStr.slice(0, 4)) * 12 + Number(dateStr.slice(5, 7));
+function isLastDayOfMonth(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.getDate() === new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+export function budgetStartAnchorDay(budget) {
+  return (budget.repeat && budget.repeat.anchorDay) || dayOfMonth(budget.startDate);
+}
+
+export function budgetEndAnchorDay(budget) {
+  if (budget.repeat && budget.repeat.endAnchorDay) return budget.repeat.endAnchorDay;
+  return isLastDayOfMonth(budget.endDate) ? 31 : dayOfMonth(budget.endDate);
+}
+
+// Which anchors a budget form should save, given the budget being edited (`initial`, may be
+// empty for a new budget) and the dates currently typed into the form. A stored anchor is
+// kept only while the date it was derived from is unchanged: if the user moves the start
+// from the 1st to the 15th, the old "1" anchor must not survive and keep scheduling the
+// next cycle on the 1st.
+export function formRepeatAnchors(initial, startDate, endDate) {
+  const initialRepeat = (initial && initial.repeat) || {};
+  const startUnchanged = startDate === ((initial && initial.startDate) || "");
+  const endUnchanged = endDate === ((initial && initial.endDate) || "");
+  return {
+    anchorDay: startDate ? budgetStartAnchorDay({ startDate, repeat: { anchorDay: startUnchanged ? initialRepeat.anchorDay : null } }) : null,
+    endAnchorDay: endDate ? budgetEndAnchorDay({ endDate, repeat: { endAnchorDay: endUnchanged ? initialRepeat.endAnchorDay : null } }) : null,
+  };
+}
+
 export function budgetDueDate(budget) {
   if (!budget.startDate || !budget.endDate) return null;
   const freq = budget.repeat && budget.repeat.frequency;
@@ -94,12 +139,9 @@ export function budgetDueDate(budget) {
     return toLocalDateStr(due);
   }
   if (freq === "monthly") {
-    // Prefer the anchor day stored on the budget being edited the first time repeating
-    // was set up, so it survives every later cycle even if an in-between cycle had to
-    // clamp down to a shorter month. Only falls back to the current startDate's
-    // day for budgets saved before anchorDay existed.
-    const anchorDay = (budget.repeat && budget.repeat.anchorDay) || new Date(budget.startDate + "T00:00:00").getDate();
-    return addMonthsClamped(budget.startDate, 1, anchorDay);
+    // See budgetStartAnchorDay: prefers the anchor stored when repeating was set up so it
+    // survives cycles that had to clamp down to a shorter month.
+    return addMonthsClamped(budget.startDate, 1, budgetStartAnchorDay(budget));
   }
   return null;
 }
@@ -117,6 +159,16 @@ export function nextBudgetDates(budget) {
   const durationDays = budgetMatchDurationDays(budget);
   if (!durationDays) return null;
   const freq = budget.repeat && budget.repeat.frequency;
+  if (freq === "monthly") {
+    // Calendar-based, not a fixed number of days: a "Oct 1 - Oct 31" budget must become
+    // "Nov 1 - Nov 30", not "Nov 1 - Dec 1" (31 days later). The new start is one month on;
+    // the new end keeps the budget's shape in months (e.g. 0 months for a single calendar
+    // month, 1 for "15th to the 14th") and lands on the end anchor day (see above).
+    const startDate = addMonthsClamped(budget.startDate, 1, budgetStartAnchorDay(budget));
+    const spanMonths = monthIndex(budget.endDate) - monthIndex(budget.startDate);
+    const endDate = addMonthsClamped(startDate, spanMonths, budgetEndAnchorDay(budget));
+    return { startDate, endDate: endDate < startDate ? startDate : endDate };
+  }
   let start;
   if (freq === "match") {
     start = new Date(budget.endDate + "T00:00:00");
@@ -171,7 +223,12 @@ export function rolloverDueBudgets(state) {
         // same as any other newly created budget (see nextTopBudgetOrder).
         order: nextTopBudgetOrder(budgets),
         active: true,
-        repeat: { ...b.repeat },
+        // Carry the anchors forward explicitly (see budgetStartAnchorDay): a cycle that had to
+        // clamp to a short month can't work out the original day by itself.
+        repeat: {
+          ...b.repeat,
+          ...(b.repeat.frequency === "monthly" ? { anchorDay: budgetStartAnchorDay(b), endAnchorDay: budgetEndAnchorDay(b) } : {}),
+        },
         categories: (b.categories || []).map((c) => ({
           id: uid(), name: c.name, mode: c.mode, bulkAmount: c.bulkAmount, date: c.date || null,
           items: (c.items || []).map((it) => ({ id: uid(), name: it.name, amount: it.amount, date: it.date || null })),

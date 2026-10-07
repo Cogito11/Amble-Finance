@@ -9,6 +9,7 @@ import { EmptyState } from "../common/EmptyState";
 import { StatCard } from "../common/StatCard";
 import { fmt, fmtMonths } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
+import { sumMoneyBy } from "../../utils/money";
 import { isDebtAccount, isOpenAccount } from "../../state/accounts";
 
 // Simulates paying off a set of debts under a given strategy ("avalanche" pays
@@ -33,7 +34,7 @@ export function simulateDebtPayoff(debts, extra, strategy) {
 
   let totalInterest = 0;
   let months = 0;
-  const startingTotal = working.reduce((s, d) => s + balMap[d.id], 0);
+  const startingTotal = sumMoneyBy(working, (d) => balMap[d.id]);
   const points = [{ month: 0, balance: startingTotal }];
   const payoffOrder = [];
   const MAX_MONTHS = 600; // 50-year safety cap in case payments can't cover interest

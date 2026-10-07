@@ -3,6 +3,8 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkCategoryForm } from "../../state/inputs";
 import { ColorSwatchButton } from "../common/ColorSwatchButton";
 import { nextCategoryColor } from "../../state/categories";
 import { blurOnWheel, uid } from "../../utils/misc";
@@ -14,7 +16,8 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
   const [limit, setLimit] = useState(initial.limit ?? "");
   const [color, setColor] = useState(initial.color || nextCategoryColor(categories, initial.name || ""));
 
-  const canSave = name.trim().length > 0;
+  const check = checkCategoryForm({ name, type, limit });
+  const canSave = check.valid;
 
   const submit = () => {
     if (!canSave) return;
@@ -22,7 +25,7 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
       id: initial.id || uid(),
       name: name.trim(),
       type,
-      limit: type === "expense" ? (parseFloat(limit) || 0) : 0,
+      limit: check.limit,
       color,
       planId: initial.planId ?? null,
     });
@@ -51,6 +54,7 @@ export function CategoryModal({ initial, categories, onSave, onClose, onDelete }
             <input type="number" min="0" step="1" className="input mono" placeholder="0.00" value={limit} onChange={(e) => setLimit(e.target.value)} onWheel={blurOnWheel} />
           </div>
         )}
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

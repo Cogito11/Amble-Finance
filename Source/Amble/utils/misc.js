@@ -1,10 +1,8 @@
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-// Snaps a money value to whole cents. Adding decimal amounts in floating point
-// leaves tiny errors (0.1 + 0.2 === 0.30000000000000004), so a budget that was
-// met exactly could come out a hair over its limit and be flagged "over".
-// Rounding every summed total to cents makes "spent === limit" compare as equal.
-export const roundMoney = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// Snaps a money value to whole cents. Re-exported from money.js, which holds all the
+// cent-based money helpers (see there for why floating point can't be trusted).
+export { roundMoney } from "./money";
 
 // Number inputs change their value when the user scrolls over them while focused,
 // which is an easy way to accidentally mangle an amount. Blurring on wheel stops
@@ -30,6 +28,6 @@ export const isTypingTarget = (el) => {
 export function sortTransactionsNewestFirst(list) {
   return list
     .map((t, i) => ({ t, i }))
-    .sort((a, b) => b.t.date.localeCompare(a.t.date) || b.i - a.i)
+    .sort((a, b) => String(b.t.date ?? "").localeCompare(String(a.t.date ?? "")) || b.i - a.i)
     .map(({ t }) => t);
 }

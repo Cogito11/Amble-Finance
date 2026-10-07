@@ -56,6 +56,8 @@ export const fmtMonths = (months) => {
 
 export const fmtDate = (d) => {
   const dt = new Date(d + "T00:00:00");
+  // A record with a blank/damaged date would otherwise render the literal text "Invalid Date".
+  if (Number.isNaN(dt.getTime())) return "No date";
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 };
 

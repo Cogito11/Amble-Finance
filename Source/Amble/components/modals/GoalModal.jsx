@@ -3,6 +3,8 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkGoalForm } from "../../state/inputs";
 import { blurOnWheel, uid } from "../../utils/misc";
 
 export function GoalModal({ initial, accounts, onSave, onClose, onDelete }) {
@@ -16,18 +18,19 @@ export function GoalModal({ initial, accounts, onSave, onClose, onDelete }) {
   const [manualAmount, setManualAmount] = useState(initial.manualAmount ?? "");
   const [notes, setNotes] = useState(initial.notes || "");
 
-  const canSave = name.trim().length > 0 && targetAmount && parseFloat(targetAmount) > 0 && (trackingMode !== "account" || accountId);
+  const check = checkGoalForm({ name, targetAmount, trackingMode, accountId, manualAmount, targetDate });
+  const canSave = check.valid;
 
   const submit = () => {
     if (!canSave) return;
     onSave({
       id: initial.id || uid(),
       name: name.trim(),
-      targetAmount: Math.abs(parseFloat(targetAmount)),
+      targetAmount: check.targetAmount,
       targetDate: targetDate || null,
       trackingMode,
       accountId: trackingMode === "account" ? accountId : null,
-      manualAmount: trackingMode === "manual" ? (parseFloat(manualAmount) || 0) : 0,
+      manualAmount: trackingMode === "manual" ? check.manualAmount : 0,
       notes: notes.trim(),
       dateCreated: initial.dateCreated || new Date().toISOString(),
     });
@@ -76,6 +79,7 @@ export function GoalModal({ initial, accounts, onSave, onClose, onDelete }) {
           <label>Notes <span className="muted">· optional</span></label>
           <input className="input" placeholder="What's this for?" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

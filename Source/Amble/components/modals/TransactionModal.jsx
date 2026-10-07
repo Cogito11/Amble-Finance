@@ -3,8 +3,10 @@ import {
   Trash2
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { FormHint } from "../common/FormHint";
+import { checkTransactionForm } from "../../state/inputs";
 import { categoryIncome, categorySpend } from "../../state/categories";
-import { todayStr } from "../../utils/dates";
+import { isValidDateStr, todayStr } from "../../utils/dates";
 import { fmt } from "../../utils/format";
 import { blurOnWheel, uid } from "../../utils/misc";
 
@@ -12,7 +14,10 @@ import { blurOnWheel, uid } from "../../utils/misc";
 export function TransactionModal({ initial, accounts, categories, budgets, transactions, onSave, onClose, onDelete }) {
   const isEdit = !!initial.id;
   const [type, setType] = useState(initial.type || "expense");
-  const [date, setDate] = useState(initial.date || todayStr());
+  // A new transaction starts on today. An existing one that somehow has no valid date (saved before
+  // dates were validated) starts blank instead: pre-filling today would quietly give it a date the
+  // person never chose, so they pick the real one (Save stays disabled until they do).
+  const [date, setDate] = useState(initial.id ? (isValidDateStr(initial.date) ? initial.date : "") : (initial.date || todayStr()));
   const [description, setDescription] = useState(initial.description || "");
   const [amount, setAmount] = useState(initial.amount ?? "");
   // Closed accounts shouldn't be offered as a default for a brand-new transaction,
@@ -135,14 +140,17 @@ export function TransactionModal({ initial, accounts, categories, budgets, trans
     return { name: selectedCategory.name, tracked };
   })();
 
-  const canSave = amount && parseFloat(amount) > 0 && accountId && (type !== "transfer" || (toAccountId && toAccountId !== accountId));
+  // Validates the amount (finite, positive, rounded to cents), the date (required, a real calendar
+  // date) and the accounts. The form saves the parsed values, not whatever text happened to be typed.
+  const check = checkTransactionForm({ type, date, amount, accountId, toAccountId });
+  const canSave = check.valid;
 
   const submit = () => {
     if (!canSave) return;
     onSave({
       id: initial.id || uid(),
       type, date, description: description.trim(),
-      amount: Math.abs(parseFloat(amount)),
+      amount: check.amount,
       accountId,
       toAccountId: type === "transfer" ? toAccountId : null,
       categoryId: categoryId || null,
@@ -246,6 +254,7 @@ export function TransactionModal({ initial, accounts, categories, budgets, trans
             <strong>{incomeCategoryStatus.name}</strong>
           </div>
         )}
+        <FormHint check={check} />
       </div>
       <div className="modal-footer">
         {isEdit ? <button className="btn btn-ghost tone-rust" onClick={() => onDelete(initial.id)}><Trash2 size={14} /> Delete</button> : <span />}

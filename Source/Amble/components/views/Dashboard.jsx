@@ -10,23 +10,23 @@ import { Gauge } from "../common/Gauge";
 import { StatCard } from "../common/StatCard";
 import { budgetTotalSpent } from "./StatusView";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS, DASHBOARD_WIDGETS, defaultWidgetPrefs } from "../../constants";
-import { computeBalance, isAssetAccount, isDebtAccount, sortedAccountsList } from "../../state/accounts";
+import { computeBalance, isDebtAccount, sortedAccountsList } from "../../state/accounts";
+import { accountTotals, sumAmounts, sumAmountsOfType } from "../../state/totals";
 import { categorySpend, budgetAllocated } from "../../state/categories";
 import { currentMonthKey, isWithinRolling30Days, monthKeyOf, toLocalDateStr, todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
 import { sortTransactionsNewestFirst } from "../../utils/misc";
 
 /* ---------------------------------- dashboard ---------------------------------- */
 export function Dashboard({ accounts, categories, transactions, balances, budgets, onAdd, onGoTx, onNavigate, widgets, onCustomize }) {
   const w = widgets || defaultWidgetPrefs();
-  const netWorth = accounts.reduce((s, a) => s + balances[a.id], 0);
-  const totalAssets = accounts.filter(isAssetAccount).reduce((s, a) => s + balances[a.id], 0);
-  const totalDebt = accounts.filter(isDebtAccount).reduce((s, a) => s + Math.max(0, -balances[a.id]), 0);
+  const { netWorth, totalAssets, totalDebt } = accountTotals(accounts, balances);
 
   const cmk = currentMonthKey();
   const monthTx = transactions.filter((t) => monthKeyOf(t.date) === cmk);
-  const monthIncome = monthTx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const monthExpense = monthTx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const monthIncome = sumAmountsOfType(monthTx, "income");
+  const monthExpense = sumAmountsOfType(monthTx, "expense");
 
   const activeBudget = (budgets || []).find((b) => b.active) || null;
   const activeBudgetId = activeBudget?.id;
@@ -45,8 +45,8 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
   // "Uncategorized" isn't tied to any budget, so — like any category with no time
   // frame — its gauge is scoped to a rolling 30 days rather than the calendar month.
   const rolling30Tx = transactions.filter((t) => t.type === "expense" && isWithinRolling30Days(t.date));
-  const uncategorizedSpentRolling = rolling30Tx.filter((t) => !t.categoryId).reduce((s, t) => s + t.amount, 0);
-  const rolling30Expense = rolling30Tx.reduce((s, t) => s + t.amount, 0);
+  const uncategorizedSpentRolling = sumAmounts(rolling30Tx.filter((t) => !t.categoryId));
+  const rolling30Expense = sumAmounts(rolling30Tx);
 
   // With a budget active: same rule as the budget gauges above - general categories
   // + the active budget's categories only, so a deactivated budget's spend doesn't
@@ -74,7 +74,7 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
           const cat = categories.find((c) => c.id === t.categoryId);
           const top = cat ? (cat.parentCategoryId ? categories.find((c) => c.id === cat.parentCategoryId) : cat) : null;
           if (!top) return;
-          byTopCategory[top.id] = (byTopCategory[top.id] || 0) + t.amount;
+          byTopCategory[top.id] = roundMoney((byTopCategory[top.id] || 0) + t.amount);
         });
         const rows = Object.entries(byTopCategory).map(([id, value]) => {
           const cat = categories.find((c) => c.id === id);
@@ -96,8 +96,8 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
     const tx = transactions.filter((t) => monthKeyOf(t.date) === key);
     trendData.push({
       month: label,
-      income: tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0),
-      expense: tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0),
+      income: sumAmountsOfType(tx, "income"),
+      expense: sumAmountsOfType(tx, "expense"),
     });
   }
 
@@ -135,7 +135,7 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
 
   const netWorthTrendData = allDatesInWindow.map((date) => {
     const txUpTo = transactions.filter((t) => t.date <= date);
-    return { date, t: dateToTs(date), netWorth: accounts.reduce((s, a) => s + computeBalance(a, txUpTo), 0) };
+    return { date, t: dateToTs(date), netWorth: sumMoneyBy(accounts, (a) => computeBalance(a, txUpTo)) };
   });
   // Always end on today's actual net worth, even on a day with no transactions,
   // so the line reflects the current balance rather than stopping early.

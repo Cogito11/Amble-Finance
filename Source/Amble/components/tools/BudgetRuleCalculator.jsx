@@ -5,6 +5,7 @@ import {
 import { monthKeyOf } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
 import { blurOnWheel, sortTransactionsNewestFirst } from "../../utils/misc";
+import { roundMoney, sumMoneyBy } from "../../utils/money";
 
 export function BudgetRuleCalculator({ onBack, transactions }) {
   const [income, setIncome] = useState(4500);
@@ -23,10 +24,10 @@ export function BudgetRuleCalculator({ onBack, transactions }) {
     const byMonth = {};
     (transactions || []).filter((t) => t.type === "income").forEach((t) => {
       const mk = monthKeyOf(t.date);
-      byMonth[mk] = (byMonth[mk] || 0) + t.amount;
+      byMonth[mk] = roundMoney((byMonth[mk] || 0) + t.amount);
     });
     const months = Object.keys(byMonth).sort().reverse().slice(0, 6);
-    const total = months.reduce((s, mk) => s + byMonth[mk], 0);
+    const total = sumMoneyBy(months, (mk) => byMonth[mk]);
     return { value: months.length ? total / months.length : 0, monthsUsed: months.length };
   }, [transactions]);
 

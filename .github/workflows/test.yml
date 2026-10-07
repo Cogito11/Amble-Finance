@@ -1,0 +1,37 @@
+name: Tests
+
+# Runs the regression suite (and a production compile) on every push and pull request,
+# so a change that breaks money math, budget dates, or a view is caught before merge.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.19.1
+          cache: npm
+          cache-dependency-path: Source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Source
+        # Skips the Electron binary download - tests and the Vite compile don't need it.
+        run: npm ci --ignore-scripts
+
+      - name: Run tests
+        working-directory: Source
+        run: npm test
+
+      - name: Compile check (Vite production build)
+        working-directory: Source
+        run: npx vite build
