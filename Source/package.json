@@ -2,7 +2,7 @@
   "name": "amble-finance",
   "productName": "Amble",
   "private": true,
-  "version": "1.7.2",
+  "version": "1.7.3",
   "homepage": "https://github.com/Cogito11/Amble-Finance",
   "repository": {
     "type": "git",
@@ -25,7 +25,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7",
-    "lucide-react": "^0.383.0"
+    "lucide-react": "^0.383.0",
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
@@ -51,6 +52,7 @@
       "!dist/mac*{,/**/*}",
       "main.js",
       "preload.js",
+      "updater.js",
       "store/**/*",
       "Amble/assets/**/*"
     ],

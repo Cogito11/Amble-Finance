@@ -6,10 +6,22 @@ import { ShortcutsList } from "../common/Shortcuts";
 import { BackupList } from "../common/BackupList";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
-import { checkForUpdate } from "../../utils/updates";
+import { UpdatesRow } from "../common/UpdateControls";
 
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
+  {
+    version: "1.7.3",
+    items: [
+      "Added in-place updates for supported install types.",
+      "When a new version is available, a banner appears to download it and restart to apply, with no new installer needed.",
+      "Amble now checks for new versions shortly after it starts and every few hours while it's open.",
+      "A downloaded update installs automatically the next time you close Amble if you choose **Later**.",
+      "The **Check for update** button in the About section can now download and install an update directly.",
+      "In-place updates work with the Windows installer, Linux AppImage, and Linux .deb. Windows portable and macOS still require download.",
+      "Cleaned up the README so it's shorter and easier to follow.",
+    ],
+  },
   {
     version: "1.7.2",
     items: [
@@ -262,31 +274,6 @@ export function MoreView({
     }, 450);
   };
 
-  // Manual update check from the About tab. Unlike the background toast check
-  // in App.jsx, this always hits GitHub live (no cache/throttle) since it's a
-  // one-off click, not something that could happen on every launch.
-  const [updateCheck, setUpdateCheck] = useState({ status: "idle" }); // idle | checking | current | available | error
-  const handleCheckForUpdate = async () => {
-    setUpdateCheck({ status: "checking" });
-    try {
-      const result = await checkForUpdate();
-      setUpdateCheck(result.hasUpdate ? { status: "available", version: result.latestVersion } : { status: "current" });
-    } catch (e) {
-      setUpdateCheck({ status: "error", reason: e && e.message });
-    }
-  };
-  const updateCheckMessage = {
-    idle: "Check GitHub for a newer release of Amble.",
-    checking: "Checking for updates…",
-    current: `You're on the latest version (v${APP_INFO.version}).`,
-    available: `A newer version (v${updateCheck.version}) is available.`,
-    error: updateCheck.reason === "no-release"
-      ? "No published release found on GitHub."
-      : updateCheck.reason === "rate-limited"
-        ? "GitHub's API rate limit was hit. Try again in a few minutes."
-        : "Couldn't check for updates right now.",
-  }[updateCheck.status];
-
   return (
     <div className="more-view">
       <div className="seg more-tabs">
@@ -492,18 +479,7 @@ export function MoreView({
             <div className="about-row"><span className="muted">Developed By</span><span>{APP_INFO.maintainerName} ({APP_INFO.maintainerHandle})</span></div>
             <div className="about-row">
               <span className="muted">Updates</span>
-              <span>
-                {updateCheck.status === "available" ? (
-                  <a className="btn btn-primary btn-sm" href={APP_INFO.downloadUrl} target="_blank" rel="noreferrer">
-                    <Download size={13} /> Download v{updateCheck.version}
-                  </a>
-                ) : (
-                  <button className="btn btn-ghost btn-sm" onClick={handleCheckForUpdate} disabled={updateCheck.status === "checking"} title={updateCheckMessage}>
-                    {updateCheck.status === "current" ? <Check size={13} /> : <RefreshCw size={13} className={updateCheck.status === "checking" ? "spin" : ""} />}
-                    {" "}{updateCheck.status === "checking" ? "Checking…" : updateCheck.status === "current" ? "Up to date" : updateCheck.status === "error" ? "Check failed" : "Check for update"}
-                  </button>
-                )}
-              </span>
+              <span><UpdatesRow /></span>
             </div>
           </div>
           <div className="settings-actions about-links">
