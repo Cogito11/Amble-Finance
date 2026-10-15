@@ -73,6 +73,22 @@ describe("friendlyError", () => {
   });
 });
 
+describe("diagnostics", () => {
+  const withLog = (opts) => {
+    const log = vi.fn();
+    createUpdater({
+      app: { isPackaged: opts.isPackaged, getVersion: () => "1.7.2" }, BrowserWindow: { getAllWindows: () => [] },
+      loadAutoUpdater: () => fakeAutoUpdater(), platform: opts.platform, env: opts.env || {}, resourcesPath: "/r", existsSync: () => false, log,
+    });
+    return log;
+  };
+  it("logs why an install can't update itself, and when it can", () => {
+    expect(withLog({ isPackaged: true, platform: "linux" })).toHaveBeenCalledWith(expect.stringContaining("off for this install (unmanaged-install)"));
+    expect(withLog({ isPackaged: true, platform: "win32", env: { PORTABLE_EXECUTABLE_FILE: "x" } })).toHaveBeenCalledWith(expect.stringContaining("(portable)"));
+    expect(withLog({ isPackaged: true, platform: "linux", env: { APPIMAGE: "/a.AppImage" } })).toHaveBeenCalledWith("in-place updates are on");
+  });
+});
+
 describe("an install that can't update itself", () => {
   it("reports unsupported, never loads electron-updater, and ignores every request", async () => {
     const { updater, autoUpdater, loadAutoUpdater } = setup({ isPackaged: false });

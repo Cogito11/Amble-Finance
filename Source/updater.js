@@ -98,6 +98,9 @@ function createUpdater({
     error: null,
   };
 
+  // Say why, so "it opened the website instead of updating" can be diagnosed from the terminal.
+  log(support.supported ? "in-place updates are on" : `in-place updates are off for this install (${support.reason})`);
+
   let autoUpdater = null;
   let phase = "check";
   let backgroundCheck = false;
