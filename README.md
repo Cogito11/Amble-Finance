@@ -78,7 +78,7 @@ cd Amble-Finance/Source
 npm install        # always run this first, or the build can be missing parts
 npm start          # run the app from source
 npm test           # run the tests
-npm run build      # build installers for your current platform (output goes to Source/dist)
+npm run build      # build installers for your current platform (output goes to Source/release)
 ```
 
 A build produces the installers for the system you build on: Windows (installer and portable),

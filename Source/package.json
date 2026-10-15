@@ -22,15 +22,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "recharts": "^2.12.7",
-    "lucide-react": "^0.383.0",
     "electron-updater": "^6.8.9"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "lucide-react": "^0.383.0",
     "electron": "^31.3.0",
     "electron-builder": "^24.13.3",
     "concurrently": "^8.2.2",
@@ -41,6 +41,10 @@
   },
   "build": {
     "appId": "com.bishop.amble",
+    "directories": {
+      "output": "release"
+    },
+    "electronLanguages": ["en-US", "en-GB"],
     "publish": [
       {
         "provider": "github"
@@ -49,7 +53,6 @@
     "artifactName": "Amble_${version}_Setup_${os}_${arch}.${ext}",
     "files": [
       "dist/**/*",
-      "!dist/mac*{,/**/*}",
       "main.js",
       "preload.js",
       "updater.js",
