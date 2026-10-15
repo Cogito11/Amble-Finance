@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   Plus, Loader2, MoreHorizontal, Sliders, ExternalLink, ArrowLeft
 } from "lucide-react";
@@ -537,6 +537,22 @@ export default function App() {
     if (loaded && effectiveView === "more") refreshBackups();
   }, [loaded, effectiveView]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Every account's balance and this month's net are derived from the whole transaction list, so they're
+  // memoized: the app re-renders for plenty of reasons that don't touch the ledger (opening a dialog,
+  // dragging a nav item...). Kept above the early returns below so the hook order never changes.
+  const ledgerAccounts = state ? state.accounts : null;
+  const ledgerTransactions = state ? state.transactions : null;
+  const thisMonthKey = currentMonthKey();
+  const balances = useMemo(() => {
+    const result = {};
+    if (ledgerAccounts && ledgerTransactions) ledgerAccounts.forEach((a) => { result[a.id] = computeBalance(a, ledgerTransactions); });
+    return result;
+  }, [ledgerAccounts, ledgerTransactions]);
+  const netThisMonth = useMemo(
+    () => (ledgerTransactions ? netForMonth(ledgerTransactions, thisMonthKey) : 0),
+    [ledgerTransactions, thisMonthKey],
+  );
+
   // Used when a dialog crashes: closes everything so the app is usable again.
   const closeAllModals = () => {
     setTxModal(null); setPendingBillLink(null); setAccModal(null); setAccError(""); setCatModal(null);
@@ -563,9 +579,6 @@ export default function App() {
   // Every fmt() call in the tree (including deep child components) reads this
   // module-level variable, so it must be refreshed before anything below renders.
   setActiveCurrency(state.currency);
-
-  const balances = {};
-  state.accounts.forEach((a) => { balances[a.id] = computeBalance(a, state.transactions); });
 
   const saveTransaction = (t) => {
     // The form already validates, but nothing should ever be able to persist a transaction with
@@ -1177,7 +1190,6 @@ export default function App() {
   };
 
   const { netWorth, totalDebt, totalAssets, cash } = accountTotals(state.accounts, balances);
-  const netThisMonth = netForMonth(state.transactions, currentMonthKey());
   const footerMetrics = {
     netWorth: { label: "Net worth", value: netWorth },
     debt: { label: "Debt", value: totalDebt },

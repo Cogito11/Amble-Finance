@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Wallet, ArrowUpRight, ArrowDownRight, ArrowRightLeft, CreditCard, Sliders, ChevronRight
 } from "lucide-react";
@@ -10,12 +10,12 @@ import { Gauge } from "../common/Gauge";
 import { StatCard } from "../common/StatCard";
 import { budgetTotalSpent } from "./StatusView";
 import { ACCOUNT_ICONS, ACCOUNT_LABELS, DASHBOARD_WIDGETS, defaultWidgetPrefs } from "../../constants";
-import { computeBalance, isDebtAccount, sortedAccountsList } from "../../state/accounts";
-import { accountTotals, sumAmounts, sumAmountsOfType } from "../../state/totals";
+import { isDebtAccount, sortedAccountsList } from "../../state/accounts";
+import { accountTotals, netWorthAtDates, sumAmounts, sumAmountsOfType } from "../../state/totals";
 import { categorySpend, budgetAllocated } from "../../state/categories";
 import { currentMonthKey, isWithinRolling30Days, monthKeyOf, toLocalDateStr, todayStr } from "../../utils/dates";
 import { fmt, fmtDate } from "../../utils/format";
-import { roundMoney, sumMoneyBy } from "../../utils/money";
+import { roundMoney } from "../../utils/money";
 import { sortTransactionsNewestFirst } from "../../utils/misc";
 
 /* ---------------------------------- dashboard ---------------------------------- */
@@ -104,9 +104,9 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
   // Net worth over time, at exact granularity: one point for every date in the
   // last 6 months that actually has a transaction, instead of a single sampled
   // value per month. Each point is net worth as of the end of that date,
-  // reconstructed by replaying every transaction dated on or before it — same
-  // "replay through computeBalance" approach as before, just at the resolution
-  // of individual transaction dates rather than month boundaries.
+  // reconstructed from every transaction dated on or before it (see
+  // netWorthAtDates), at the resolution of individual transaction dates rather
+  // than month boundaries.
   const dateToTs = (isoDate) => new Date(`${isoDate}T00:00:00`).getTime();
   const today = todayStr();
   const nwTodayTs = dateToTs(today);
@@ -130,18 +130,22 @@ export function Dashboard({ accounts, categories, transactions, balances, budget
   // just a long gap the line has to interpolate across) plus every date that
   // actually has a transaction. Multiple transactions on the same day still
   // collapse into a single point.
-  const txDatesInWindow = transactions.filter((t) => t.date >= nwWindowStart && t.date <= today).map((t) => t.date);
-  const allDatesInWindow = Array.from(new Set([...nwMonthStarts, ...txDatesInWindow])).sort();
-
-  const netWorthTrendData = allDatesInWindow.map((date) => {
-    const txUpTo = transactions.filter((t) => t.date <= date);
-    return { date, t: dateToTs(date), netWorth: sumMoneyBy(accounts, (a) => computeBalance(a, txUpTo)) };
-  });
-  // Always end on today's actual net worth, even on a day with no transactions,
-  // so the line reflects the current balance rather than stopping early.
-  if (netWorthTrendData[netWorthTrendData.length - 1].date !== today) {
-    netWorthTrendData.push({ date: today, t: nwTodayTs, netWorth });
-  }
+  //
+  // Memoized: this walks every transaction, and the Dashboard re-renders on any
+  // change elsewhere in the app. The month starts only change when the window
+  // start does, so nwWindowStart covers them in the dependency list.
+  const netWorthTrendData = useMemo(() => {
+    const txDatesInWindow = transactions.filter((t) => t.date >= nwWindowStart && t.date <= today).map((t) => t.date);
+    const allDatesInWindow = Array.from(new Set([...nwMonthStarts, ...txDatesInWindow])).sort();
+    const values = netWorthAtDates(accounts, transactions, allDatesInWindow);
+    const series = allDatesInWindow.map((date, i) => ({ date, t: dateToTs(date), netWorth: values[i] }));
+    // Always end on today's actual net worth, even on a day with no transactions,
+    // so the line reflects the current balance rather than stopping early.
+    if (series[series.length - 1].date !== today) {
+      series.push({ date: today, t: nwTodayTs, netWorth });
+    }
+    return series;
+  }, [accounts, transactions, nwWindowStart, today, netWorth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Explicit x-axis ticks: the 1st of each of the last 6 months. Left to its
   // own auto-generation on a numeric time domain, Recharts (combined with
