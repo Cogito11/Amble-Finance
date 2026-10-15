@@ -5,6 +5,7 @@ import {
 import { ConfirmDialog } from "./components/common/ConfirmDialog";
 import { ShortcutsModal } from "./components/common/Shortcuts";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { UpdateBanner } from "./components/common/UpdateControls";
 import { RecoveryScreen, ViewCrashCard } from "./components/common/RecoveryScreen";
 import { AccountModal } from "./components/modals/AccountModal";
 import { ClosedAccountsModal } from "./components/modals/ClosedAccountsModal";
@@ -1297,6 +1298,7 @@ export default function App() {
               <button className="btn btn-ghost btn-sm" onClick={exportJSON}>Export backup</button>
             </div>
           )}
+          {!popoutView && <UpdateBanner />}
           {notice && (
             <div className={notice.tone === "info" ? "recovery-ok" : "inline-error"} role="status" style={{ margin: "12px 24px 0", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ flex: 1 }}>{notice.text}</span>

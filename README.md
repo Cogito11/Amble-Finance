@@ -55,18 +55,48 @@ Build output (installers) is written by `electron-builder` based on the platform
 DMG + zip, Linux: AppImage + `.deb`).
 - the completed builds can be found in the /dist folder in Source
 
+## Updates
+
+Amble looks for a newer release on GitHub a few seconds after it starts, and again every few hours
+while it's open. When there is one, a banner at the top of the window lets you download it and
+restart to finish updating. There's no installer to download and run by hand, and your data stays
+where it is. You can also check at any time from **More → About**. If you'd rather not restart
+right away, a downloaded update installs automatically the next time you close Amble.
+
+| Install | Updates itself? |
+| --- | --- |
+| Windows installer (NSIS) | Yes |
+| Linux AppImage | Yes |
+| Linux `.deb` | Yes, but still marked beta by electron-updater (asks for your password to install) |
+| Windows portable `.exe` | No - **About** links to the download page |
+| macOS | No for now - **About** links to the download page. In-place updates need Apple code-signing; once the builds are signed, set `MAC_IN_PLACE_UPDATES` to `true` in `Source/updater.js`. |
+
+The very first version that includes this feature has to be installed the usual way; every version
+after it can update in place.
+
+### Publishing a release (maintainers)
+
+1. Bump `version` in `Source/package.json`.
+2. Commit, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. The **Build and Release** workflow builds every platform and uploads the installers together with
+   the `latest*.yml` files that the updater reads.
+4. Make sure the GitHub release is **published** (electron-builder creates releases as drafts by
+   default). Drafts are invisible to the updater, so nobody is offered the update until you publish it.
+
 ## Tech stack
 
 - [React](https://react.dev/) + [Vite](https://vitejs.dev/) for the UI
 - [Electron](https://www.electronjs.org/) for the desktop shell
 - [Recharts](https://recharts.org/) for charts
 - [lucide-react](https://lucide.dev/) for icons
-- Local storage only - no backend, no analytics, no network access needed
+- Local storage only - no backend, no analytics. The only network requests Amble makes are to GitHub, to check for and download new releases
 
 ## Data & privacy
 
 Amble doesn't have a server, an account system, or any analytics. All of your data, accounts,
-transactions, categories, and budget plans are stored locally on your device. Use the built-in
+transactions, categories, and budget plans are stored locally on your device.
+The only time Amble goes online is to ask GitHub whether a newer version exists (and to download it
+if you choose to); that request contains none of your data. Use the built-in
 **Data** export in the app's **More** tab any time you want a portable JSON backup.
 
 ### Where your data lives, and how it's protected

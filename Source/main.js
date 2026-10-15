@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, screen, ipcMain } = require("electron");
 const path = require("path");
 const { createFileStore } = require("./store/fileStore");
 const { registerStoreIpc } = require("./store/ipc");
+const { createUpdater, registerUpdaterIpc } = require("./updater");
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
@@ -33,6 +34,19 @@ function setupDataStore() {
   registerStoreIpc({ ipcMain, BrowserWindow, shell, store, unavailableReason });
 }
 setupDataStore();
+
+// In-place updates (see updater.js). Created once the app is ready so electron-updater is only
+// loaded when it will actually be used, and never in a dev run or a build that can't update itself.
+let updater = null;
+function setupUpdater() {
+  updater = createUpdater({
+    app,
+    BrowserWindow,
+    loadAutoUpdater: () => require("electron-updater").autoUpdater,
+    log: (...args) => console.error("[updater]", ...args),
+  });
+  registerUpdaterIpc({ ipcMain, updater });
+}
 
 // Popped-out views (e.g. Transactions in its own window) are tracked here by
 // the view id they were opened for, so clicking "pop out" again for a view
@@ -201,7 +215,9 @@ if (!gotSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
+    setupUpdater(); // registers its IPC handlers before any window asks for them
     createWindow();
+    updater.start();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

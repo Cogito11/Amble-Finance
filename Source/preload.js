@@ -36,3 +36,17 @@ contextBridge.exposeInMainWorld("ambleStore", {
     return () => ipcRenderer.removeListener("store:changed", listener);
   },
 });
+
+// In-place updates (see updater.js). The main process owns the whole process; this only lets the UI
+// read the current state, ask for the next step, and hear when the state changes.
+contextBridge.exposeInMainWorld("ambleUpdater", {
+  getState: () => ipcRenderer.invoke("updater:get-state"),
+  check: () => ipcRenderer.invoke("updater:check"),
+  download: () => ipcRenderer.invoke("updater:download"),
+  install: () => ipcRenderer.invoke("updater:install"),
+  onStateChange: (callback) => {
+    const listener = (event, state) => callback(state);
+    ipcRenderer.on("updater:state-changed", listener);
+    return () => ipcRenderer.removeListener("updater:state-changed", listener);
+  },
+});
