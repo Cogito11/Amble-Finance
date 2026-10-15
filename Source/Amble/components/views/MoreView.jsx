@@ -11,6 +11,18 @@ import { UpdatesRow } from "../common/UpdateControls";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.7.3",
+    items: [
+      "Added in-place updates for supported install types.",
+      "When a new version is available, a banner appears to download it and restart to apply, with no new installer needed.",
+      "Amble now checks for new versions shortly after it starts and every few hours while it's open.",
+      "A downloaded update installs automatically the next time you close Amble if you choose **Later**.",
+      "The **Check for update** button in the About section can now download and install an update directly.",
+      "In-place updates work with the Windows installer, Linux AppImage, and Linux .deb. Windows portable and macOS still require download.",
+      "Cleaned up the README so it's shorter and easier to follow.",
+    ],
+  },
+  {
     version: "1.7.2",
     items: [
       "Added the option for quarterly and semi annually repeating bills.",
