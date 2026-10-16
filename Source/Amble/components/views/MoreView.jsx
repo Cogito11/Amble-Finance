@@ -11,6 +11,15 @@ import { UpdatesRow } from "../common/UpdateControls";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.7.4",
+    items: [
+      "Amble is much smaller to download and install.",
+      "Amble now includes its own fonts instead of loading them from Google.",
+      "The Dashboard now builds the net worth chart in a single pass and only recalculates it when your data changes.",
+      "Balances and this month's net are no longer recalculated on every screen update.",
+    ],
+  },
+  {
     version: "1.7.3",
     items: [
       "Added in-place updates for supported install types.",
