@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Receipt, Wallet, Target, PiggyBank, CreditCard, Landmark, Moon, Sun, ClipboardList, Repeat, Sliders, Database, Info, Activity, Monitor, Calculator, TrendingUp, ShieldCheck, TrendingDown, Percent, BarChart3, CalendarClock
+  LayoutDashboard, Receipt, Wallet, Target, PiggyBank, CreditCard, Landmark, Moon, Sun, ClipboardList, Repeat, Sliders, Database, Info, Activity, Monitor, Calculator, TrendingUp, ShieldCheck, TrendingDown, Percent, BarChart3, CalendarClock, FileText
 } from "lucide-react";
 import { version as appVersion } from "../package.json";
 
@@ -49,6 +49,7 @@ export const SHORTCUTS = [
       { keys: ["6"], label: "Tools" },
       { keys: ["7"], label: "More" },
       { keys: ["8"], label: "Plan" },
+      { keys: ["9"], label: "Taxes" },
     ],
   },
 ];
@@ -79,6 +80,7 @@ export const NAV_ITEMS = [
   { id: "budgets", label: "Budgets", icon: ClipboardList },
   { id: "plan", label: "Plan", icon: CalendarClock },
   { id: "tools", label: "Tools", icon: Calculator },
+  { id: "taxes", label: "Taxes", icon: FileText },
 ];
 
 export const VIEW_TITLES = {
@@ -89,6 +91,7 @@ export const VIEW_TITLES = {
   budgets: "Budgets",
   plan: "Plan",
   tools: "Tools",
+  taxes: "Taxes",
   more: "More",
 };
 

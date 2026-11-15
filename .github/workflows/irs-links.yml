@@ -1,0 +1,36 @@
+name: IRS link check
+
+# The Taxes tab links to forms on irs.gov. The IRS occasionally renames or retires a page, so this
+# requests every link once a week and fails if any are dead, which emails the repo owner.
+#
+# It is separate from the Tests workflow on purpose: a slow or unreachable irs.gov should never block
+# a pull request. To check by hand: `npm run check:irs-links` in Source/ (needs internet), or run
+# this workflow from the Actions tab.
+on:
+  schedule:
+    - cron: "17 14 * * 1"   # Mondays, 14:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.19.1
+          cache: npm
+          cache-dependency-path: Source/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Source
+        run: npm ci --ignore-scripts
+
+      - name: Check IRS links
+        working-directory: Source
+        run: npm run check:irs-links

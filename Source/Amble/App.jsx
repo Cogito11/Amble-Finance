@@ -18,6 +18,7 @@ import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
 import { BillModal } from "./components/modals/BillModal";
 import { GoalModal } from "./components/modals/GoalModal";
 import { ToolsView } from "./components/tools/ToolsView";
+import { TaxesView } from "./components/taxes/TaxesView";
 import { AccountsView } from "./components/views/AccountsView";
 import { StatusView } from "./components/views/StatusView";
 import { Dashboard } from "./components/views/Dashboard";
@@ -42,7 +43,7 @@ import { CSS } from "./styles/theme";
 import { currentMonthKey, todayStr } from "./utils/dates";
 import { sumMoney } from "./utils/money";
 import { fmt, setActiveCurrency } from "./utils/format";
-import { isTypingTarget, uid } from "./utils/misc";
+import { isTypingTarget, mergeSidebarOrder, uid } from "./utils/misc";
 
 export default function App() {
   const sidebarSections = [...NAV_ITEMS, { id: "more", label: "More", icon: MoreHorizontal }];
@@ -235,7 +236,7 @@ export default function App() {
       const remapNavId = (id) => (needsLegacyRemap ? (LEGACY_NAV_ID_MAP[id] || id) : id);
       const savedOrder = savedOrderRaw.map(remapNavId);
       const savedVisible = Object.fromEntries(Object.entries(saved.visible || {}).map(([id, v]) => [remapNavId(id), v]));
-      const order = [...savedOrder.filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !savedOrder.includes(id))];
+      const order = mergeSidebarOrder(savedOrder, defaultPrefs.order);
       return { order, visible: { ...defaultPrefs.visible, ...savedVisible }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
     } catch (e) {
       return defaultPrefs;
@@ -499,7 +500,7 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more", "8": "plan" };
+        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more", "8": "plan", "9": "taxes" };
         if (navByKey[key]) {
           setView(navByKey[key]);
           return;
@@ -1281,7 +1282,7 @@ export default function App() {
               {effectiveView === "status" && (
                 <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && (
+              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && effectiveView !== "taxes" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
               {!popoutView && (
@@ -1394,6 +1395,7 @@ export default function App() {
               />
             )}
             {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
+            {effectiveView === "taxes" && <TaxesView />}
             {effectiveView === "more" && (
               <MoreView
                 onExportJSON={exportJSON}

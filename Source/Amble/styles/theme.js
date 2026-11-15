@@ -595,6 +595,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tool-card-badge { font-size:10px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color: var(--text-faint); background: var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:2px 6px; }
 .tool-card-desc { font-size:12px; color: var(--text-muted); margin-top:3px; line-height:1.45; }
 .tool-card-chevron { flex-shrink:0; color: var(--text-faint); }
+.tax-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.tax-toolbar .search-input { max-width:420px; }
+.tax-count { font-size:12px; color: var(--text-faint); }
+.tax-card { display:flex; flex-direction:column; background: var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-card:hover, .tax-card:focus-within { border-color: var(--brass); background: var(--brass-soft); }
+.tax-card-main { display:flex; align-items:flex-start; gap:14px; flex:1; text-align:left; background:transparent; border:none; padding:16px 18px 12px; cursor:pointer; color:inherit; font:inherit; }
+.tax-card-name { font-size:12.5px; color: var(--text); margin-top:2px; }
+.tax-card-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:2px 18px 14px; }
+.tax-card-actions .btn, .tax-detail-actions .btn { text-decoration:none; }
+.tax-detail-section + .tax-detail-section { margin-top:16px; }
+.tax-detail-label { font-size:12px; color: var(--text-muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px; }
+.tax-detail-text { font-size:13.5px; line-height:1.55; margin:0; }
+.tax-detail-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.tax-disclaimer { font-size:12px; color: var(--text-muted); line-height:1.5; margin:0; }
 .tool-detail { display:flex; flex-direction:column; gap:16px; }
 .tool-detail .card > .form-group + .form-group,
 .tool-detail .card > .form-row + .form-group,

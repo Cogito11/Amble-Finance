@@ -11,6 +11,16 @@ import { UpdatesRow } from "../common/UpdateControls";
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
   {
+    version: "1.8.0",
+    items: [
+      "Added the **Taxes** sidebar tab, a searchable guide to common IRS forms.",
+      "Each form explains what it's for, who uses it, and when, with links to download the PDF, read its instructions, and open its page on IRS.gov.",
+      "The links open IRS.gov in your web browser. Amble itself never contacts the IRS.",
+      "Press **9** to jump to the Taxes tab.",
+      "Tabs added in future updates now appear above **More** in your sidebar instead of below it.",
+    ],
+  },
+  {
     version: "1.7.4",
     items: [
       "Amble is much smaller to download and install.",

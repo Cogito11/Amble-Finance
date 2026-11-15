@@ -14,6 +14,7 @@ subscription, or learning a complicated tool. Everything stays on your computer.
 - **Plan around your paycheck.** Split a paycheck into categories and track your spending until the next one.
 - **Keep up with bills and goals.** Set up repeating bills (including quarterly and twice-a-year) and savings goals in the Plan tab.
 - **Understand your money.** A dashboard shows net worth, spending by category, and income vs. expenses for the last six months. Nine built-in calculators cover things like loan payoff, debt payoff, compound interest, and emergency funds.
+- **Find tax forms.** The Taxes tab explains common IRS forms in plain language and links to download each one from IRS.gov.
 - **Make it yours.** Choose a light, dark, or system theme and your own currency, and pop any view out into its own window.
 - **Back up any time.** Export all your data as JSON, or your transactions as CSV.
 
@@ -54,6 +55,8 @@ then on you can update inside the app.
 - **It stays on your device.** There is no account, no server, and no analytics.
 - **One online connection.** Amble contacts GitHub to check for new versions, and downloads one only
   if you choose to. None of your data is sent. There is currently no setting to turn the check off.
+- **Tax form links open in your browser.** The Taxes tab links to IRS.gov. Clicking a link opens your
+  web browser; Amble itself never contacts the IRS.
 - **Plain files you can open.** **More → Data** shows where your data lives and has an **Open data
   folder** button. The main file is ordinary JSON.
 - **Safe saving.** Changes are written so a crash or power cut can't leave a half-written file. If a
@@ -78,6 +81,7 @@ cd Amble-Finance/Source
 npm install        # always run this first, or the build can be missing parts
 npm start          # run the app from source
 npm test           # run the tests
+npm run check:irs-links   # check that the Taxes tab's IRS.gov links still work (needs internet)
 npm run build      # build installers for your current platform (output goes to Source/release)
 ```
 
