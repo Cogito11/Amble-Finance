@@ -14,7 +14,7 @@ subscription, or learning a complicated tool. Everything stays on your computer.
 - **Plan around your paycheck.** Split a paycheck into categories and track your spending until the next one.
 - **Keep up with bills and goals.** Set up repeating bills (including quarterly and twice-a-year) and savings goals in the Plan tab.
 - **Understand your money.** A dashboard shows net worth, spending by category, and income vs. expenses for the last six months. Nine built-in calculators cover things like loan payoff, debt payoff, compound interest, and emergency funds.
-- **Find tax forms.** The Taxes tab explains common IRS forms in plain language and links to download each one from IRS.gov.
+- **Find tax forms.** The Taxes tab suggests forms for everyday situations, explains common IRS forms in plain language, and links to download each one and its instructions from IRS.gov.
 - **Make it yours.** Choose a light, dark, or system theme and your own currency, and pop any view out into its own window.
 - **Back up any time.** Export all your data as JSON, or your transactions as CSV.
 

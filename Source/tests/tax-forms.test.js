@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  IRS_ORIGIN, TAX_FORMS, TAX_FORM_GROUPS, TAX_FORM_KINDS, allCatalogLinks, formLinks, searchTaxForms,
+  IRS_ORIGIN, TAX_FORMS, TAX_FORM_GROUPS, TAX_FORM_KINDS, allCatalogLinks, filterTaxForms, formLinks, getTaxForm, searchTaxForms,
 } from "../Amble/data/taxForms";
 import { NAV_ITEMS, SHORTCUTS, VIEW_TITLES } from "../Amble/constants";
 
@@ -65,7 +65,8 @@ describe("tax form catalog", () => {
 
   it("keeps year-specific and dollar figures out of the text (they go stale every January)", () => {
     for (const f of TAX_FORMS) {
-      for (const field of ["number", "title", "summary", "whoUses", "when"]) {
+      for (const field of ["number", "title", "summary", "whoUses", "when", "instructionsNote"]) {
+        if (f[field] === undefined) continue; // instructionsNote is optional
         expect(f[field], `${f.id}.${field} mentions a year`).not.toMatch(/\b(19|20)\d{2}\b/);
         expect(f[field], `${f.id}.${field} mentions a dollar amount`).not.toMatch(/\$/);
       }
@@ -102,6 +103,63 @@ describe("searchTaxForms", () => {
 
   it("returns nothing when nothing matches", () => {
     expect(searchTaxForms("zzzzqq")).toEqual([]);
+  });
+});
+
+describe("instructions", () => {
+  it("an instructionsNote only appears on forms that have an instructions document", () => {
+    for (const f of TAX_FORMS) {
+      if (f.instructionsNote === undefined) continue;
+      expect(typeof f.instructionsNote, f.id).toBe("string");
+      expect(f.instructionsNote.trim().length, f.id).toBeGreaterThan(0);
+      expect(f.instructions, `${f.id} has a note about instructions it doesn't have`).not.toBeNull();
+    }
+  });
+
+  it("forms that share an instructions file say so", () => {
+    const byFile = {};
+    for (const f of TAX_FORMS) if (f.instructions) (byFile[f.instructions] ||= []).push(f);
+    for (const [file, forms] of Object.entries(byFile)) {
+      // Schedules and forms covered by the 1040's instructions are the only ones where one file serves
+      // forms that look unrelated; every other shared file should carry a note explaining it.
+      if (forms.length < 2 || file === "i1040gi.pdf") continue;
+      for (const f of forms) expect(f.instructionsNote, `${f.id} shares ${file}`).toBeTruthy();
+    }
+  });
+});
+
+describe("the wider catalog", () => {
+  it("includes the credit, payment and statement forms people most often need", () => {
+    for (const id of ["schedule-1", "schedule-8812", "2441", "8863", "8829", "8606", "8888", "9465", "1040-v", "1099-k", "1099-g", "1098", "1098-t", "5498", "4506", "w-7", "8821"]) {
+      expect(getTaxForm(id), id).not.toBeNull();
+    }
+    expect(getTaxForm("nope")).toBeNull();
+  });
+
+  it("forms you receive are filed under statements, never under 'you file'", () => {
+    for (const f of TAX_FORMS.filter((x) => x.group === "statements")) expect(f.kind, f.id).toBe("you-receive");
+  });
+});
+
+describe("filterTaxForms", () => {
+  it("'all' keeps everything the search found", () => {
+    expect(ids(filterTaxForms("", "all"))).toEqual(ids(TAX_FORMS));
+    expect(ids(filterTaxForms("freelance", "all"))).toEqual(ids(searchTaxForms("freelance")));
+  });
+
+  it("keeps only the chosen kind", () => {
+    for (const kind of Object.keys(TAX_FORM_KINDS)) {
+      const found = filterTaxForms("", kind);
+      expect(found.length, kind).toBeGreaterThan(0);
+      expect(found.every((f) => f.kind === kind), kind).toBe(true);
+    }
+    expect(ids(filterTaxForms("", "you-receive"))).toContain("1099-nec");
+    expect(ids(filterTaxForms("", "you-receive"))).not.toContain("1040");
+  });
+
+  it("combines a search with a kind", () => {
+    const found = filterTaxForms("freelance", "hand-over");
+    expect(ids(found)).toEqual(["w-9"]);
   });
 });
 

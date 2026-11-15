@@ -14,7 +14,9 @@ const PATCH_NOTES = [
     version: "1.8.0",
     items: [
       "Added the **Taxes** sidebar tab, a searchable guide to common IRS forms.",
-      "Each form explains what it's for, who uses it, and when, with links to download the PDF, read its instructions, and open its page on IRS.gov.",
+      "Each form explains what it's for, who uses it, and when, with links to download the PDF, read how to fill it out, and open its page on IRS.gov.",
+      "Tap **Not sure what you need?** to open a finder that suggests the right forms for everyday situations like selling stocks, freelancing or needing more time to file.",
+      "Use the dropdown next to the search box to show only forms you file, receive, or hand over.",
       "The links open IRS.gov in your web browser. Amble itself never contacts the IRS.",
       "Press **9** to jump to the Taxes tab.",
       "Tabs added in future updates now appear above **More** in your sidebar instead of below it.",

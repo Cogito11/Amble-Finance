@@ -598,6 +598,32 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tax-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
 .tax-toolbar .search-input { max-width:420px; }
 .tax-count { font-size:12px; color: var(--text-faint); }
+.tax-pill-btn, .tax-situation { font:inherit; font-size:12.5px; padding:6px 12px; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text); cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-pill-btn { display:inline-flex; align-items:center; gap:6px; }
+.tax-pill-btn:hover, .tax-situation:hover, .tax-select:hover { border-color: var(--brass); background: var(--brass-soft); }
+.app-root .tax-pill-btn:focus-visible, .app-root .tax-situation:focus-visible { outline:none; border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-pill-btn.is-active, .tax-situation.is-active, .tax-select.is-active { border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-select { position:relative; display:inline-flex; align-items:center; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text); cursor:pointer; transition: border-color .15s, background .15s; }
+/* One highlight only: the pill itself. It shows for keyboard focus, not after a mouse click, so choosing the default
+   (All forms) leaves the pill un-highlighted. The global focus ring would otherwise also outline the inner select. */
+.tax-select:has(select:focus-visible) { border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.app-root .tax-select select:focus, .app-root .tax-select select:focus-visible { outline:none; }
+.tax-select select { appearance:none; -webkit-appearance:none; font:inherit; font-size:12.5px; color:inherit; background:transparent; border:0; outline:none; cursor:pointer; padding:6px 30px 6px 12px; border-radius:20px; }
+.tax-select select option { color: var(--text); background: var(--surface); }
+.tax-select svg { position:absolute; right:11px; pointer-events:none; color: var(--text-muted); }
+.tax-finder { display:flex; flex-direction:column; gap:12px; background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+.tax-finder-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; }
+.tax-finder-options { display:flex; flex-wrap:wrap; gap:8px; }
+.tax-finder-answer { display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--border); padding-top:14px; }
+.tax-finder-forms { display:flex; flex-direction:column; gap:8px; }
+.tax-finder-form { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+.tax-finder-form-text { min-width:0; }
+.tax-finder-form-name { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13.5px; font-weight:600; }
+.tax-finder-form-role { font-size:12.5px; color: var(--text-muted); margin-top:2px; }
+.tax-howto { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+.tax-howto-label { display:flex; align-items:center; gap:6px; margin-bottom:0; }
+.tax-howto-note { font-size:12.5px; color: var(--text-muted); margin:0; }
+.tax-howto .btn { text-decoration:none; }
 .tax-card { display:flex; flex-direction:column; background: var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; cursor:pointer; transition: border-color .15s, background .15s; }
 .tax-card:hover, .tax-card:focus-within { border-color: var(--brass); background: var(--brass-soft); }
 .tax-card-main { display:flex; align-items:flex-start; gap:14px; flex:1; text-align:left; background:transparent; border:none; padding:16px 18px 12px; cursor:pointer; color:inherit; font:inherit; }
