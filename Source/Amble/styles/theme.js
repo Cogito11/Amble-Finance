@@ -100,6 +100,9 @@ strong, b, h1, h2, h3, h4, h5, h6, th { font-weight: 600; }
 .nav-item-drop-before::before { top:-2px; }
 .nav-item-drop-after::after { bottom:-2px; }
 .nav-popout-dot { width:7px; height:7px; border-radius:50%; background: var(--teal); margin-left:auto; flex-shrink:0; }
+.nav-shortcut-hint { margin-left:auto; flex-shrink:0; font-size:11px; font-weight:500; color: var(--text-faint); opacity:.65; font-variant-numeric: tabular-nums; }
+.nav-item.active .nav-shortcut-hint { color: var(--brass); opacity:.7; }
+.nav-item .nav-popout-dot + .nav-shortcut-hint, .nav-shortcut-hint + .nav-popout-dot { margin-left:8px; }
 
 .icon-btn.popout-open { color: var(--teal); }
 .icon-btn.popout-open:hover { color: var(--teal); background: var(--surface-2); }
@@ -616,10 +619,15 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tax-finder-options { display:flex; flex-wrap:wrap; gap:8px; }
 .tax-finder-answer { display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--border); padding-top:14px; }
 .tax-finder-forms { display:flex; flex-direction:column; gap:8px; }
-.tax-finder-form { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
-.tax-finder-form-text { min-width:0; }
+/* The whole row is the button that opens the form. */
+.tax-finder-form { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-finder-form:hover { border-color: var(--brass); background: var(--brass-soft); }
+.app-root .tax-finder-form:focus-visible { outline:none; border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-finder-form-text { display:block; min-width:0; }
 .tax-finder-form-name { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13.5px; font-weight:600; }
-.tax-finder-form-role { font-size:12.5px; color: var(--text-muted); margin-top:2px; }
+.tax-finder-form-role { display:block; font-size:12.5px; font-weight:400; color: var(--text-muted); margin-top:2px; }
+.tax-finder-form-chevron { flex-shrink:0; color: var(--text-faint); transition: transform .15s, color .15s; }
+.tax-finder-form:hover .tax-finder-form-chevron, .tax-finder-form:focus-visible .tax-finder-form-chevron { color: var(--brass); transform: translateX(2px); }
 .tax-howto { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
 .tax-howto-label { display:flex; align-items:center; gap:6px; margin-bottom:0; }
 .tax-howto-note { font-size:12.5px; color: var(--text-muted); margin:0; }

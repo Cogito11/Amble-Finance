@@ -37,7 +37,8 @@ Amble checks GitHub for a newer version shortly after it starts, and every few h
 When there is one, a banner appears at the top of the window. Click **Download update**, then
 **Restart now**. You don't need to download a new installer, and your data isn't touched. If you
 choose **Later**, the update installs the next time you close Amble. You can also check yourself any
-time in **More → About**.
+time in **More → About**. To stop Amble checking by itself, turn off **Check for updates
+automatically** in **More → Settings**.
 
 | Your install | Updates inside the app? |
 | --- | --- |

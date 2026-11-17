@@ -1,13 +1,13 @@
 import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { UpdateBanner, UpdatesRow } from "../Amble/components/common/UpdateControls";
+import { AutoUpdateCard, UpdateBanner, UpdatesRow } from "../Amble/components/common/UpdateControls";
 import { APP_INFO } from "../Amble/constants";
 
 // Drives the real banner and About-tab row against a fake `window.ambleUpdater` (the preload bridge),
 // to prove the UI shows the right thing for each update state and asks the main process for the right step.
 
-const state = (patch = {}) => ({ supported: true, reason: null, status: "idle", currentVersion: "1.7.2", version: null, percent: null, error: null, ...patch });
+const state = (patch = {}) => ({ supported: true, autoCheck: true, reason: null, status: "idle", currentVersion: "1.7.2", version: null, percent: null, error: null, ...patch });
 
 function fakeBridge(initial) {
   let current = initial;
@@ -17,6 +17,7 @@ function fakeBridge(initial) {
     check: vi.fn(async () => current),
     download: vi.fn(async () => current),
     install: vi.fn(async () => current),
+    setAutoCheck: vi.fn(async (enabled) => { current = { ...current, autoCheck: enabled }; return current; }),
     onStateChange: vi.fn((cb) => { listeners.add(cb); return () => listeners.delete(cb); }),
     listenerCount: () => listeners.size,
     push(next) { current = next; listeners.forEach((cb) => cb(next)); },
@@ -169,5 +170,46 @@ describe("<UpdateBanner/>", () => {
     expect(bridge.listenerCount()).toBe(1);
     await act(async () => { r.unmount(); });
     expect(bridge.listenerCount()).toBe(0);
+  });
+});
+
+describe("the automatic-update switch in Settings", () => {
+  const box = (r) => r.root.findByType("input");
+
+  it("isn't shown where there are no background checks to turn off", async () => {
+    expect((await mount(<AutoUpdateCard />)).toJSON()).toBeNull(); // no bridge (browser build)
+    globalThis.ambleUpdater = fakeBridge(state({ supported: false, reason: "portable", status: "unsupported" }));
+    expect((await mount(<AutoUpdateCard />)).toJSON()).toBeNull();
+  });
+
+  it("starts on, says what it does, and turning it off asks the main process", async () => {
+    globalThis.ambleUpdater = bridge = fakeBridge(state());
+    const r = await mount(<AutoUpdateCard />);
+    expect(html(r)).toContain("Check for updates automatically");
+    expect(html(r)).toContain("never downloads anything until you choose to");
+    expect(box(r).props.checked).toBe(true);
+
+    await act(async () => { box(r).props.onChange({ target: { checked: false } }); });
+    await settle();
+    expect(bridge.setAutoCheck).toHaveBeenCalledWith(false);
+    expect(box(r).props.checked).toBe(false);
+    expect(html(r)).toContain("Amble won't check by itself");
+
+    await act(async () => { box(r).props.onChange({ target: { checked: true } }); });
+    await settle();
+    expect(bridge.setAutoCheck).toHaveBeenLastCalledWith(true);
+    expect(box(r).props.checked).toBe(true);
+  });
+
+  it("shows off when the saved choice is off", async () => {
+    globalThis.ambleUpdater = fakeBridge(state({ autoCheck: false }));
+    expect(box(await mount(<AutoUpdateCard />)).props.checked).toBe(false);
+  });
+
+  it("the manual Check button is unaffected by the switch", async () => {
+    globalThis.ambleUpdater = bridge = fakeBridge(state({ autoCheck: false }));
+    const row = await mount(<UpdatesRow />);
+    await act(async () => { buttonLabelled(row, "Check for update").props.onClick(); });
+    expect(bridge.check).toHaveBeenCalledTimes(1);
   });
 });

@@ -16,6 +16,7 @@ const CHANNELS = {
   check: "updater:check",
   download: "updater:download",
   install: "updater:install",
+  setAutoCheck: "updater:set-auto-check",
   changed: "updater:state-changed",
 };
 
@@ -83,12 +84,21 @@ function createUpdater({
   log = () => {},
   setTimer = setTimeout,
   setRepeating = setInterval,
+  // Where the "check for updates automatically" choice is kept between launches (see createSettingsFile).
+  settings = { read: () => ({}), write: () => {} },
 }) {
   const support = detectSupport({ isPackaged: app.isPackaged, platform, env, resourcesPath, existsSync });
+
+  // On unless the person turned it off. It only controls the quiet checks Amble makes by itself (shortly
+  // after launch and every few hours); the "Check for update" button always works, and nothing is ever
+  // downloaded without a click.
+  let autoCheck = true;
+  try { autoCheck = settings.read().autoCheck !== false; } catch (e) { log("couldn't read update settings", e); }
 
   // status: unsupported | idle | checking | current | available | downloading | downloaded | error
   // error:  null, or { phase: "check" | "download" | "install", message }
   let state = {
+    autoCheck,
     supported: support.supported,
     reason: support.reason || null,
     status: support.supported ? "idle" : "unsupported",
@@ -231,8 +241,10 @@ function createUpdater({
     return state;
   }
 
-  function start() {
-    if (!ready() || started) return;
+  let launched = false; // start() has been called, i.e. the app is up and may run background checks
+
+  function schedule() {
+    if (!ready() || !launched || !autoCheck || started) return;
     started = true;
     timers.push(setTimer(() => { check({ background: true }); }, FIRST_CHECK_DELAY_MS));
     timers.push(setRepeating(() => { check({ background: true }); }, CHECK_INTERVAL_MS));
@@ -245,15 +257,59 @@ function createUpdater({
     started = false;
   }
 
-  return { getState: () => state, check, download, install, start, stop };
+  function start() {
+    launched = true;
+    schedule();
+  }
+
+  // Turning it off cancels the pending and repeating checks straight away; turning it back on starts them again.
+  function setAutoCheck(enabled) {
+    const next = enabled === true;
+    if (next === autoCheck) return state;
+    autoCheck = next;
+    try { settings.write({ autoCheck }); } catch (e) { log("couldn't save update settings", e); }
+    if (autoCheck) schedule(); else stop();
+    setState({ autoCheck });
+    return state;
+  }
+
+  return { getState: () => state, check, download, install, setAutoCheck, start, stop };
 }
 
-// None of these take arguments from the renderer, so there is nothing for it to inject.
+// A tiny JSON file in the app's data folder holding the update preferences. The main process needs the
+// choice before any window exists (to decide whether to check at launch), so it can't live in the renderer's
+// storage. Never throws: a missing or damaged file just means "defaults", and a failed save is reported to the caller.
+function createSettingsFile(filePath, fsImpl = fs) {
+  return {
+    read() {
+      try {
+        const parsed = JSON.parse(fsImpl.readFileSync(filePath, "utf8"));
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch (e) {
+        return {};
+      }
+    },
+    write(values) {
+      const next = { ...this.read(), ...values };
+      fsImpl.mkdirSync(path.dirname(filePath), { recursive: true });
+      const tmp = `${filePath}.tmp`;
+      fsImpl.writeFileSync(tmp, JSON.stringify(next));
+      fsImpl.renameSync(tmp, filePath);
+    },
+  };
+}
+
+// The only argument from the renderer is a yes/no for the auto-check switch, and anything that isn't
+// exactly true or false is ignored, so there is nothing for it to inject.
 function registerUpdaterIpc({ ipcMain, updater }) {
   ipcMain.handle(CHANNELS.getState, () => updater.getState());
   ipcMain.handle(CHANNELS.check, async () => { await updater.check(); return updater.getState(); });
   ipcMain.handle(CHANNELS.download, async () => { await updater.download(); return updater.getState(); });
   ipcMain.handle(CHANNELS.install, () => { updater.install(); return updater.getState(); });
+  ipcMain.handle(CHANNELS.setAutoCheck, (event, enabled) => {
+    if (typeof enabled === "boolean") updater.setAutoCheck(enabled);
+    return updater.getState();
+  });
 }
 
 module.exports = {
@@ -264,5 +320,6 @@ module.exports = {
   detectSupport,
   friendlyError,
   createUpdater,
+  createSettingsFile,
   registerUpdaterIpc,
 };

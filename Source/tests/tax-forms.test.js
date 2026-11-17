@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   IRS_ORIGIN, TAX_FORMS, TAX_FORM_GROUPS, TAX_FORM_KINDS, allCatalogLinks, filterTaxForms, formLinks, getTaxForm, searchTaxForms,
 } from "../Amble/data/taxForms";
-import { NAV_ITEMS, SHORTCUTS, VIEW_TITLES } from "../Amble/constants";
+import { NAV_ITEMS, VIEW_TITLES } from "../Amble/constants";
 
 // The Taxes catalog is hand-written and its links are only ever built from file names, so these tests
 // guard the things that would otherwise rot silently: duplicate entries, a link that leaves irs.gov,
@@ -164,11 +164,9 @@ describe("filterTaxForms", () => {
 });
 
 describe("Taxes tab wiring", () => {
-  it("is in the sidebar, has a title (which also enables pop-out), and has a number shortcut", () => {
+  it("is in the sidebar and has a title (which also enables pop-out)", () => {
     expect(NAV_ITEMS.map((n) => n.id)).toContain("taxes");
     expect(VIEW_TITLES.taxes).toBe("Taxes");
-    const nav = SHORTCUTS.find((g) => g.group === "Navigation");
-    expect(nav.items).toContainEqual({ keys: ["9"], label: "Taxes" });
   });
 
   it("every sidebar tab still has a title", () => {

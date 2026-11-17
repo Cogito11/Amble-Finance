@@ -85,6 +85,37 @@ export function UpdatesRow() {
   return updater.supported ? <InPlaceUpdates updater={updater} /> : <ManualUpdates />;
 }
 
+// ---- The "Updates" card in More > Settings ----------------------------------------------------------
+
+// Only installs that update themselves have background checks to turn off, so everywhere else (a browser
+// build, the portable .exe, ...) this renders nothing: there, Amble only looks when you click the button.
+export function AutoUpdateCard() {
+  const { supported, autoCheck, setAutoCheck } = useUpdater();
+  if (!supported) return null;
+  return (
+    <div className="card">
+      <div className="card-title">Updates</div>
+      <p className="settings-desc">
+        Amble can look for a new version by itself, shortly after it opens and every few hours while it stays open.
+        That's the only time it contacts GitHub on its own, and it never downloads anything until you choose to.
+      </p>
+      <div className="widget-toggle-list">
+        <label className="widget-toggle-row">
+          <input type="checkbox" checked={autoCheck} onChange={(e) => setAutoCheck(e.target.checked)} />
+          <div className="widget-toggle-text">
+            <div className="widget-toggle-label">Check for updates automatically</div>
+            <div className="widget-toggle-desc">
+              {autoCheck
+                ? "On. Turn this off to only check when you click Check for update in About."
+                : "Off. Amble won't check by itself. Use Check for update in About whenever you like."}
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 // ---- The notice at the top of the main window -------------------------------------------------------
 
 const bannerStyle = { margin: "12px 24px 0", display: "flex", alignItems: "center", gap: 10 };

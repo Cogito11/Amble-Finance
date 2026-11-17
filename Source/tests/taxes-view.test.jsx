@@ -242,6 +242,24 @@ describe("<TaxesView/> situation finder", () => {
     expect(linkLabelled(r, "Download PDF").props.href).toBe(formLinks(first).pdf);
   });
 
+  it("each form is one whole-row button (no separate View form button) showing its number, kind and role", () => {
+    const r = mount();
+    openFinder(r);
+    const sold = getTaxSituation("sold-investments");
+    act(() => { option(r, sold.label).props.onClick(); });
+    const rows = r.root.findAll((n) => n.type === "button" && n.props.className === "tax-finder-form");
+    expect(rows).toHaveLength(sold.forms.length);
+    rows.forEach((row, i) => {
+      const form = getTaxForm(sold.forms[i].id);
+      expect(textOf(row)).toContain(form.number);
+      expect(textOf(row)).toContain(sold.forms[i].role);
+      expect(row.props["aria-label"]).toBe(`View ${form.number}`);
+    });
+    expect(pageText(r)).not.toContain("View form");
+    act(() => { rows[0].props.onClick(); });
+    expect(pageText(r)).toContain(getTaxForm(sold.forms[0].id).title);
+  });
+
   it("clicking the same situation again hides the explanation; picking another swaps it", () => {
     const r = mount();
     openFinder(r);

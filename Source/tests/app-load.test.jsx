@@ -111,7 +111,7 @@ describe("<App/> startup", () => {
 
 describe("<App/> import", () => {
   const goToMore = async (r) => {
-    const more = r.root.findAll((n) => n.type === "button" && /^More$/.test(textOf(n).trim()))[0];
+    const more = r.root.findAll((n) => n.type === "button" && /^More\d?$/.test(textOf(n).trim()))[0];
     await act(async () => { more.props.onClick(); });
   };
   const fileOf = (name, text) => ({ name, text: async () => text });
@@ -179,7 +179,7 @@ describe("<App/> import", () => {
 describe("<App/> saving", () => {
   const MoreProps = (r) => r.root.findByType(MoreView).props;
   const goToMore = async (r) => {
-    const more = r.root.findAll((n) => n.type === "button" && /^More$/.test(textOf(n).trim()))[0];
+    const more = r.root.findAll((n) => n.type === "button" && /^More\d?$/.test(textOf(n).trim()))[0];
     await act(async () => { more.props.onClick(); });
   };
 
@@ -321,7 +321,7 @@ describe("<App/> restoring an automatic backup", () => {
     storage.disk.backups.push({ name: "20260101-000000-launch.json", reason: "launch", size: 1234, modifiedMs: 1767225600000, text: JSON.stringify(older) });
 
     const r = await mount();
-    await act(async () => { r.root.findAll((n) => n.type === "button" && /^More$/.test(textOf(n).trim()))[0].props.onClick(); });
+    await act(async () => { r.root.findAll((n) => n.type === "button" && /^More\d?$/.test(textOf(n).trim()))[0].props.onClick(); });
     await settle();
     const props = r.root.findByType(MoreView).props;
     expect(props.backups.map((b) => b.name)).toContain("20260101-000000-launch.json");
@@ -346,7 +346,7 @@ describe("<App/> restoring an automatic backup", () => {
     storage.data.set(STORAGE_KEY, JSON.stringify(goodState()));
     storage.disk.backups.push({ name: "20260101-000000-launch.json", reason: "launch", size: 3, modifiedMs: 1767225600000, text: "{garbage" });
     const r = await mount();
-    await act(async () => { r.root.findAll((n) => n.type === "button" && /^More$/.test(textOf(n).trim()))[0].props.onClick(); });
+    await act(async () => { r.root.findAll((n) => n.type === "button" && /^More\d?$/.test(textOf(n).trim()))[0].props.onClick(); });
     await settle();
     const before = storage.data.get(STORAGE_KEY);
     await act(async () => { r.root.findByType(MoreView).props.onRestoreBackup({ name: "20260101-000000-launch.json", modifiedMs: 0 }); });
