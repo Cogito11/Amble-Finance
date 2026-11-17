@@ -18,6 +18,7 @@ import { StatusSettingsModal } from "./components/modals/StatusSettingsModal";
 import { BillModal } from "./components/modals/BillModal";
 import { GoalModal } from "./components/modals/GoalModal";
 import { ToolsView } from "./components/tools/ToolsView";
+import { TaxesView } from "./components/taxes/TaxesView";
 import { AccountsView } from "./components/views/AccountsView";
 import { StatusView } from "./components/views/StatusView";
 import { Dashboard } from "./components/views/Dashboard";
@@ -42,7 +43,8 @@ import { CSS } from "./styles/theme";
 import { currentMonthKey, todayStr } from "./utils/dates";
 import { sumMoney } from "./utils/money";
 import { fmt, setActiveCurrency } from "./utils/format";
-import { isTypingTarget, uid } from "./utils/misc";
+import { isTypingTarget, mergeSidebarOrder, uid } from "./utils/misc";
+import { navShortcutKey, navShortcutTarget, visibleNavIds } from "./utils/navigation";
 
 export default function App() {
   const sidebarSections = [...NAV_ITEMS, { id: "more", label: "More", icon: MoreHorizontal }];
@@ -210,13 +212,10 @@ export default function App() {
   const [navDragId, setNavDragId] = useState(null);
   const [navOverId, setNavOverId] = useState(null);
   const [sidebarPrefs, setSidebarPrefs] = useState(() => {
-    // Every section defaults to visible except "plan" - it's a newer, more
-    // involved feature (bills/goals/calendar) that not everyone wants cluttering
-    // the sidebar, so it starts opt-in. Existing installs get this too, since
-    // their saved prefs (below) won't have a "plan" key yet to override it -
-    // same mechanism that already brings any new section in hidden or shown per
-    // its own default without touching users' existing customizations.
-    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, section.id !== "plan"])), footerMetric: "netWorth" };
+    // Every section is visible by default, in NAV_ITEMS order with More last. A section added in a later
+    // version has no saved entry to override this, so it shows up for existing installs too, while
+    // anything a person already hid or reordered (saved below) is left exactly as they set it.
+    const defaultPrefs = { order: sidebarSections.map((section) => section.id), visible: Object.fromEntries(sidebarSections.map((section) => [section.id, true])), footerMetric: "netWorth", showNumbers: false };
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
       if (!raw) return defaultPrefs;
@@ -235,8 +234,8 @@ export default function App() {
       const remapNavId = (id) => (needsLegacyRemap ? (LEGACY_NAV_ID_MAP[id] || id) : id);
       const savedOrder = savedOrderRaw.map(remapNavId);
       const savedVisible = Object.fromEntries(Object.entries(saved.visible || {}).map(([id, v]) => [remapNavId(id), v]));
-      const order = [...savedOrder.filter((id) => defaultPrefs.order.includes(id)), ...defaultPrefs.order.filter((id) => !savedOrder.includes(id))];
-      return { order, visible: { ...defaultPrefs.visible, ...savedVisible }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth" };
+      const order = mergeSidebarOrder(savedOrder, defaultPrefs.order);
+      return { order, visible: { ...defaultPrefs.visible, ...savedVisible }, footerMetric: ["netWorth", "debt", "cash", "totalAssets", "netThisMonth"].includes(saved.footerMetric) ? saved.footerMetric : "netWorth", showNumbers: saved.showNumbers === true };
     } catch (e) {
       return defaultPrefs;
     }
@@ -499,9 +498,11 @@ export default function App() {
           setShortcutsOpen(true);
           return;
         }
-        const navByKey = { "1": "dashboard", "2": "transactions", "3": "accounts", "4": "status", "5": "budgets", "6": "tools", "7": "more", "8": "plan" };
-        if (navByKey[key]) {
-          setView(navByKey[key]);
+        // The number keys open the Nth tab in the sidebar, so hidden tabs have no key and reordering
+        // the sidebar reorders the keys.
+        const target = navShortcutTarget(key, visibleNavIds(sidebarPrefs.order, sidebarPrefs.visible, sidebarSections.map((section) => section.id)));
+        if (target) {
+          setView(target);
           return;
         }
       }
@@ -523,7 +524,7 @@ export default function App() {
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [loaded, view, txModal, accModal, catModal, budgetModal, billModal, goalModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length]);
+  }, [loaded, view, txModal, accModal, catModal, budgetModal, billModal, goalModal, widgetModalOpen, sidebarModalOpen, closedAccountsOpen, confirmDialog, shortcutsOpen, darkMode, anyOverlayOpen, state?.transactions?.length, sidebarPrefs.order, sidebarPrefs.visible]);
 
   // The bill being edited was deleted elsewhere (e.g. another window): close its modal.
   // (Kept above the early return below so the hook order never changes between renders.)
@@ -1200,6 +1201,8 @@ export default function App() {
   const footerMetric = footerMetrics[sidebarPrefs.footerMetric] || footerMetrics.netWorth;
   const orderedSidebarSections = sidebarPrefs.order.map((id) => sidebarSections.find((section) => section.id === id)).filter(Boolean);
   const visibleSidebarSections = orderedSidebarSections.filter((item) => sidebarPrefs.visible[item.id]);
+  const shortcutTabs = visibleSidebarSections.map((item) => ({ id: item.id, label: item.label })); // what the number keys open, in order
+  const shortcutKeyFor = (id) => navShortcutKey(shortcutTabs.map((tab) => tab.id), id);
   // Where the dragged tab would land relative to the one it is over: dragging down
   // drops after it, dragging up drops before it (matches how reorderSidebarSection moves it).
   const navDropSide = (id) => {
@@ -1232,6 +1235,7 @@ export default function App() {
                 return (
                   <button
                     key={item.id}
+                    aria-keyshortcuts={shortcutKeyFor(item.id) || undefined}
                     className={`nav-item ${view === item.id ? "active" : ""}${navDragId === item.id ? " nav-item-dragging" : ""}${side ? ` nav-item-drop-${side}` : ""}`}
                     onClick={() => setView(item.id)}
                     draggable
@@ -1257,6 +1261,7 @@ export default function App() {
                     {openPopoutViews.includes(item.id) && (
                       <span className="nav-popout-dot" title="Popped out in its own window" aria-label="Popped out in its own window" />
                     )}
+                    {sidebarPrefs.showNumbers && shortcutKeyFor(item.id) && <span className="nav-shortcut-hint" aria-hidden="true">{shortcutKeyFor(item.id)}</span>}
                   </button>
                 );
               })}
@@ -1281,7 +1286,7 @@ export default function App() {
               {effectiveView === "status" && (
                 <button className="btn btn-ghost" onClick={() => setStatusModalOpen(true)}><Sliders size={16} /> Customize</button>
               )}
-              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && (
+              {effectiveView !== "more" && effectiveView !== "budgets" && effectiveView !== "tools" && effectiveView !== "plan" && effectiveView !== "taxes" && (
                 <button className="btn btn-primary" onClick={() => setTxModal({})}><Plus size={16} /> Add transaction</button>
               )}
               {!popoutView && (
@@ -1394,6 +1399,7 @@ export default function App() {
               />
             )}
             {effectiveView === "tools" && <ToolsView accounts={state.accounts} balances={balances} transactions={state.transactions} />}
+            {effectiveView === "taxes" && <TaxesView />}
             {effectiveView === "more" && (
               <MoreView
                 onExportJSON={exportJSON}
@@ -1424,6 +1430,15 @@ export default function App() {
                 onClearQuarantine={requestClearQuarantine}
                 dashboardWidgets={dashboardWidgets}
                 onToggleWidget={toggleWidget}
+                sidebarSections={orderedSidebarSections}
+                sidebarVisible={sidebarPrefs.visible}
+                sidebarFooterMetric={sidebarPrefs.footerMetric}
+                sidebarShowNumbers={sidebarPrefs.showNumbers}
+                onChangeSidebarShowNumbers={(showNumbers) => setSidebarPrefs((prefs) => ({ ...prefs, showNumbers }))}
+                onToggleSidebarSection={toggleSidebarSection}
+                onReorderSidebarSection={reorderSidebarSection}
+                onChangeSidebarFooterMetric={(footerMetric) => setSidebarPrefs((prefs) => ({ ...prefs, footerMetric }))}
+                shortcutTabs={shortcutTabs}
               />
             )}
             </ErrorBoundary>
@@ -1539,7 +1554,7 @@ export default function App() {
         />
       )}
       {shortcutsOpen && (
-        <ShortcutsModal onClose={() => setShortcutsOpen(false)} />
+        <ShortcutsModal onClose={() => setShortcutsOpen(false)} tabs={shortcutTabs} />
       )}
       {confirmDialog && (
         <ConfirmDialog

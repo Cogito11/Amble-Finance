@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const require = createRequire(import.meta.url);
 const {
   CHANNELS, FIRST_CHECK_DELAY_MS, CHECK_INTERVAL_MS, MAC_IN_PLACE_UPDATES,
-  detectSupport, friendlyError, createUpdater, registerUpdaterIpc,
+  detectSupport, friendlyError, createUpdater, createSettingsFile, registerUpdaterIpc,
 } = require("../updater.js");
 
 // A stand-in for electron-updater's autoUpdater: an EventEmitter whose operations the test controls.
@@ -336,11 +336,11 @@ describe("background checks", () => {
 });
 
 describe("IPC", () => {
-  it("exposes exactly the four channels, each returning the current state", async () => {
+  it("exposes exactly the five channels, each returning the current state", async () => {
     const { updater, autoUpdater } = setup();
     const handlers = {};
     registerUpdaterIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, updater });
-    expect(Object.keys(handlers).sort()).toEqual([CHANNELS.check, CHANNELS.download, CHANNELS.getState, CHANNELS.install].sort());
+    expect(Object.keys(handlers).sort()).toEqual([CHANNELS.check, CHANNELS.download, CHANNELS.getState, CHANNELS.install, CHANNELS.setAutoCheck].sort());
 
     expect(await handlers[CHANNELS.getState]()).toMatchObject({ status: "idle" });
     autoUpdater.checkForUpdates.mockImplementation(async () => { autoUpdater.emit("update-available", { version: "1.8.0" }); return {}; });
@@ -349,5 +349,117 @@ describe("IPC", () => {
     expect(await handlers[CHANNELS.download]()).toMatchObject({ status: "downloaded" });
     expect(await handlers[CHANNELS.install]()).toMatchObject({ status: "downloaded" });
     expect(autoUpdater.quitAndInstall).toHaveBeenCalledTimes(1);
+  });
+
+  it("the auto-check switch only accepts a real true or false", async () => {
+    const { updater } = setup();
+    const handlers = {};
+    registerUpdaterIpc({ ipcMain: { handle: (ch, fn) => { handlers[ch] = fn; } }, updater });
+    expect(await handlers[CHANNELS.setAutoCheck]({}, false)).toMatchObject({ autoCheck: false });
+    expect(await handlers[CHANNELS.setAutoCheck]({}, "yes")).toMatchObject({ autoCheck: false }); // ignored
+    expect(await handlers[CHANNELS.setAutoCheck]({}, undefined)).toMatchObject({ autoCheck: false }); // ignored
+    expect(await handlers[CHANNELS.setAutoCheck]({}, true)).toMatchObject({ autoCheck: true });
+  });
+});
+
+describe("automatic background checks", () => {
+  // A settings store that remembers what was saved, like the file in the app's data folder.
+  const memorySettings = (initial = {}) => { const saved = { ...initial }; return { saved, read: () => ({ ...saved }), write: (v) => Object.assign(saved, v) }; };
+  const withSettings = (settings, extra = {}) => {
+    const autoUpdater = fakeAutoUpdater();
+    const timers = [];
+    const updater = createUpdater({
+      app: { isPackaged: true, getVersion: () => "1.7.5" },
+      BrowserWindow: { getAllWindows: () => [] },
+      loadAutoUpdater: () => autoUpdater,
+      platform: "win32", env: {}, resourcesPath: "/r", existsSync: () => false, log: () => {},
+      setTimer: (fn, ms) => { const t = { fn, ms, kind: "timeout" }; timers.push(t); return t; },
+      setRepeating: (fn, ms) => { const t = { fn, ms, kind: "interval" }; timers.push(t); return t; },
+      settings, ...extra,
+    });
+    return { updater, autoUpdater, timers };
+  };
+
+  it("is on by default and the first check is scheduled at launch", () => {
+    const { updater, timers } = withSettings(memorySettings());
+    expect(updater.getState().autoCheck).toBe(true);
+    updater.start();
+    expect(timers.map((t) => t.kind).sort()).toEqual(["interval", "timeout"]);
+  });
+
+  it("when switched off, no background check is ever scheduled, but the Check button still works", async () => {
+    const { updater, autoUpdater, timers } = withSettings(memorySettings({ autoCheck: false }));
+    expect(updater.getState().autoCheck).toBe(false);
+    updater.start();
+    expect(timers).toHaveLength(0);
+    await updater.check();
+    expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("turning it off saves the choice and cancels checks already scheduled; turning it on schedules them again", () => {
+    const settings = memorySettings();
+    const { updater, timers } = withSettings(settings);
+    updater.start();
+    expect(timers).toHaveLength(2);
+
+    updater.setAutoCheck(false);
+    expect(settings.saved).toEqual({ autoCheck: false });
+    expect(updater.getState().autoCheck).toBe(false);
+
+    updater.setAutoCheck(true);
+    expect(settings.saved).toEqual({ autoCheck: true });
+    expect(updater.getState().autoCheck).toBe(true);
+    expect(timers).toHaveLength(4); // a fresh pair
+  });
+
+  it("switching it on before the app has launched doesn't start checking early", () => {
+    const { updater, timers } = withSettings(memorySettings({ autoCheck: false }));
+    updater.setAutoCheck(true);
+    expect(timers).toHaveLength(0);
+    updater.start();
+    expect(timers).toHaveLength(2);
+  });
+
+  it("broadcasts the change to open windows and keeps working if saving fails", () => {
+    const win = fakeWindow();
+    const failing = { read: () => ({}), write: () => { throw new Error("disk full"); } };
+    const { updater } = withSettings(failing, { BrowserWindow: { getAllWindows: () => [win] } });
+    expect(() => updater.setAutoCheck(false)).not.toThrow();
+    expect(updater.getState().autoCheck).toBe(false);
+    expect(win.webContents.send).toHaveBeenCalled();
+  });
+
+  it("a settings file that can't be read just means the default (on)", () => {
+    const { updater } = withSettings({ read: () => { throw new Error("nope"); }, write: () => {} });
+    expect(updater.getState().autoCheck).toBe(true);
+  });
+});
+
+describe("createSettingsFile", () => {
+  const memoryFs = () => {
+    const files = {};
+    return {
+      files,
+      readFileSync: (p) => { if (!(p in files)) throw new Error("ENOENT"); return files[p]; },
+      writeFileSync: (p, data) => { files[p] = data; },
+      renameSync: (from, to) => { files[to] = files[from]; delete files[from]; },
+      mkdirSync: () => {},
+    };
+  };
+
+  it("reads defaults when the file is missing or damaged, and merges what it writes", () => {
+    const fs = memoryFs();
+    const file = createSettingsFile("/data/update-settings.json", fs);
+    expect(file.read()).toEqual({});
+    fs.files["/data/update-settings.json"] = "{not json";
+    expect(file.read()).toEqual({});
+    fs.files["/data/update-settings.json"] = "[1,2]";
+    expect(file.read()).toEqual({});
+
+    file.write({ autoCheck: false });
+    expect(file.read()).toEqual({ autoCheck: false });
+    file.write({ other: 1 });
+    expect(file.read()).toEqual({ autoCheck: false, other: 1 });
+    expect(Object.keys(fs.files)).toEqual(["/data/update-settings.json"]); // no temp file left behind
   });
 });

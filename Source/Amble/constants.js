@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Receipt, Wallet, Target, PiggyBank, CreditCard, Landmark, Moon, Sun, ClipboardList, Repeat, Sliders, Database, Info, Activity, Monitor, Calculator, TrendingUp, ShieldCheck, TrendingDown, Percent, BarChart3, CalendarClock
+  LayoutDashboard, Receipt, Wallet, Target, PiggyBank, CreditCard, Landmark, Moon, Sun, ClipboardList, Repeat, Sliders, Database, Info, Activity, Monitor, Calculator, TrendingUp, ShieldCheck, TrendingDown, Percent, BarChart3, CalendarClock, FileText
 } from "lucide-react";
 import { version as appVersion } from "../package.json";
 
@@ -23,9 +23,9 @@ export const IS_MAC =
 
 export const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
 
-// Single source of truth for every keyboard shortcut Amble supports - driving both
-// the held-"?" preview and the reference list in About, so the two can never drift
-// out of sync with each other.
+// The fixed keyboard shortcuts - driving both the held-"?" preview and the reference list in About, so the two
+// can never drift out of sync with each other. The Navigation shortcuts (1-9) aren't listed here because they
+// follow whichever tabs are in your sidebar, in your order: see navigationShortcuts in utils/navigation.js.
 export const SHORTCUTS = [
   {
     group: "General",
@@ -36,19 +36,6 @@ export const SHORTCUTS = [
       { keys: [MOD_KEY, "D"], label: "Toggle dark / light mode" },
       { keys: ["?"], label: "Hold to preview shortcuts" },
       { keys: ["Esc"], label: "Close a dialog" },
-    ],
-  },
-  {
-    group: "Navigation",
-    items: [
-      { keys: ["1"], label: "Dashboard" },
-      { keys: ["2"], label: "Transactions" },
-      { keys: ["3"], label: "Accounts" },
-      { keys: ["4"], label: "Status" },
-      { keys: ["5"], label: "Budgets" },
-      { keys: ["6"], label: "Tools" },
-      { keys: ["7"], label: "More" },
-      { keys: ["8"], label: "Plan" },
     ],
   },
 ];
@@ -79,6 +66,7 @@ export const NAV_ITEMS = [
   { id: "budgets", label: "Budgets", icon: ClipboardList },
   { id: "plan", label: "Plan", icon: CalendarClock },
   { id: "tools", label: "Tools", icon: Calculator },
+  { id: "taxes", label: "Taxes", icon: FileText },
 ];
 
 export const VIEW_TITLES = {
@@ -89,6 +77,7 @@ export const VIEW_TITLES = {
   budgets: "Budgets",
   plan: "Plan",
   tools: "Tools",
+  taxes: "Taxes",
   more: "More",
 };
 

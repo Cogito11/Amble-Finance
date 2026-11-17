@@ -6,10 +6,26 @@ import { ShortcutsList } from "../common/Shortcuts";
 import { BackupList } from "../common/BackupList";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
-import { UpdatesRow } from "../common/UpdateControls";
+import { AutoUpdateRow, UpdatesRow } from "../common/UpdateControls";
+import { SidebarSettingsForm } from "../common/SidebarSettingsForm";
 
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
 const PATCH_NOTES = [
+  {
+    version: "1.7.5",
+    items: [
+      "Added the **Taxes** sidebar tab, a searchable guide to common IRS forms.",
+      "Each form explains what it's for, who uses it, and when, with links to download the PDF, read how to fill it out, and open its page on IRS.gov.",
+      "Tap **Not sure what you need?** to open a finder that suggests the right forms for everyday situations like selling stocks, freelancing or needing more time to file.",
+      "Use the dropdown next to the search box to show only forms you file, receive, or hand over.",
+      "The links open IRS.gov in your web browser. Amble itself never contacts the IRS.",
+      "The number keys now open the tabs in your sidebar, in your order, so hiding or reordering a tab changes them to match. You can show a faint number beside each tab (off by default) with **Sidebar shortcut numbers** under Appearance, and the Keyboard Shortcuts list (and the preview you get by holding **?**) always reflect your sidebar.",
+      "Every tab, including **Plan** and **Taxes**, now shows in the sidebar on a new install. Hide any you don't use in **Customize sidebar**.",
+      "Added a **Sidebar** section to More > Settings, below Dashboard, for choosing which tabs show and in what order.",
+      "Added a **Check for updates automatically** switch under the update button in More > About. Turn it off and Amble only looks for updates when you click Check for update.",
+      "Tabs added in future updates now appear above **More** in your sidebar instead of below it.",
+    ],
+  },
   {
     version: "1.7.4",
     items: [
@@ -260,6 +276,9 @@ export function MoreView({
   dataInfo = null, backups = [], onOpenDataFolder, onRestoreBackup,
   quarantineCount = 0, onExportQuarantine, onClearQuarantine,
   dashboardWidgets, onToggleWidget,
+  sidebarSections = [], sidebarVisible = {}, sidebarFooterMetric = "netWorth", sidebarShowNumbers = false, onChangeSidebarShowNumbers,
+  onToggleSidebarSection, onReorderSidebarSection, onChangeSidebarFooterMetric,
+  shortcutTabs = [],
 }) {
   const [tab, setTab] = useState("settings");
   const fileInputRef = useRef(null);
@@ -326,6 +345,25 @@ export function MoreView({
               ))}
             </select>
           </div>
+          <div className="settings-row">
+            <div>
+              <div className="settings-row-label">Sidebar shortcut numbers</div>
+              <div className="settings-desc">Show the number key that opens each tab beside it in the sidebar. The keys work either way.</div>
+            </div>
+            <div className="seg theme-mode-seg" role="group" aria-label="Sidebar shortcut numbers">
+              {[[true, "On"], [false, "Off"]].map(([value, label]) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={`seg-btn ${sidebarShowNumbers === value ? "active" : ""}`}
+                  aria-pressed={sidebarShowNumbers === value}
+                  onClick={() => onChangeSidebarShowNumbers && onChangeSidebarShowNumbers(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="settings-row" style={{ borderBottom: "none", paddingBottom: 0, marginBottom: 0 }}>
             <div>
               <div className="settings-row-label">Category colors</div>
@@ -354,6 +392,20 @@ export function MoreView({
               </label>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "settings" && sidebarSections.length > 0 && (
+        <div className="card">
+          <div className="card-title">Sidebar</div>
+          <SidebarSettingsForm
+            sections={sidebarSections}
+            visible={sidebarVisible}
+            footerMetric={sidebarFooterMetric}
+            onToggle={onToggleSidebarSection}
+            onReorder={onReorderSidebarSection}
+            onChangeMetric={onChangeSidebarFooterMetric}
+          />
         </div>
       )}
 
@@ -490,6 +542,7 @@ export function MoreView({
               <span className="muted">Updates</span>
               <span><UpdatesRow /></span>
             </div>
+            <AutoUpdateRow />
           </div>
           <div className="settings-actions about-links">
             <a className="btn btn-ghost" href={APP_INFO.githubUrl} target="_blank" rel="noreferrer"><Github size={14} /> GitHub</a>
@@ -540,7 +593,7 @@ export function MoreView({
           <div className="settings-desc" style={{ marginTop: -6 }}>
             Hold <kbd className="kbd">?</kbd> anywhere in the app for a quick preview of these.
           </div>
-          <ShortcutsList />
+          <ShortcutsList tabs={shortcutTabs} />
         </div>
       )}
     </div>

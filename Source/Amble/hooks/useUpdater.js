@@ -6,7 +6,7 @@ export function getUpdaterBridge() {
   return typeof window !== "undefined" && window.ambleUpdater ? window.ambleUpdater : null;
 }
 
-// Mirrors the main process's update state and exposes the three things the UI can ask for.
+// Mirrors the main process's update state and exposes what the UI can ask for.
 //   supported: true only when this install can really update itself. When it's false (browser build,
 //              portable .exe, unsigned Mac build, ...) callers fall back to the "open the download page" flow.
 //   state:     { status, version, percent, error, ... } - see updater.js for the possible values.
@@ -33,8 +33,20 @@ export function useUpdater() {
     } catch (e) { /* surfaced through state.error */ }
   };
 
+  // Whether Amble checks for updates by itself in the background. Defaults to on until the main process says otherwise.
+  const setAutoCheck = async (enabled) => {
+    const bridge = getUpdaterBridge();
+    if (!bridge || !bridge.setAutoCheck) return;
+    try {
+      const next = await bridge.setAutoCheck(enabled === true);
+      if (next) setState(next);
+    } catch (e) { /* the switch just stays where it was */ }
+  };
+
   return {
     supported: !!(state && state.supported),
+    autoCheck: !state || state.autoCheck !== false,
+    setAutoCheck,
     state,
     check: call("check"),
     download: call("download"),

@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld("ambleUpdater", {
   check: () => ipcRenderer.invoke("updater:check"),
   download: () => ipcRenderer.invoke("updater:download"),
   install: () => ipcRenderer.invoke("updater:install"),
+  setAutoCheck: (enabled) => ipcRenderer.invoke("updater:set-auto-check", enabled === true),
   onStateChange: (callback) => {
     const listener = (event, state) => callback(state);
     ipcRenderer.on("updater:state-changed", listener);

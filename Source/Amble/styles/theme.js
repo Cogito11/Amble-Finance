@@ -100,6 +100,9 @@ strong, b, h1, h2, h3, h4, h5, h6, th { font-weight: 600; }
 .nav-item-drop-before::before { top:-2px; }
 .nav-item-drop-after::after { bottom:-2px; }
 .nav-popout-dot { width:7px; height:7px; border-radius:50%; background: var(--teal); margin-left:auto; flex-shrink:0; }
+.nav-shortcut-hint { margin-left:auto; flex-shrink:0; font-size:11px; font-weight:500; color: var(--text-faint); opacity:.65; font-variant-numeric: tabular-nums; }
+.nav-item.active .nav-shortcut-hint { color: var(--brass); opacity:.7; }
+.nav-item .nav-popout-dot + .nav-shortcut-hint, .nav-shortcut-hint + .nav-popout-dot { margin-left:8px; }
 
 .icon-btn.popout-open { color: var(--teal); }
 .icon-btn.popout-open:hover { color: var(--teal); background: var(--surface-2); }
@@ -595,6 +598,51 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .tool-card-badge { font-size:10px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; color: var(--text-faint); background: var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:2px 6px; }
 .tool-card-desc { font-size:12px; color: var(--text-muted); margin-top:3px; line-height:1.45; }
 .tool-card-chevron { flex-shrink:0; color: var(--text-faint); }
+.tax-toolbar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.tax-toolbar .search-input { max-width:420px; }
+.tax-count { font-size:12px; color: var(--text-faint); }
+.tax-pill-btn, .tax-situation { font:inherit; font-size:12.5px; padding:6px 12px; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text); cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-pill-btn { display:inline-flex; align-items:center; gap:6px; }
+.tax-pill-btn:hover, .tax-situation:hover, .tax-select:hover { border-color: var(--brass); background: var(--brass-soft); }
+.app-root .tax-pill-btn:focus-visible, .app-root .tax-situation:focus-visible { outline:none; border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-pill-btn.is-active, .tax-situation.is-active, .tax-select.is-active { border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-select { position:relative; display:inline-flex; align-items:center; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text); cursor:pointer; transition: border-color .15s, background .15s; }
+/* One highlight only: the pill itself. It shows for keyboard focus, not after a mouse click, so choosing the default
+   (All forms) leaves the pill un-highlighted. The global focus ring would otherwise also outline the inner select. */
+.tax-select:has(select:focus-visible) { border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.app-root .tax-select select:focus, .app-root .tax-select select:focus-visible { outline:none; }
+.tax-select select { appearance:none; -webkit-appearance:none; font:inherit; font-size:12.5px; color:inherit; background:transparent; border:0; outline:none; cursor:pointer; padding:6px 30px 6px 12px; border-radius:20px; }
+.tax-select select option { color: var(--text); background: var(--surface); }
+.tax-select svg { position:absolute; right:11px; pointer-events:none; color: var(--text-muted); }
+.tax-finder { display:flex; flex-direction:column; gap:12px; background: var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+.tax-finder-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; }
+.tax-finder-options { display:flex; flex-wrap:wrap; gap:8px; }
+.tax-finder-answer { display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--border); padding-top:14px; }
+.tax-finder-forms { display:flex; flex-direction:column; gap:8px; }
+/* The whole row is the button that opens the form. */
+.tax-finder-form { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-finder-form:hover { border-color: var(--brass); background: var(--brass-soft); }
+.app-root .tax-finder-form:focus-visible { outline:none; border-color: var(--brass); background: var(--brass-soft); box-shadow: inset 0 0 0 1px var(--brass); }
+.tax-finder-form-text { display:block; min-width:0; }
+.tax-finder-form-name { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13.5px; font-weight:600; }
+.tax-finder-form-role { display:block; font-size:12.5px; font-weight:400; color: var(--text-muted); margin-top:2px; }
+.tax-finder-form-chevron { flex-shrink:0; color: var(--text-faint); transition: transform .15s, color .15s; }
+.tax-finder-form:hover .tax-finder-form-chevron, .tax-finder-form:focus-visible .tax-finder-form-chevron { color: var(--brass); transform: translateX(2px); }
+.tax-howto { display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+.tax-howto-label { display:flex; align-items:center; gap:6px; margin-bottom:0; }
+.tax-howto-note { font-size:12.5px; color: var(--text-muted); margin:0; }
+.tax-howto .btn { text-decoration:none; }
+.tax-card { display:flex; flex-direction:column; background: var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; cursor:pointer; transition: border-color .15s, background .15s; }
+.tax-card:hover, .tax-card:focus-within { border-color: var(--brass); background: var(--brass-soft); }
+.tax-card-main { display:flex; align-items:flex-start; gap:14px; flex:1; text-align:left; background:transparent; border:none; padding:16px 18px 12px; cursor:pointer; color:inherit; font:inherit; }
+.tax-card-name { font-size:12.5px; color: var(--text); margin-top:2px; }
+.tax-card-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:2px 18px 14px; }
+.tax-card-actions .btn, .tax-detail-actions .btn { text-decoration:none; }
+.tax-detail-section + .tax-detail-section { margin-top:16px; }
+.tax-detail-label { font-size:12px; color: var(--text-muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:4px; }
+.tax-detail-text { font-size:13.5px; line-height:1.55; margin:0; }
+.tax-detail-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.tax-disclaimer { font-size:12px; color: var(--text-muted); line-height:1.5; margin:0; }
 .tool-detail { display:flex; flex-direction:column; gap:16px; }
 .tool-detail .card > .form-group + .form-group,
 .tool-detail .card > .form-row + .form-group,
@@ -649,6 +697,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .about-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .about-row > .muted:first-child { flex:0 0 140px; }
 .about-row:last-child { border-bottom:none; }
+.about-row-note { display:block; font-size:12px; color: var(--text-faint); margin-top:3px; line-height:1.45; }
+.about-row .checkbox-row { padding:0; }
 .about-links { padding-top:2px; }
 
 .about-version-value { display:flex; align-items:center; gap:10px; }

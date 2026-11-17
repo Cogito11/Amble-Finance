@@ -2,7 +2,7 @@ const { app, BrowserWindow, shell, screen, ipcMain } = require("electron");
 const path = require("path");
 const { createFileStore } = require("./store/fileStore");
 const { registerStoreIpc } = require("./store/ipc");
-const { createUpdater, registerUpdaterIpc } = require("./updater");
+const { createUpdater, createSettingsFile, registerUpdaterIpc } = require("./updater");
 
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
@@ -44,6 +44,7 @@ function setupUpdater() {
     BrowserWindow,
     loadAutoUpdater: () => require("electron-updater").autoUpdater,
     log: (...args) => console.error("[updater]", ...args),
+    settings: createSettingsFile(path.join(app.getPath("userData"), "update-settings.json")),
   });
   registerUpdaterIpc({ ipcMain, updater });
 }

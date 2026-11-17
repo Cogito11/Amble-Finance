@@ -1,5 +1,15 @@
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
+// Combines a saved sidebar order with the sections the current version offers. Saved sections keep their
+// place and any that no longer exist are dropped. A section the person has never seen (added in a newer
+// version) goes just above "More" when "More" is still last, rather than below it, and at the end otherwise.
+export const mergeSidebarOrder = (savedOrder, defaultOrder) => {
+  const kept = savedOrder.filter((id) => defaultOrder.includes(id));
+  const added = defaultOrder.filter((id) => !savedOrder.includes(id));
+  if (kept.length && kept[kept.length - 1] === "more") return [...kept.slice(0, -1), ...added, "more"];
+  return [...kept, ...added];
+};
+
 // Snaps a money value to whole cents. Re-exported from money.js, which holds all the
 // cent-based money helpers (see there for why floating point can't be trusted).
 export { roundMoney } from "./money";
