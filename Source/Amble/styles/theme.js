@@ -697,6 +697,8 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .about-row { display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--border); font-size:13px; }
 .about-row > .muted:first-child { flex:0 0 140px; }
 .about-row:last-child { border-bottom:none; }
+.about-row-note { display:block; font-size:12px; color: var(--text-faint); margin-top:3px; line-height:1.45; }
+.about-row .checkbox-row { padding:0; }
 .about-links { padding-top:2px; }
 
 .about-version-value { display:flex; align-items:center; gap:10px; }

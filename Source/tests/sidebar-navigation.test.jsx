@@ -259,3 +259,43 @@ describe("the shortcut numbers beside the tabs can be turned off", () => {
     expect(seg(r).props.className).toContain("theme-mode-seg");
   });
 });
+
+describe("the automatic-update switch lives in About, under the update button", () => {
+  const fakeUpdater = () => {
+    let current = { supported: true, autoCheck: true, reason: null, status: "idle", currentVersion: "1.7.5", version: null, percent: null, error: null };
+    return {
+      getState: async () => current, check: async () => current, download: async () => current, install: async () => current,
+      setAutoCheck: async (enabled) => { current = { ...current, autoCheck: enabled }; return current; },
+      onStateChange: () => () => {},
+    };
+  };
+  const goToMore = async (r) => { await act(async () => { navButtons(r).find((b) => labelOf(b) === "More").props.onClick(); }); await settle(); };
+  const tabButton = (r, label) => r.root.findAll((n) => n.type === "button" && String(n.props.className).includes("seg-btn") && textOf(n).includes(label))[0];
+
+  it("is in About right after the Updates row, and no longer in Settings", async () => {
+    globalThis.ambleUpdater = fakeUpdater();
+    try {
+      const r = await mount();
+      await goToMore(r);
+      expect(textOf(r.root)).not.toContain("Check for updates automatically"); // Settings tab
+
+      await act(async () => { tabButton(r, "About").props.onClick(); });
+      await settle();
+      const rows = r.root.findAll((n) => n.props && n.props.className === "about-row").map((row) => textOf(row));
+      const updates = rows.findIndex((t) => t.startsWith("Updates"));
+      expect(updates).toBeGreaterThan(-1);
+      expect(rows[updates + 1]).toContain("Automatic checks");
+      expect(rows[updates + 1]).toContain("Check for updates automatically");
+    } finally {
+      delete globalThis.ambleUpdater;
+    }
+  });
+
+  it("isn't shown on installs that can't update themselves", async () => {
+    const r = await mount();
+    await goToMore(r);
+    await act(async () => { tabButton(r, "About").props.onClick(); });
+    await settle();
+    expect(textOf(r.root)).not.toContain("Automatic checks");
+  });
+});

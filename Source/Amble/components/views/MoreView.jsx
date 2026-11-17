@@ -6,7 +6,7 @@ import { ShortcutsList } from "../common/Shortcuts";
 import { BackupList } from "../common/BackupList";
 import { APP_INFO, DASHBOARD_WIDGETS, MORE_TABS, THEME_MODE_OPTIONS } from "../../constants";
 import { CURRENCIES, fmtDateTime, formatBytes } from "../../utils/format";
-import { AutoUpdateCard, UpdatesRow } from "../common/UpdateControls";
+import { AutoUpdateRow, UpdatesRow } from "../common/UpdateControls";
 import { SidebarSettingsForm } from "../common/SidebarSettingsForm";
 
 // Full patch notes history, most recent first. Keep in sync with Patch notes.md.
@@ -22,7 +22,7 @@ const PATCH_NOTES = [
       "The number keys now open the tabs in your sidebar, in your order, so hiding or reordering a tab changes them to match. You can show a faint number beside each tab (off by default) with **Sidebar shortcut numbers** under Appearance, and the Keyboard Shortcuts list (and the preview you get by holding **?**) always reflect your sidebar.",
       "Every tab, including **Plan** and **Taxes**, now shows in the sidebar on a new install. Hide any you don't use in **Customize sidebar**.",
       "Added a **Sidebar** section to More > Settings, below Dashboard, for choosing which tabs show and in what order.",
-      "Added a **Check for updates automatically** switch to More > Settings. Turn it off and Amble only looks for updates when you click Check for update.",
+      "Added a **Check for updates automatically** switch under the update button in More > About. Turn it off and Amble only looks for updates when you click Check for update.",
       "Tabs added in future updates now appear above **More** in your sidebar instead of below it.",
     ],
   },
@@ -409,8 +409,6 @@ export function MoreView({
         </div>
       )}
 
-      {tab === "settings" && <AutoUpdateCard />}
-
       {tab === "data" && (
         <>
           <div className="card">
@@ -544,6 +542,7 @@ export function MoreView({
               <span className="muted">Updates</span>
               <span><UpdatesRow /></span>
             </div>
+            <AutoUpdateRow />
           </div>
           <div className="settings-actions about-links">
             <a className="btn btn-ghost" href={APP_INFO.githubUrl} target="_blank" rel="noreferrer"><Github size={14} /> GitHub</a>
