@@ -10,7 +10,7 @@
 //    never put a tax year in a label or description. The links keep working on their own.
 //  - Describe what a form is for, not figures. No deadlines, thresholds or dollar amounts: those change
 //    every year, and the IRS page linked from each entry is where to find them.
-//  - `npm run check:irs-links` (also run weekly by GitHub Actions) requests every link and reports the
+//  - `npm run check:irs-links` (also available as a manual GitHub Actions run) requests every link and reports the
 //    ones that no longer resolve.
 
 export const IRS_ORIGIN = "https://www.irs.gov";

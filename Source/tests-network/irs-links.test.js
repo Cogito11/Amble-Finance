@@ -6,7 +6,7 @@ import { checkLink } from "./check-link";
 //
 // Run it with `npm run check:irs-links` (it needs internet). It is deliberately NOT part of `npm test`:
 // the normal suite has to pass offline and shouldn't fail because irs.gov is slow. GitHub Actions runs it
-// weekly (.github/workflows/irs-links.yml). How each link is judged lives in check-link.js.
+// on demand (.github/workflows/irs-links.yml, started by hand from the Actions tab). How each link is judged lives in check-link.js.
 //
 // "dead" links fail the run. "unverified" ones (blocked, timed out, server error) only warn, so a temporary
 // hiccup or a firewall doesn't cry wolf. The run still fails if nothing at all could be verified, because

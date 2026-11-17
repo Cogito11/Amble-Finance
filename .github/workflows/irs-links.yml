@@ -1,14 +1,13 @@
 name: IRS link check
 
 # The Taxes tab links to forms on irs.gov. The IRS occasionally renames or retires a page, so this
-# requests every link once a week and fails if any are dead, which emails the repo owner.
+# requests every link and fails if any are dead.
 #
+# It only runs when you start it: open the Actions tab, pick "IRS link check" and click "Run workflow".
 # It is separate from the Tests workflow on purpose: a slow or unreachable irs.gov should never block
-# a pull request. To check by hand: `npm run check:irs-links` in Source/ (needs internet), or run
-# this workflow from the Actions tab.
+# a pull request. To check from your own machine instead: `npm run check:irs-links` in Source/
+# (needs internet).
 on:
-  schedule:
-    - cron: "17 14 * * 1"   # Mondays, 14:17 UTC
   workflow_dispatch:
 
 permissions:

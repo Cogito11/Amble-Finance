@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkLink } from "../tests-network/check-link";
 
-// The weekly IRS link check can't run in the normal suite (it needs the internet), so this proves its
+// The on-demand IRS link check can't run in the normal suite (it needs the internet), so this proves its
 // verdicts are right by feeding it fake responses.
 
 const PDF = { kind: "pdf", url: "https://www.irs.gov/pub/irs-pdf/f1040.pdf" };
